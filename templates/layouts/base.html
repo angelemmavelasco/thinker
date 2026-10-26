@@ -8,36 +8,35 @@
         Thinker: {{ .title }}
     </title>
 </head>
-<body class="bg-zinc-950 text-xs text-zinc-50 p-6">
-    <header class="fixed top-0 left-0 right-0 w-full z-100 p-6 flex justify-between">
+<body class="bg-zinc-950 text-xs text-zinc-50 px-4">
+    <header class="fixed top-0 left-0 right-0 w-full z-100 p-4 flex justify-between">
         <ul class="flex gap-4">
             <!-- el llm principal -->
-            <li class="hover:text-zinc-400 transition-all cursor-pointer">Thinker</li>
+            <li class="hover:text-pink-400 transition-all cursor-pointer">Thinker</li>
             <!-- Grafo princiapl -->
-            <li class="hover:text-zinc-400 transition-all cursor-pointer">Red</li>
+            <li class="hover:text-pink-400 transition-all cursor-pointer">Red</li>
             <!-- crud de ideas -->
-            <li class="hover:text-zinc-400 transition-all cursor-pointer">Mis ideas</li>
+            <li class="hover:text-pink-400 transition-all cursor-pointer">Mis ideas</li>
             <!-- Relaciones y palabras clave -->
-            <li class="hover:text-zinc-400 transition-all cursor-pointer">Relaciones</li>
+            <li class="hover:text-pink-400 transition-all cursor-pointer">Relaciones</li>
             <!-- Opciones varias -->
-            <li class="hover:text-zinc-400 transition-all cursor-pointer">Opciones</li>
+            <li class="hover:text-pink-400 transition-all cursor-pointer">Opciones</li>
 
-            <li class="hover:text-zinc-400 transition-all cursor-pointer">Mi perfíl</li>
+            <li class="hover:text-pink-400 transition-all cursor-pointer">Mi perfíl</li>
 
-            <li class="hover:text-zinc-400 transition-all cursor-pointer">Configuración</li>
+            <li class="hover:text-pink-400 transition-all cursor-pointer">Configuración</li>
 
-            <li class="hover:text-zinc-400 transition-all cursor-pointer">Soporte</li>
+            <li class="hover:text-pink-400 transition-all cursor-pointer">Soporte</li>
         </ul>
 
-        <p class="italic text-sky-400 font-medium">
+        <p class="text-pink-400">
             Genera ideas, Thinker lo demás.
         </p>
                 
     </header>
-    <main class="mt-14 flex flex-col gap-4">
-
+    <main class="mt-12 flex flex-col gap-4">
+        {{ block "content" . }}
+        {{ end }}
     </main>
-    {{ block "content" . }}
-    {{ end }}
 </body>
 </html>
