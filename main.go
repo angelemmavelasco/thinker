@@ -23,7 +23,6 @@ func main() {
 	router := gin.Default()
 	router.HTMLRender = config.LoadTemplates("./templates/")
 
-	//test================
 	router.GET("/ideas", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "ideas_list.html", gin.H{
 			"title": "Mis ideas",
