@@ -3,20 +3,16 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
-
-	"github.com/joho/godotenv"
+	"thinker/internal/config"
 )
 
 func main() {
 	fmt.Println("Hello from thinker")
 
-	err := godotenv.Load()
+	baseConfig, err := config.LoadConfig()
 	if err != nil {
-		log.Fatal("Error while loading env file")
+		log.Fatal("Error while loading env variables")
 	}
-
-	apiKey := os.Getenv("LLM_API_KEY")
-	fmt.Println(apiKey)
+	fmt.Printf("Base config loaded successfully: %+v\n", *baseConfig)
 
 }
