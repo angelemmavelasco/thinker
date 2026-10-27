@@ -6,9 +6,9 @@ import (
 	"log"
 	"net/http"
 	"thinker/internal/config"
+	"thinker/internal/database"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 )
 
 func main() {
@@ -20,16 +20,20 @@ func main() {
 		log.Fatal("Error while loading env variables")
 	}
 
-	conn, err := pgx.Connect(context.Background(), baseConfig.ConnString)
+	// base context
+	ctx := context.Background()
+
+	dbConnector := database.NewConnector(baseConfig)
+	conn, err := dbConnector.Connect(ctx)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	defer conn.Close(context.Background())
+	defer conn.Close(ctx)
 
 	var username string
-	err = conn.QueryRow(context.Background(), "select username from users where id=$1", 1).Scan(&username)
+	err = conn.QueryRow(context.Background(), "select username from users where id=$1", 2).Scan(&username)
 	if err != nil {
-		fmt.Errorf("Error while retrieving rows: %w", err)
+		fmt.Printf("Error while retrieving rows: %w", err)
 	}
 	fmt.Println(username)
 
