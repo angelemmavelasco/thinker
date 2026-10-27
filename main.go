@@ -33,6 +33,8 @@ func main() {
 	// initi router
 	router := routes.SetUpRouter(queries)
 
-	router.Run(":8080")
+	if err := router.Run(":8080"); err != nil {
+		log.Fatalf("Error al ejecutar el servidor HTTP: %v", err)
+	}
 
 }
