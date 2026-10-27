@@ -15,94 +15,22 @@
     </ul>
 </div>
 
-<ul class="grid grid-cols-5 gap-4">
+<ul class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+    {{range $idea := .ideas}}
     <li class="border-l-[4px] border-pink-400 p-1 flex flex-col gap-2">
         <p class="font-medium text-sm">
-            Titulo
+            {{$idea.Title}}
         </p>
         <p class="italic text-zinc-400">
-            Lorem, ipsum dolor sit amet consectetur adipisicing elit. Voluptatum laudantium odio expedita quod repellat eveniet maxime nesciunt earum maiores officiis, inventore omnis modi id cupiditate harum voluptatem impedit esse. Veritatis?
+            {{$idea.Content}}
         </p>
-        <ul class="flex gap-2 text-[9px]">
+        <ul class="flex gap-2 text-[9px] mt-auto">
             <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Machine learning</li>
             <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Ciencia de datos</li>
             <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Matemáticas</li>
         </ul>
     </li>
-
-    <li class="border-l-[4px] border-pink-400 p-1 flex flex-col gap-2">
-        <p class="font-medium text-sm">
-            Titulo
-        </p>
-        <p class="italic text-zinc-400">
-            Lorem, ipsum dolor sit amet consectetur adipisicing elit. Voluptatum laudantium odio expedita quod repellat eveniet maxime nesciunt earum maiores officiis, inventore omnis modi id cupiditate harum voluptatem impedit esse. Veritatis?
-        </p>
-        <ul class="flex gap-2 text-[9px]">
-            <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Machine learning</li>
-            <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Ciencia de datos</li>
-            <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Matemáticas</li>
-        </ul>
-    </li>
-
-
-    <li class="border-l-[4px] border-pink-400 p-1 flex flex-col gap-2">
-        <p class="font-medium text-sm">
-            Titulo
-        </p>
-        <p class="italic text-zinc-400">
-            Lorem, ipsum dolor sit amet consectetur adipisicing elit. Voluptatum laudantium odio expedita quod repellat eveniet maxime nesciunt earum maiores officiis, inventore omnis modi id cupiditate harum voluptatem impedit esse. Veritatis?
-        </p>
-        <ul class="flex gap-2 text-[9px]">
-            <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Machine learning</li>
-            <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Ciencia de datos</li>
-            <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Matemáticas</li>
-        </ul>
-    </li>
-
-
-    <li class="border-l-[4px] border-pink-400 p-1 flex flex-col gap-2">
-        <p class="font-medium text-sm">
-            Titulo
-        </p>
-        <p class="italic text-zinc-400">
-            Lorem, ipsum dolor sit amet consectetur adipisicing elit. Voluptatum laudantium odio expedita quod repellat eveniet maxime nesciunt earum maiores officiis, inventore omnis modi id cupiditate harum voluptatem impedit esse. Veritatis?
-        </p>
-        <ul class="flex gap-2 text-[9px]">
-            <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Machine learning</li>
-            <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Ciencia de datos</li>
-            <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Matemáticas</li>
-        </ul>
-    </li>
-
-
-    <li class="border-l-[4px] border-pink-400 p-1 flex flex-col gap-2">
-        <p class="font-medium text-sm">
-            Titulo
-        </p>
-        <p class="italic text-zinc-400">
-            Lorem, ipsum dolor sit amet consectetur adipisicing elit. Voluptatum laudantium odio expedita quod repellat eveniet maxime nesciunt earum maiores officiis, inventore omnis modi id cupiditate harum voluptatem impedit esse. Veritatis?
-        </p>
-        <ul class="flex gap-2 text-[9px]">
-            <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Machine learning</li>
-            <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Ciencia de datos</li>
-            <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Matemáticas</li>
-        </ul>
-    </li>
-
-
-    <li class="border-l-[4px] border-pink-400 p-1 flex flex-col gap-2">
-        <p class="font-medium text-sm">
-            Titulo
-        </p>
-        <p class="italic text-zinc-400">
-            Lorem, ipsum dolor sit amet consectetur adipisicing elit. Voluptatum laudantium odio expedita quod repellat eveniet maxime nesciunt earum maiores officiis, inventore omnis modi id cupiditate harum voluptatem impedit esse. Veritatis?
-        </p>
-        <ul class="flex gap-2 text-[9px]">
-            <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Machine learning</li>
-            <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Ciencia de datos</li>
-            <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Matemáticas</li>
-        </ul>
-    </li>
+    {{end}}
 
 </ul>
 

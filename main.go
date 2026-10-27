@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"thinker/internal/config"
 	"thinker/internal/database"
+	"thinker/internal/models"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,20 +31,45 @@ func main() {
 	}
 	defer conn.Close(ctx)
 
-	var username string
-	err = conn.QueryRow(context.Background(), "select username from users where id=$1", 2).Scan(&username)
-	if err != nil {
-		fmt.Printf("Error while retrieving rows: %w", err)
-	}
-	fmt.Println(username)
-
 	//load templates and parse dirs
 	router := gin.Default()
 	router.HTMLRender = config.LoadTemplates("./templates/")
 
 	router.GET("/ideas", func(c *gin.Context) {
+
+		rows, err := conn.Query(c.Request.Context(), `
+            SELECT title, content
+            FROM ideas 
+            ORDER BY created_at DESC;
+        `)
+		if err != nil {
+			c.String(http.StatusInternalServerError, "Error al consultar ideas: %v", err)
+			return
+		}
+		defer rows.Close()
+
+		var ideas []models.Idea
+		for rows.Next() {
+			var idea models.Idea
+			err := rows.Scan(
+				&idea.Title,
+				&idea.Content,
+			)
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error al procesar registros: %v", err)
+				return
+			}
+			ideas = append(ideas, idea)
+		}
+
+		if err := rows.Err(); err != nil {
+			c.String(http.StatusInternalServerError, "Error en la iteración: %v", err)
+			return
+		}
+
 		c.HTML(http.StatusOK, "ideas_list.html", gin.H{
 			"title": "Mis ideas",
+			"ideas": ideas,
 		})
 	})
 
