@@ -5,13 +5,10 @@ import (
 	"thinker/internal/config"
 	"thinker/internal/database"
 	"thinker/internal/handlers"
+	"thinker/internal/urls"
 
 	"github.com/gin-gonic/gin"
 )
-
-type Router interface {
-	NewRouter()
-}
 
 func SetUpRouter(queries *database.Queries) *gin.Engine {
 	// base router
@@ -22,32 +19,15 @@ func SetUpRouter(queries *database.Queries) *gin.Engine {
 	ideaHandler := handlers.NewIdeaHandler(queries)
 	userHandler := handlers.NewUserHandler(queries)
 
-	router.GET("/", func(c *gin.Context) {
+	router.GET(urls.Get("home"), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "hello world from thinker",
 		})
 	})
 
-	api := router.Group("/api")
-	{
-		users := api.Group("/users")
-		{
-			users.GET("", userHandler.ListUsers)
-		}
-	}
-
-	web := router.Group("/web")
-	{
-		ideas := web.Group("/ideas")
-		{
-			ideas.GET("", ideaHandler.ListIdeas)
-		}
-
-		users := web.Group("/users")
-		{
-			users.GET("", userHandler.ListUsersView)
-		}
-	}
+	router.GET(urls.Get("api:users:list"), userHandler.ListUsers)
+	router.GET(urls.Get("ideas:list"), ideaHandler.ListIdeas)
+	router.GET(urls.Get("users:list"), userHandler.ListUsersView)
 
 	return router
 }
