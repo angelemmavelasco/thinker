@@ -9,20 +9,28 @@
     </title>
 </head>
 <body class="bg-zinc-950 text-xs text-zinc-50 px-4">
-    <header class="fixed top-0 left-0 right-0 w-full z-100 p-4 flex justify-between">
+    <header class="fixed top-0 left-0 right-0 w-full z-100 p-4 flex justify-between backdrop-blur-xl">
         <ul class="flex gap-4">
             <!-- el llm principal -->
             <li class="hover:text-pink-400 transition-all cursor-pointer">Thinker</li>
             <!-- Grafo princiapl -->
             <li class="hover:text-pink-400 transition-all cursor-pointer">Red</li>
             <!-- crud de ideas -->
-            <li class="hover:text-pink-400 transition-all cursor-pointer">Mis ideas</li>
+            <li class="hover:text-pink-400 transition-all cursor-pointer">
+                <a href='{{url "ideas:list"}}'>
+                    Mis ideas
+                </a>
+            </li>
             <!-- Relaciones y palabras clave -->
             <li class="hover:text-pink-400 transition-all cursor-pointer">Relaciones</li>
             <!-- Opciones varias -->
             <li class="hover:text-pink-400 transition-all cursor-pointer">Opciones</li>
 
-            <li class="hover:text-pink-400 transition-all cursor-pointer">Mi perfíl</li>
+            <li class="hover:text-pink-400 transition-all cursor-pointer">
+                <a href='{{url "users:list"}}'>
+                    Usuarios
+                </a>
+            </li>
 
             <li class="hover:text-pink-400 transition-all cursor-pointer">Configuración</li>
 
