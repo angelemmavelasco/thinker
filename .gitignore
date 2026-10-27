@@ -1,2 +1,6 @@
 thinker.db 
 .env
+**.session.sql
+*.session.sql
+.vscode/
+.idea/
