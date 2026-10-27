@@ -11,9 +11,11 @@ import (
 type BaseConfig struct {
 	LLMApiKey  string
 	DBHost     string
+	DBPort     string
+	DBName     string
 	DBUsername string
 	DBPassword string
-	DBName     string
+	ConnString string
 }
 
 func LoadConfig() (*BaseConfig, error) {
@@ -23,19 +25,22 @@ func LoadConfig() (*BaseConfig, error) {
 	}
 
 	llmApiKey := os.Getenv("LLM_API_KEY")
-	dbHost := os.Getenv("DBHOST")
-	dbUsername := os.Getenv("DBUSERNAME")
-	dbPassword := os.Getenv("DBPASSWORD")
-	dbName := os.Getenv("DBNAME")
+	dbHost := os.Getenv("DB_HOST")
+	dbPort := os.Getenv("DB_PORT")
+	dbName := os.Getenv("DB_NAME")
+	dbUsername := os.Getenv("DB_USERNAME")
+	dbPassword := os.Getenv("DB_PASSWORD")
+	connString := os.Getenv("CONN_STRING")
 
 	config := BaseConfig{
 		LLMApiKey:  llmApiKey,
 		DBHost:     dbHost,
+		DBPort:     dbPort,
+		DBName:     dbName,
 		DBUsername: dbUsername,
 		DBPassword: dbPassword,
-		DBName:     dbName,
+		ConnString: connString,
 	}
-
 	fmt.Println("Base config loaded successfully:")
 	return &config, nil
 }
