@@ -11,6 +11,39 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createIdea = `-- name: CreateIdea :one
+INSERT INTO ideas (user_id, title, content, status)
+VALUES ($1, $2, $3, $4)
+RETURNING id, user_id, title, content, status, created_at, updated_at
+`
+
+type CreateIdeaParams struct {
+	UserID  pgtype.UUID
+	Title   string
+	Content string
+	Status  string
+}
+
+func (q *Queries) CreateIdea(ctx context.Context, arg CreateIdeaParams) (Idea, error) {
+	row := q.db.QueryRow(ctx, createIdea,
+		arg.UserID,
+		arg.Title,
+		arg.Content,
+		arg.Status,
+	)
+	var i Idea
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.Content,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash)
 VALUES ($1, $2)
@@ -49,6 +82,75 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const listIdeas = `-- name: ListIdeas :many
+SELECT id, user_id, title, content, status, created_at, updated_at
+FROM ideas
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListIdeas(ctx context.Context) ([]Idea, error) {
+	rows, err := q.db.Query(ctx, listIdeas)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Idea
+	for rows.Next() {
+		var i Idea
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Title,
+			&i.Content,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIdeasByUserID = `-- name: ListIdeasByUserID :many
+SELECT id, user_id, title, content, status, created_at, updated_at
+FROM ideas
+WHERE user_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListIdeasByUserID(ctx context.Context, userID pgtype.UUID) ([]Idea, error) {
+	rows, err := q.db.Query(ctx, listIdeasByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Idea
+	for rows.Next() {
+		var i Idea
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Title,
+			&i.Content,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listUsers = `-- name: ListUsers :many
