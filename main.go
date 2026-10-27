@@ -31,6 +31,9 @@ func main() {
 	}
 	defer conn.Close(ctx)
 
+	//init queries
+	queries := database.New(conn)
+
 	//load templates and parse dirs
 	router := gin.Default()
 	router.HTMLRender = config.LoadTemplates("./templates/")
@@ -70,6 +73,22 @@ func main() {
 		c.HTML(http.StatusOK, "ideas_list.html", gin.H{
 			"title": "Mis ideas",
 			"ideas": ideas,
+		})
+	})
+
+	router.GET("/users", func(c *gin.Context) {
+		users, err := queries.ListUsers(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "No se pudieron obtener los usuarios"})
+			return
+		}
+
+		c.JSON(http.StatusOK, users)
+	})
+
+	router.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "hello world from thinker",
 		})
 	})
 
