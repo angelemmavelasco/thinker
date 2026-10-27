@@ -42,6 +42,11 @@ func SetUpRouter(queries *database.Queries) *gin.Engine {
 		{
 			ideas.GET("", ideaHandler.ListIdeas)
 		}
+
+		users := web.Group("/users")
+		{
+			users.GET("", userHandler.ListUsersView)
+		}
 	}
 
 	return router
