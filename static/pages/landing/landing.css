@@ -1,0 +1,56 @@
+@keyframes efct-aura {
+    0% {
+        opacity: 0;
+        transform: translate3d(-10%, 8%, 0) scale(0.85);
+    }
+    40% {
+        opacity: 0.85;
+        transform: translate3d(6%, -4%, 0) scale(1.05);
+    }
+    100% {
+        opacity: 0.4;
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+}
+
+@keyframes efct-reveal {
+    0% {
+        opacity: 0;
+        filter: blur(8px);
+        transform: translateY(6px);
+    }
+    100% {
+        opacity: 1;
+        filter: blur(0);
+        transform: translateY(0);
+    }
+}
+
+.title-glow {
+    position: relative;
+    isolation: isolate;
+    animation: efct-reveal 1.1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.title-glow::before {
+    content: "";
+    position: absolute;
+    inset: -35% -15%;
+    z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(
+        ellipse 65% 55% at 35% 50%,
+        rgba(6, 182, 212, 0.28) 0%,
+        rgba(8, 145, 178, 0.14) 45%,
+        transparent 75%
+    );
+    filter: blur(48px);
+    animation: efct-aura 2.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .title-glow,
+    .title-glow::before {
+        animation: none;
+    }
+}

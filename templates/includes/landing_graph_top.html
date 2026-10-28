@@ -1,0 +1,196 @@
+{{ define "landing_graph_top" }}
+<div class="w-full overflow-hidden pointer-events-none mt-26">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" class="w-full h-auto font-sans select-none">
+        <defs>
+        <filter id="cyan-glow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="8" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+
+        <linearGradient id="edge-fade" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#09090b" />
+            <stop offset="12%" stop-color="#18181b" />
+            <stop offset="88%" stop-color="#18181b" />
+            <stop offset="100%" stop-color="#09090b" />
+        </linearGradient>
+        </defs>
+
+        <style>
+        .word-node {
+            paint-order: stroke fill;
+            stroke: #09090b;
+            stroke-width: 14px;
+            stroke-linejoin: round;
+            stroke-linecap: round;
+            transform-box: fill-box;
+            transform-origin: center;
+            scale: 1;
+            transition: fill 0.7s ease-out, scale 0.7s ease-out;
+        }
+
+        .word-node.node-glow {
+            fill: #67e8f9;
+            scale: 1.06;
+            transition: fill 0.18s ease-out, scale 0.18s ease-out;
+        }
+
+        @keyframes data-flow {
+            0% { stroke-dashoffset: 320; opacity: 0.1; }
+            50% { opacity: 0.85; }
+            100% { stroke-dashoffset: 0; opacity: 0.1; }
+        }
+
+        @keyframes drift-1 {
+            0%, 100% { transform: translate(0px, 0px); }
+            50% { transform: translate(4px, -6px); }
+        }
+        @keyframes drift-2 {
+            0%, 100% { transform: translate(0px, 0px); }
+            50% { transform: translate(-5px, 5px); }
+        }
+        @keyframes drift-3 {
+            0%, 100% { transform: translate(0px, 0px); }
+            50% { transform: translate(3px, 7px); }
+        }
+
+        .drift-a { animation: drift-1 7s ease-in-out infinite; }
+        .drift-b { animation: drift-2 8.5s ease-in-out infinite; }
+        .drift-c { animation: drift-3 9.5s ease-in-out infinite; }
+
+        .edge-pulse {
+            stroke-dasharray: 22 298;
+            animation: data-flow 3.8s linear infinite;
+        }
+        .edge-pulse-slow {
+            stroke-dasharray: 14 306;
+            animation: data-flow 5.5s linear infinite;
+        }
+
+        .d-1 { animation-delay: 0.6s; }
+        .d-2 { animation-delay: 1.3s; }
+        .d-3 { animation-delay: 2.1s; }
+        .d-4 { animation-delay: 2.8s; }
+        .d-5 { animation-delay: 3.4s; }
+        </style>
+
+        <g stroke="#141417" stroke-width="1.2" stroke-linecap="round">
+        <line x1="-50" y1="40" x2="110" y2="85" />
+        <line x1="-50" y1="140" x2="110" y2="85" />
+        <line x1="-50" y1="260" x2="85" y2="220" />
+        <line x1="-50" y1="380" x2="130" y2="355" />
+        <line x1="110" y1="85" x2="240" y2="30" />
+        <line x1="110" y1="85" x2="85" y2="220" />
+        <line x1="85" y1="220" x2="130" y2="355" />
+        <line x1="240" y1="30" x2="360" y2="95" />
+        <line x1="130" y1="355" x2="330" y2="325" />
+
+        <line x1="360" y1="95" x2="510" y2="35" />
+        <line x1="510" y1="35" x2="720" y2="80" />
+        <line x1="330" y1="325" x2="540" y2="385" />
+        <line x1="540" y1="385" x2="750" y2="340" />
+        <line x1="360" y1="95" x2="330" y2="325" />
+
+        <line x1="720" y1="80" x2="960" y2="45" />
+        <line x1="960" y1="45" x2="1110" y2="95" />
+        <line x1="1110" y1="95" x2="1250" y2="50" />
+        <line x1="1110" y1="95" x2="1250" y2="170" />
+        <line x1="880" y1="215" x2="1110" y2="95" />
+        <line x1="880" y1="215" x2="1080" y2="245" />
+        <line x1="1080" y1="245" x2="1250" y2="230" />
+        <line x1="1080" y1="245" x2="1250" y2="330" />
+        <line x1="750" y1="340" x2="1010" y2="370" />
+        <line x1="880" y1="215" x2="1010" y2="370" />
+        <line x1="1010" y1="370" x2="1250" y2="390" />
+        </g>
+
+        <g stroke="#222226" stroke-width="1.8" stroke-linecap="round">
+        <line x1="360" y1="95" x2="195" y2="165" />
+        <line x1="330" y1="325" x2="195" y2="165" />
+        <line x1="195" y1="165" x2="85" y2="220" />
+        <line x1="195" y1="165" x2="110" y2="85" />
+        <line x1="720" y1="80" x2="880" y2="215" />
+        <line x1="750" y1="340" x2="880" y2="215" />
+        <line x1="720" y1="80" x2="960" y2="130" />
+        <line x1="880" y1="215" x2="960" y2="130" />
+        <line x1="960" y1="130" x2="1110" y2="95" />
+        <line x1="750" y1="340" x2="950" y2="310" />
+        <line x1="950" y1="310" x2="1080" y2="245" />
+
+        <line x1="580" y1="210" x2="360" y2="95" stroke="#27272a" stroke-width="2.2" />
+        <line x1="580" y1="210" x2="330" y2="325" stroke="#27272a" stroke-width="2.2" />
+        <line x1="580" y1="210" x2="720" y2="80" stroke="#27272a" stroke-width="2.2" />
+        <line x1="580" y1="210" x2="880" y2="215" stroke="#27272a" stroke-width="2.2" />
+        <line x1="580" y1="210" x2="750" y2="340" stroke="#27272a" stroke-width="2.2" />
+        </g>
+
+        <g stroke="#06b6d4" stroke-linecap="round" fill="none">
+        <line x1="580" y1="210" x2="360" y2="95" stroke-width="2.2" class="edge-pulse" />
+        <line x1="580" y1="210" x2="330" y2="325" stroke-width="2.2" class="edge-pulse d-1" />
+        <line x1="580" y1="210" x2="720" y2="80" stroke-width="2.2" class="edge-pulse d-2" />
+        <line x1="580" y1="210" x2="880" y2="215" stroke-width="2.2" class="edge-pulse d-3" />
+        <line x1="580" y1="210" x2="750" y2="340" stroke-width="2.2" class="edge-pulse d-4" />
+
+        <line x1="360" y1="95" x2="195" y2="165" stroke-width="1.5" stroke="#0891b2" class="edge-pulse-slow d-2" />
+        <line x1="195" y1="165" x2="85" y2="220" stroke-width="1.2" stroke="#0e7490" class="edge-pulse-slow d-4" />
+        <line x1="330" y1="325" x2="130" y2="355" stroke-width="1.5" stroke="#0891b2" class="edge-pulse-slow d-5" />
+        <line x1="360" y1="95" x2="240" y2="30" stroke-width="1.2" stroke="#0e7490" class="edge-pulse-slow d-1" />
+        <line x1="720" y1="80" x2="960" y2="130" stroke-width="1.5" stroke="#0891b2" class="edge-pulse-slow d-3" />
+        <line x1="960" y1="130" x2="1110" y2="95" stroke-width="1.2" stroke="#0e7490" class="edge-pulse-slow d-5" />
+        <line x1="880" y1="215" x2="1080" y2="245" stroke-width="1.5" stroke="#0891b2" class="edge-pulse-slow d-1" />
+        <line x1="750" y1="340" x2="950" y2="310" stroke-width="1.5" stroke="#0891b2" class="edge-pulse-slow d-2" />
+        </g>
+
+        <g font-size="12" font-weight="500" fill="#3f3f46" text-anchor="middle">
+        <text x="240" y="34" class="word-node drift-b">Salut</text>
+        <text x="110" y="89" class="word-node drift-a">Hallo</text>
+        <text x="85" y="224" class="word-node drift-c">Olá</text>
+        <text x="130" y="359" class="word-node drift-b">Cześć</text>
+        <text x="510" y="39" class="word-node drift-c">Hei</text>
+        <text x="540" y="389" class="word-node drift-a">Merhaba</text>
+        <text x="960" y="49" class="word-node drift-b">Γεια</text>
+        <text x="1110" y="99" class="word-node drift-a">שלום</text>
+        <text x="1080" y="249" class="word-node drift-c">مرحبا</text>
+        <text x="1010" y="374" class="word-node drift-b">नमस्ते</text>
+        </g>
+
+        <g font-size="14" font-weight="500" fill="#52525b" text-anchor="middle">
+        <g transform="translate(195, 165)">
+            <text x="0" y="5" class="word-node drift-c d-2">Привет</text>
+        </g>
+        <g transform="translate(960, 130)">
+            <text x="0" y="5" class="word-node drift-a d-4">안녕</text>
+        </g>
+        <g transform="translate(950, 310)">
+            <text x="0" y="5" class="word-node drift-b d-1">Hej</text>
+        </g>
+        </g>
+
+        <g font-size="16" font-weight="600" fill="#a1a1aa" text-anchor="middle">
+        <g transform="translate(360, 95)">
+            <text x="0" y="5" class="word-node drift-a">Hello</text>
+        </g>
+
+        <g transform="translate(330, 325)">
+            <text x="0" y="5" class="word-node drift-b d-1">Bonjour</text>
+        </g>
+
+        <g transform="translate(720, 80)">
+            <text x="0" y="5" class="word-node drift-b d-2">Ciao</text>
+        </g>
+
+        <g transform="translate(880, 215)">
+            <text x="0" y="5" class="word-node drift-c d-3">こんにちは</text>
+        </g>
+
+        <g transform="translate(750, 340)">
+            <text x="0" y="5" class="word-node drift-a d-4">你好</text>
+        </g>
+
+        <g transform="translate(580, 210)">
+            <text x="0" y="5" class="word-node drift-a d-2">Hola</text>
+        </g>
+        </g>
+    </svg>
+</div>
+{{ end }}
+

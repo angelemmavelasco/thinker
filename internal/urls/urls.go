@@ -6,7 +6,7 @@ import (
 
 // Routes is a centralized urls catalog to be maped automatically from templates
 var RouteNames = map[string]string{
-	"home": "/",
+	"landing": "/",
 
 	"api:users:list": "/api/users",
 

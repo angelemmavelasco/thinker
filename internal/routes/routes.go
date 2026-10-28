@@ -13,21 +13,19 @@ import (
 func SetUpRouter(queries *database.Queries) *gin.Engine {
 	// base router
 	router := gin.Default()
+	router.Static("/static", "./static")
 	router.HTMLRender = config.LoadTemplates("./templates/")
 
 	// needed handlers
 	ideaHandler := handlers.NewIdeaHandler(queries)
 	userHandler := handlers.NewUserHandler(queries)
 
-	router.GET(urls.Get("home"), func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "hello world from thinker",
-		})
-	})
-
 	router.GET(urls.Get("api:users:list"), userHandler.ListUsers)
 	router.GET(urls.Get("ideas:list"), ideaHandler.ListIdeas)
 	router.GET(urls.Get("users:list"), userHandler.ListUsersView)
+	router.GET(urls.Get("landing"), func(c *gin.Context) {
+		c.HTML(http.StatusOK, "landing.html", gin.H{})
+	})
 
 	return router
 }
