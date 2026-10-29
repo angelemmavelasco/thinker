@@ -126,7 +126,7 @@ The server initializes its database pool once at boot and supplies the compiled 
 
 ```
 
-### Package Boundaries
+<!-- ### Package Boundaries
 
 * internal/routes registers endpoints and maps them to their respective domain handlers.
 
@@ -140,18 +140,18 @@ The server initializes its database pool once at boot and supplies the compiled 
 
 * internal/models defines application entities outside the raw generated database rows.
 
-The database relies on explicit SQL statements rather than an ORM. The build tooling generates types from internal/database/schema.sql and method signatures from internal/database/query.sql.
+The database relies on explicit SQL statements rather than an ORM. The build tooling generates types from internal/database/schema.sql and method signatures from internal/database/query.sql. -->
 
-## Routes
+<!-- ## Routes
 
 | Route | Handler purpose | Response | 
 | ----- | ----- | ----- | 
 | GET / | Application health status | JSON | 
 | GET /api/users | Retrieve registered users | JSON | 
 | GET /web/users | User management view | HTML | 
-| GET /web/ideas | Idea listing and dashboard | HTML | 
-
-Routes are registered using internal/urls. Templates use the url helper for reverse resolution, keeping hyperlinks maintainable across views.
+| GET /web/ideas | Idea listing and dashboard | HTML |  -->
+<!-- 
+Routes are registered using internal/urls. Templates use the url helper for reverse resolution, keeping hyperlinks maintainable across views. -->
 
 ## Getting Started
 
