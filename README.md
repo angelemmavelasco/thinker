@@ -119,7 +119,7 @@ flowchart LR
 1. Ingestion
 - Gin HTTP router
     > Access to a url path via web app.
-- RBAC (Control de accesos basado en roles) middleware
+- RBAC (Role-based access control) middleware
     > Controls permissions for every idea, keyword, and action according to the user role to enforce enterprise privacy.
 
 2. Validation
