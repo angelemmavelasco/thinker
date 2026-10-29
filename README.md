@@ -12,17 +12,28 @@ Most note taking platforms rely on folder hierarchies or basic keyword search. W
 
 Thinker treats ideas as an active, compounding artifact:
 
-* Every submitted note or thought becomes an idea node inside a semantic graph.
-
-* A local language model compiles incoming content, extracting entities, identifying topics, and noting connections or contradictions.
-
-* Explicit relationships create edges between ideas, allowing multi hop discovery without relying solely on brittle text matching.
-
-* Role based access control ensures users only discover and traverse knowledge permitted for their organizational role.
-
-* The search experience operates independently of manual tagging by traversing the graph structure and combining text matching with graph expansion.
-
+- Every submitted note or thought becomes an idea node inside a semantic graph.
+- A local language model compiles incoming content, extracting entities, identifying topics, and noting connections or contradictions.
+- Explicit relationships create edges between ideas, allowing multi hop discovery without relying solely on brittle text matching.
+- Role based access control ensures users only discover and traverse knowledge permitted for their organizational role.
+- The search experience operates independently of manual tagging by traversing the graph structure and combining text matching with graph expansion.
 The present build contains the foundation for user and idea records, named route handling, database access layer, and server rendered template views.
+
+## Stack
+- go 1.26.5
+> - [github.com/gin-contrib/multitemplate v1.1.4](https://pkg.go.dev/github.com/gin-contrib/multitemplate@v1.1.4)
+> - [github.com/gin-gonic/gin v1.12.0](https://pkg.go.dev/github.com/gin-gonic/gin@v1.12.0)
+> - [github.com/jackc/pgx/v5 v5.11.0](https://pkg.go.dev/github.com/jackc/pgx/v5@v5.11.0)
+> - [github.com/joho/godotenv v1.5.1](https://pkg.go.dev/github.com/joho/godotenv@v1.5.1)
+
+- LLM
+> - [Qwen2.5-3B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF)
+> - [MiniMax M3.1 Flash](https://www.minimax.io/blog/minimax-m31f)
+
+- HTML5
+- CSS
+> - [Tailwind 4](https://tailwindcss.com/docs/installation/using-vite)
+- JavaScript
 
 ## Architecture and data flow
 ```mermaid
@@ -170,126 +181,32 @@ flowchart LR
 - Postgres knowledge graph
     > The persistent relational store that preserves all nodes, edges, and permission constraints as a compounding single source of truth.
 
-## Getting Started
+### Architecture
 
-### Prerequisites
+Thinker is almost enteraly built on Go. This decision was taken due to the quickness and native concurrency support provided by the language.
 
-Ensure the following tools are installed:
-
-* Go 1.26.5 or later
-
-* Docker Engine with Docker Compose
-
-* sqlc 1.31.1 or later
-
-* PostgreSQL client utilities such as psql
-
-* A local inference runner such as llama.cpp or Ollama when testing the model integration
-
-### Environment Configuration
-
-Create a .env file in the root directory:
-
-```
-DB_NAME=thinker
-DB_USERNAME=postgres
-DB_PASSWORD=postgres
-DB_HOST=127.0.0.1
-DB_PORT=5432
-CONN_STRING=postgresql://postgres:postgres@127.0.0.1:5432/thinker
-LLM_BASE_URL=http://127.0.0.1:8081/v1
-LLM_MODEL=qwen2.5-3b-instruct
-
-```
-
-Keep CONN_STRING consistent with the credentials set in docker-compose.yaml. Never commit personal environment files containing real secrets.
-
-### Start the Database
-
-```
-docker compose up -d db
-
-```
-
-The database container runs on the configured port and stores data in a dedicated volume.
-
-### Apply the Database Schema
-
-Run the initial schema script against the running database instance:
-
-```
-psql postgresql://postgres:postgres@127.0.0.1:5432/thinker -f internal/database/schema.sql
-
-```
-
-The baseline schema provides the users and ideas tables. Tables for graph edges, permissions, and vector columns are applied as the graph engine milestones land.
-
-### Generate Database Code
-
-Whenever modifying internal/database/schema.sql or internal/database/query.sql, update the sqlc output:
-
-```
-sqlc generate
-
-```
-
-Generated files belong in internal/database and should not be modified manually.
-
-### Run the Application
-
-```
-go run main.go
-
-```
-
-The web server starts on port 8080. Explore the active endpoints:
-
-* http://localhost:8080/
-
-* http://localhost:8080/api/users
-
-* http://localhost:8080/web/users
-
-* http://localhost:8080/web/ideas
-
-### Run Test Suites
-
-```
-go test ./...
-go vet ./...
-
-```
+This allows Thinker be structured into 
 
 ## Current Status
 
 The system currently includes:
-
-* Gin HTTP setup and graceful initialization.
-
-* Single pool PostgreSQL connector with sqlc integration.
-
-* User listing through both JSON APIs and HTML pages.
-
-* Basic idea listing views.
-
-* Centralized route directory with reverse template resolution.
-
-* Base layout composition using Tailwind CSS.
-
-* Targeted routing and rendering unit tests.
+- Gin HTTP setup and graceful initialization.
+- Single pool PostgreSQL connector with sqlc integration.
+- User listing through both JSON APIs and HTML pages.
+- Basic idea listing views.
+- Centralized route directory with reverse template resolution.
+- Base layout composition using Tailwind CSS.
+- Targeted routing and rendering unit tests.
 
 ## Next Milestones
 
-* Implement authentication, session handling, and role based access control on notes and graph queries.
+- Implement authentication, session handling, and role based access control on notes and graph queries.
+- Upgrade the PostgreSQL container setup to support pgvector natively.
+- Set up a bounded Go worker pool for asynchronous note ingestion and relationship building.
+- Connect the worker pool to a local Qwen 2.5 3B instance for concept extraction and summary generation.
+- Create graph edge tables to store typed links and mutual relevance scores.
+- Implement graph traversal queries with role aware filters using recursive SQL queries.
+- Build an interactive visual graph explorer view in the web interface.
 
-* Upgrade the PostgreSQL container setup to support pgvector natively.
-
-* Set up a bounded Go worker pool for asynchronous note ingestion and relationship building.
-
-* Connect the worker pool to a local Qwen 2.5 3B instance for concept extraction and summary generation.
-
-* Create graph edge tables to store typed links and mutual relevance scores.
-
-* Implement graph traversal queries with role aware filters using recursive SQL queries.
-
-* Build an interactive visual graph explorer view in the web interface.
+## References
+1. https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f
