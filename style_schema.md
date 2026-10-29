@@ -1,16 +1,16 @@
-# Title
+# Titles
 - [font-medium]
 - [zinc-50]
 
-## Subtitle
+## Subtitles
 - [font-normal]
 - [zinc-400]
 
 ### Keywords
 - [font-normal]
-- [purple-700]
+- [cyan-500]
 
-### Body
+### Bodies
 - [font-normal]
 - [zinc-400]
 
