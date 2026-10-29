@@ -1,56 +1,66 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <link rel="stylesheet" href="/static/pages/landing/landing.css">
+    <link rel="stylesheet" href="/static/pages/landing/landing.css" />
     <title>Thinker</title>
-</head>
-<body class="bg-zinc-950 text-zinc-50 p-6 max-w-4xl mx-auto">
-
+  </head>
+  <body class="bg-zinc-950 text-zinc-50 p-6 max-w-4xl mx-auto">
     <ul class="text-xs flex gap-6 items-center fixed top-0 left-0 right-0 backdrop-blur-sm p-6 z-100">
-        <li>
-            <h1 class="text-cyan-500 font-bold">Thinker</h1>
-        </li>
+      <li>
+        <h1 class="text-cyan-500 font-bold">Tk</h1>
+      </li>
 
-        <li class="cursor-pointer hover:text-zinc-500 transition-all">
-            Documentación
-        </li>
+      <li class="cursor-pointer hover:text-zinc-500 transition-all">
+        Documentación
+      </li>
 
-        <li class="cursor-pointer hover:text-zinc-500 transition-all">
-            Soporte
-        </li>
+      <li class="cursor-pointer hover:text-zinc-500 transition-all">Soporte</li>
 
-        <li class="cursor-pointer hover:text-zinc-500 transition-all border border-zinc-400 rounded-sm p-0.5">
-            Regístrate
-        </li>
+      <li class="cursor-pointer hover:text-zinc-500 transition-all border border-zinc-400 rounded-sm p-0.5">
+        Regístrate
+      </li>
 
-        <li class="cursor-pointer hover:text-zinc-500 transition-all border border-cyan-500 text-cyan-500 rounded-sm p-0.5">
-            Iniciar sesión
-        </li>
+      <li class="cursor-pointer hover:text-zinc-500 transition-all border border-cyan-500 text-cyan-500 rounded-sm p-0.5">
+        Iniciar sesión
+      </li>
     </ul>
 
     {{ template "landing_graph_top" . }}
 
-    <p class="title-glow font-bold text-6xl text-center sm:text-right">
-        Genera ideas,<br>
-        <span class="text-cyan-500">Thinker</span> hace lo demás.
+    <p class="title-glow font-bold text-6xl text-center sm:text-left">
+      Genera ideas,<br/>
+      <span class="text-cyan-500">Thinker</span> hace lo demás.
     </p>
 
     {{ template "landing_graph_bottom" . }}
 
     <div class="text-zinc-400 mt-6 leading-relaxed space-y-4">
-        <p class="text-2xl">
-            El lugar para tus notas y los documentos de tu equipo donde <br> <span class="text-zinc-200">no tienes que organizar nada</span>.
-        </p>
-        <p class="text-sm text-zinc-500">
-            Tú solo escribe como te salga. Thinker lee tus notas, entiende de qué hablan y las conecta automáticamente con ideas pasadas, proyectos o apuntes de tus compañeros. Sin carpetas, sin etiquetas.
-        </p>
+      <p class="text-2xl">
+        El lugar para tus notas y los documentos de tu equipo donde
+        <br />
+        <span class="text-zinc-200">no tienes que organizar nada</span>.
+      </p>
+      <p class="text-sm text-zinc-500">
+        Tú solo escribe como te salga. Thinker lee tus notas, entiende de qué
+        hablan y las conecta automáticamente con ideas pasadas, proyectos o
+        apuntes de tus compañeros. Sin carpetas, sin etiquetas.
+      </p>
     </div>
 
-    <div class="fixed bottom-0 left-0 right-0 h-24 pointer-events-none backdrop-blur-md bg-gradient-to-t from-zinc-950 via-zinc-950/80 to-transparent [mask-image:linear-gradient(to_top,black_30%,transparent_100%)]" style="-webkit-mask-image: linear-gradient(to top, black 30%, transparent 100%); mask-image: linear-gradient(to top, black 30%, transparent 100%);"></div>
+    <div
+      class="fixed bottom-0 left-0 right-0 h-24 pointer-events-none backdrop-blur-md bg-gradient-to-t from-zinc-950 via-zinc-950/80 to-transparent [mask-image:linear-gradient(to_top,black_30%,transparent_100%)]"
+      style="
+        -webkit-mask-image: linear-gradient(
+          to top,
+          black 30%,
+          transparent 100%
+        );
+        mask-image: linear-gradient(to top, black 30%, transparent 100%);
+      "></div>
 
     <script src="/static/pages/landing/landing.js"></script>
-</body>
+  </body>
 </html>

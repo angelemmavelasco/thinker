@@ -1,63 +1,73 @@
 # Thinker
 
-Thinker is a backend system for organizing ideas as an associative knowledge graph. Users submit notes or raw thoughts, then the system extracts concepts and computes semantic relationships between them. Ideas are represented as graph nodes; semantically related ideas are connected by undirected edges whose weights express their proximity.
+Thinker is an associative knowledge graph and collaborative LLM wiki built for teams that need a shared digital brain. Instead of asking people to manually categorize documents into rigid folders or write bidirectional links by hand, the platform ingests raw notes and thoughts, extracts core concepts with a local language model, and compiles them into a living graph structure inspired by the LLM wiki pattern proposed by Andrej Karpathy.
 
-The repository currently provides the Go HTTP application, PostgreSQL access, sqlc-generated queries, and server-side HTML views. The graph-processing pipeline is an architectural target and is not yet implemented in the current codebase.
+By pairing a linked interface (graph that looks like a neural network) with role based access control, the system lets organizations maintain an autonomous second brain where knowledge compounds naturally as users write.
+
+The codebase currently provides the core Go web service, PostgreSQL storage, sqlc generated database access, and server rendered HTML templates. The asynchronous entity extraction worker and graph expansion pipeline represent the immediate architectural roadmap.
 
 ## Overview
 
-Traditional note systems often rely on folders or exact keyword search. thinker uses a semantic graph so that an idea can belong to several conceptual areas without maintaining a rigid hierarchy.
+Most note taking platforms rely on folder hierarchies or basic keyword search. When teams scale, these structures quickly break because people organize information differently and maintenance becomes a burden. Standard retrieval augmented generation also falls short over time because it answers questions from scratch by slicing documents into arbitrary chunks without preserving overall context or persistent synthesis.
 
-A future graph record should include:
+Thinker treats ideas as an active, compounding artifact:
 
-- ideas as graph nodes;
-- normalized keywords and entities as supporting concepts;
-- vector embeddings for ideas and concepts;
-- undirected weighted edges between closely related ideas or concepts;
-- edge weights derived from explicit overlap and vector similarity.
+* Every submitted note or thought becomes an idea node inside a semantic graph.
 
-The current application manages the foundational `users` and `ideas` PostgreSQL tables, exposes JSON and server-rendered views, and provides named route resolution and generated database access.
+* A local language model compiles incoming content, extracting entities, identifying topics, and noting connections or contradictions.
+
+* Explicit relationships create edges between ideas, allowing multi hop discovery without relying solely on brittle text matching.
+
+* Role based access control ensures users only discover and traverse knowledge permitted for their organizational role.
+
+* The search experience operates independently of manual tagging by traversing the graph structure and combining text matching with graph expansion.
+
+The present build contains the foundation for user and idea records, named route handling, database access layer, and server rendered template views.
 
 ## Architecture and Data Flow
 
-The target idea-processing flow is:
+The target processing lifecycle for new ideas follows a clear asynchronous pipeline:
 
-```text
-Raw idea text
+```
+User submits idea through web interface
     |
     v
-Input validation and persistence
+Gin handler validates and persists idea to PostgreSQL
     |
     v
-LLM normalization and keyword/entity extraction
+Background worker claims task via internal queue
     |
     v
-Embedding generation
+Local model extracts entities, summary, and semantic tags
     |
     v
-Similarity and shared-concept calculation
+Vector embedding generated and stored via pgvector
     |
     v
-Undirected weighted graph edge generation
+Graph relations and bidirectional links created
     |
     v
-Graph query, traversal, and ranked retrieval
+User traverses ideas via graph view or associative search
+
 ```
 
-The responsibilities are:
+Pipeline responsibilities:
 
-1. **Submission:** The HTTP layer validates and persists a user's idea.
-2. **Normalization:** An LLM converts the raw text into a consistent representation and extracts relevant keywords and entities.
-3. **Embedding:** The normalized text and extracted concepts are converted to vector representations.
-4. **Comparison:** Cosine similarity and shared-concept relationships determine the semantic distance between nodes.
-5. **Edge generation:** Related ideas are connected with an undirected edge. The weight combines or derives from mutual relevance and semantic proximity.
-6. **Retrieval:** Graph traversal and similarity search can expose related ideas even when their wording does not match exactly.
+1. Submission: The Gin layer stores the raw idea immediately and returns an acknowledgment to the user.
 
-### Runtime request flow
+2. Background extraction: A Go worker pool feeds the text to a local model such as Qwen 2.5 3B running via llama.cpp or an OpenAI compatible local runner, obtaining concise summaries and concept tags without introducing external runtimes.
 
-The current HTTP request path is:
+3. Vector persistence: Embeddings are generated and persisted into PostgreSQL with pgvector for fast seed candidate discovery.
 
-```text
+4. Graph compilation: New relationships link the note to existing ideas, maintaining an evolving web of knowledge.
+
+5. Associative retrieval: Queries use text matching alongside graph traversal algorithms to find relevant context across multiple degrees of separation.
+
+### Runtime Request Flow
+
+The current request path inside the application:
+
+```
 main.go
   -> config.LoadConfig
   -> database.NewConnector
@@ -65,27 +75,38 @@ main.go
   -> routes.SetUpRouter
   -> domain handler
   -> sqlc query or HTML template
+
 ```
 
-The application initializes its PostgreSQL connection once and passes generated query methods to handlers through `database.Queries`. HTML requests are rendered with layouts and views assembled by `multitemplate`; JSON endpoints use Gin's response renderer directly.
+The server initializes its database pool once at boot and supplies the compiled sqlc queries directly to handlers. Responses return either raw JSON for API consumers or HTML views built with standard templates and multitemplate layouts.
 
 ## Tech Stack
 
-- **Go 1.26.5:** Application runtime and server.
-- **Gin:** HTTP routing and request handling.
-- **PostgreSQL 16:** Relational persistence.
-- **pgvector:** Intended vector-storage and similarity-search extension for embeddings and graph traversal. It is not enabled in the current Docker Compose service.
-- **sqlc:** Compile-time generation of type-safe Go database methods from SQL.
-- **pgx/v5:** PostgreSQL driver and connection pool API.
-- **html/template:** Server-side template parsing and rendering.
-- **gin-contrib/multitemplate:** Named template sets composed from layouts and views.
-- **Tailwind CSS:** Browser-side page styling through the base template.
-- **Docker Compose:** Local PostgreSQL process and persistent volume management.
-- **godotenv:** Loading local environment variables from `.env`.
+* Go 1.26.5: Core backend service and concurrency orchestration.
+
+* Gin: HTTP routing, middleware, and request dispatching.
+
+* PostgreSQL 16: Relational persistence for users, ideas, and graph edges.
+
+* pgvector: Vector similarity indexing for semantic seed retrieval.
+
+* Qwen 2.5 3B Instruct GGUF: Default local inference target running on llama.cpp or compatible daemon.
+
+* sqlc: Compile time type safe database client generated from SQL queries.
+
+* pgx v5: PostgreSQL driver and connection pool.
+
+* html/template and multitemplate: Server rendered UI layouts.
+
+* Tailwind CSS: Interface styling.
+
+* Docker Compose: Local container environment for development services.
+
+* godotenv: Environment variable loader for local workflows.
 
 ## Project Structure
 
-```text
+```
 .
 ├── internal/
 │   ├── config/          # Environment loading and template renderer setup
@@ -102,138 +123,156 @@ The application initializes its PostgreSQL connection once and passes generated 
 ├── sqlc.yaml            # sqlc schema and query generation configuration
 ├── go.mod               # Go module and dependency declarations
 └── main.go              # Application entry point
+
 ```
 
-### Package boundaries
+### Package Boundaries
 
-- `internal/routes` registers the complete routes and connects them to handlers.
-- `internal/urls` is the source of truth for named routes. It exposes both direct lookup and template-friendly reverse lookup without introducing a config or handler dependency back into templates.
-- `internal/handlers` translates HTTP requests and database or rendering failures into Gin responses. Domain handlers remain separated from route registration.
-- `internal/database` contains the SQL schema and queries, sqlc-generated models and methods, and PostgreSQL connection setup.
-- `internal/config` loads environment configuration and combines each HTML view with base layouts.
-- `internal/models` holds domain-level types that are not exclusively generated database models.
+* internal/routes registers endpoints and maps them to their respective domain handlers.
 
-The database is initialized with SQL rather than by runtime ORM migrations. sqlc reads `internal/database/schema.sql` for generated types and `internal/database/query.sql` for compile-time query signatures.
+* internal/urls provides reverse route resolution for templates and application logic, avoiding hardcoded endpoint paths.
+
+* internal/handlers manages request parsing, delegates database work, and selects the rendering mechanism.
+
+* internal/database houses the SQL schemas, sqlc definitions, and connection lifecycle.
+
+* internal/config loads configuration settings and builds the multitemplate view registry.
+
+* internal/models defines application entities outside the raw generated database rows.
+
+The database relies on explicit SQL statements rather than an ORM. The build tooling generates types from internal/database/schema.sql and method signatures from internal/database/query.sql.
 
 ## Routes
 
-| Route | Handler purpose | Response |
-| --- | --- | --- |
-| `GET /` | Application health-style message | JSON |
-| `GET /api/users` | List users | JSON |
-| `GET /web/users` | List users | HTML |
-| `GET /web/ideas` | List ideas | HTML |
+| Route | Handler purpose | Response | 
+| ----- | ----- | ----- | 
+| GET / | Application health status | JSON | 
+| GET /api/users | Retrieve registered users | JSON | 
+| GET /web/users | User management view | HTML | 
+| GET /web/ideas | Idea listing and dashboard | HTML | 
 
-Routes are registered by name through `internal/urls/urls.go`. Template views call `{{ url "route:name" }}` for reverse lookup, while Go code calls `urls.Get` or `urls.URLFor`.
+Routes are registered using internal/urls. Templates use the url helper for reverse resolution, keeping hyperlinks maintainable across views.
 
 ## Getting Started
 
 ### Prerequisites
 
-Install:
+Ensure the following tools are installed:
 
-- Go 1.26.5 or later
-- Docker Engine and Docker Compose
-- sqlc 1.31.1 or a compatible later release
-- A PostgreSQL client such as `psql` for schema initialization
+* Go 1.26.5 or later
 
-### Environment configuration
+* Docker Engine with Docker Compose
 
-Create a `.env` file in the repository root. The application expects these variables:
+* sqlc 1.31.1 or later
 
-```dotenv
+* PostgreSQL client utilities such as psql
+
+* A local inference runner such as llama.cpp or Ollama when testing the model integration
+
+### Environment Configuration
+
+Create a .env file in the root directory:
+
+```
 DB_NAME=thinker
 DB_USERNAME=postgres
 DB_PASSWORD=postgres
 DB_HOST=127.0.0.1
 DB_PORT=5432
 CONN_STRING=postgresql://postgres:postgres@127.0.0.1:5432/thinker
-LLM_API_KEY=replace-with-a-local-development-key
+LLM_BASE_URL=http://127.0.0.1:8081/v1
+LLM_MODEL=qwen2.5-3b-instruct
+
 ```
 
-`docker-compose.yaml` uses `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`, and `DB_PORT`. The application currently connects through `CONN_STRING`. Keep `CONN_STRING` aligned with the Compose variables.
+Keep CONN_STRING consistent with the credentials set in docker-compose.yaml. Never commit personal environment files containing real secrets.
 
-The repository does not ship a committed environment file. Do not commit credentials or API keys.
+### Start the Database
 
-### Start PostgreSQL
-
-```bash
+```
 docker compose up -d db
+
 ```
 
-The Compose service exposes PostgreSQL on `DB_PORT` and persists data in the `postgres-data` Docker volume.
+The database container runs on the configured port and stores data in a dedicated volume.
 
-### Initialize the database schema
+### Apply the Database Schema
 
-The current Compose service starts the standard PostgreSQL image and does not mount or execute `internal/database/schema.sql` automatically. Apply the schema explicitly:
+Run the initial schema script against the running database instance:
 
-```bash
-psql "$CONN_STRING" -f internal/database/schema.sql
+```
+psql postgresql://postgres:postgres@127.0.0.1:5432/thinker -f internal/database/schema.sql
+
 ```
 
-The shell can read `CONN_STRING` from `.env` only if the environment file has been exported. An equivalent explicit command is:
+The baseline schema provides the users and ideas tables. Tables for graph edges, permissions, and vector columns are applied as the graph engine milestones land.
 
-```bash
-psql "postgresql://postgres:postgres@127.0.0.1:5432/thinker" \
-  -f internal/database/schema.sql
+### Generate Database Code
+
+Whenever modifying internal/database/schema.sql or internal/database/query.sql, update the sqlc output:
+
 ```
-
-The existing schema creates `users` and `ideas`. It does not yet define vector columns, graph edge tables, or the pgvector extension.
-
-### Regenerate database code
-
-After changing `internal/database/schema.sql` or `internal/database/query.sql`, regenerate the sqlc output:
-
-```bash
 sqlc generate
+
 ```
 
-Generated files are written to `internal/database` according to `sqlc.yaml`. Do not edit those files manually.
+Generated files belong in internal/database and should not be modified manually.
 
-### Run the application
+### Run the Application
 
-```bash
+```
 go run main.go
+
 ```
 
-The server listens on port `8080` by default. Verify the available surfaces at:
+The web server starts on port 8080. Explore the active endpoints:
 
-- `http://localhost:8080/`
-- `http://localhost:8080/api/users`
-- `http://localhost:8080/web/users`
-- `http://localhost:8080/web/ideas`
+* http://localhost:8080/
 
-### Run checks
+* http://localhost:8080/api/users
 
-```bash
+* http://localhost:8080/web/users
+
+* http://localhost:8080/web/ideas
+
+### Run Test Suites
+
+```
 go test ./...
 go vet ./...
+
 ```
 
 ## Current Status
 
-The implemented foundation includes:
+The system currently includes:
 
-- Gin HTTP routing;
-- PostgreSQL connection setup;
-- sqlc-generated user and idea queries;
-- JSON user listing;
-- server-rendered user and idea views;
-- named routes and reverse URL lookup;
-- local PostgreSQL and persistent-volume setup;
-- focused tests for route and template rendering behavior.
+* Gin HTTP setup and graceful initialization.
 
-The LLM extraction and graph-processing pipeline is not yet implemented.
+* Single pool PostgreSQL connector with sqlc integration.
+
+* User listing through both JSON APIs and HTML pages.
+
+* Basic idea listing views.
+
+* Centralized route directory with reverse template resolution.
+
+* Base layout composition using Tailwind CSS.
+
+* Targeted routing and rendering unit tests.
 
 ## Next Milestones
 
-- Add authentication, password handling, authorization, and role-based access control.
-- Add explicit pgvector support through a compatible PostgreSQL image and schema migration.
-- Store embeddings for ideas and extracted concepts.
-- Integrate an LLM processor behind a bounded worker pool for asynchronous normalization and extraction.
-- Persist normalized keywords and entities with provenance to source ideas.
-- Generate canonical undirected graph edges and store weighted similarity values.
-- Add cosine-similarity searches and graph traversals for related ideas.
-- Move schema application into reproducible migrations and make startup checks deterministic.
-- Add API-level validation, pagination, transaction handling, and structured error responses.
-- Expand tests across database, handlers, routing, and rendered templates.
+* Implement authentication, session handling, and role based access control on notes and graph queries.
+
+* Upgrade the PostgreSQL container setup to support pgvector natively.
+
+* Set up a bounded Go worker pool for asynchronous note ingestion and relationship building.
+
+* Connect the worker pool to a local Qwen 2.5 3B instance for concept extraction and summary generation.
+
+* Create graph edge tables to store typed links and mutual relevance scores.
+
+* Implement graph traversal queries with role aware filters using recursive SQL queries.
+
+* Build an interactive visual graph explorer view in the web interface.
