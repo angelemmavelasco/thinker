@@ -52,3 +52,7 @@ func (h *IdeaHandler) NewIdea(c *gin.Context) {
 	config.Render(c, http.StatusOK, "ideas_new.html", data)
 
 }
+
+// func (h *IdeaHandler) CreateIdea(c *gin.Context) error {
+// 	return nil
+// }

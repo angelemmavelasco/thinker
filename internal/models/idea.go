@@ -1,7 +1,8 @@
 package models
 
+import "thinker/internal/database"
+
 type Idea struct {
-	Title    string
-	Content  string
-	Keywords []Keyword
+	User database.User
+	Idea database.Idea
 }
