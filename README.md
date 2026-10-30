@@ -185,7 +185,35 @@ flowchart LR
 
 Thinker is almost enteraly built on Go. This decision was taken due to the quickness and native concurrency support provided by the language.
 
-This allows Thinker be structured into 
+This allows Thinker be structured in different modules confortably and following SOLID principles with an idiomatic Go approach.
+
+```
+└── thinker/
+    └── docs/
+    └── internal/
+        └── config/
+        └── database/
+        └── handlers/
+        └── models/
+        └── routes/
+        └── urls/
+    └── static/
+    └── templates/
+        └── includes/
+        └── layouts/
+        └── pages/
+        └── views/
+    ├── .env
+    ├── .gitignore
+    ├── docker-compose.yaml
+    ├── go.mod
+    ├── go.sum
+    ├── main.go
+    ├── README.md
+    ├── README.pdf
+    ├── sqlc.yaml
+    └── style_schema.md
+```
 
 ## Current Status
 

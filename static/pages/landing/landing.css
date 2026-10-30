@@ -48,9 +48,233 @@
     animation: efct-aura 2.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+@keyframes folder-dissolve {
+    0%, 100% {
+        stroke-dashoffset: 0;
+        opacity: 0.85;
+    }
+    50% {
+        stroke-dashoffset: 18;
+        opacity: 0.3;
+    }
+}
+
+@keyframes entity-left {
+    0%, 100% {
+        transform: translateX(0);
+        stroke: currentColor;
+    }
+    45%, 65% {
+        transform: translateX(-1.4px) translateY(-0.5px);
+        stroke: #22d3ee;
+    }
+}
+
+@keyframes entity-right {
+    0%, 100% {
+        transform: translateX(0);
+        stroke: currentColor;
+    }
+    45%, 65% {
+        transform: translateX(1.4px) translateY(-0.5px);
+        stroke: #22d3ee;
+    }
+}
+
+.lucide-folder-code {
+    overflow: visible;
+}
+
+.lucide-folder-code path:nth-of-type(3) {
+    stroke-dasharray: 42 6;
+    animation: folder-dissolve 3.6s ease-in-out infinite;
+}
+
+.lucide-folder-code path:nth-of-type(1) {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: entity-left 2.8s ease-in-out infinite;
+}
+
+.lucide-folder-code path:nth-of-type(2) {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: entity-right 2.8s ease-in-out infinite;
+}
+
+@keyframes hub-breathe {
+    0%, 100% {
+        stroke: currentColor;
+        transform: scale(1);
+    }
+    50% {
+        stroke: #2dd4bf;
+        transform: scale(1.08);
+    }
+}
+
+@keyframes semantic-link-flow {
+    0% {
+        stroke-dashoffset: 16;
+        stroke: #52525b;
+    }
+    50% {
+        stroke: #2dd4bf;
+    }
+    100% {
+        stroke-dashoffset: 0;
+        stroke: #52525b;
+    }
+}
+
+@keyframes subnode-ping {
+    0%, 30%, 100% {
+        stroke: currentColor;
+        transform: scale(1);
+    }
+    55% {
+        stroke: #5eead4;
+        fill: rgba(45, 212, 191, 0.25);
+        transform: scale(1.22);
+    }
+}
+
+.lucide-graph-hub {
+    overflow: visible;
+}
+
+.lucide-graph-hub circle {
+    transform-box: fill-box;
+    transform-origin: center;
+}
+
+.lucide-graph-hub circle:nth-of-type(1) {
+    animation: hub-breathe 3s ease-in-out infinite;
+}
+
+.lucide-graph-hub path {
+    stroke-dasharray: 5 3;
+    animation: semantic-link-flow 2.4s linear infinite;
+}
+
+.lucide-graph-hub path:nth-of-type(2) {
+    animation-delay: 0.4s;
+}
+
+.lucide-graph-hub path:nth-of-type(3) {
+    animation-delay: 0.8s;
+}
+
+.lucide-graph-hub circle:nth-of-type(2) {
+    animation: subnode-ping 2.4s ease-in-out infinite;
+}
+
+.lucide-graph-hub circle:nth-of-type(3) {
+    animation: subnode-ping 2.4s ease-in-out 0.4s infinite;
+}
+
+.lucide-graph-hub circle:nth-of-type(4) {
+    animation: subnode-ping 2.4s ease-in-out 0.8s infinite;
+}
+
+@keyframes brain-core {
+    0%, 100% {
+        stroke: currentColor;
+        opacity: 0.9;
+    }
+    50% {
+        stroke: #34d399;
+        opacity: 1;
+    }
+}
+
+@keyframes role-branch {
+    0%, 70%, 100% {
+        stroke: currentColor;
+        opacity: 0.45;
+    }
+    35% {
+        stroke: #6ee7b7;
+        opacity: 1;
+    }
+}
+
+@keyframes role-node {
+    0%, 70%, 100% {
+        stroke: currentColor;
+        fill: currentColor;
+        transform: scale(1);
+    }
+    35% {
+        stroke: #6ee7b7;
+        fill: #6ee7b7;
+        transform: scale(1.8);
+    }
+}
+
+.lucide-brain-circuit {
+    overflow: visible;
+}
+
+.lucide-brain-circuit path:nth-of-type(6),
+.lucide-brain-circuit path:nth-of-type(7),
+.lucide-brain-circuit path:nth-of-type(8) {
+    animation: brain-core 3.5s ease-in-out infinite;
+}
+
+.lucide-brain-circuit path:nth-of-type(1) { animation: role-branch 3.2s ease-in-out 0s infinite; }
+.lucide-brain-circuit path:nth-of-type(2) { animation: role-branch 3.2s ease-in-out 0.8s infinite; }
+.lucide-brain-circuit path:nth-of-type(3) { animation: role-branch 3.2s ease-in-out 1.6s infinite; }
+.lucide-brain-circuit path:nth-of-type(4),
+.lucide-brain-circuit path:nth-of-type(5) { animation: role-branch 3.2s ease-in-out 2.4s infinite; }
+
+.lucide-brain-circuit circle {
+    transform-box: fill-box;
+    transform-origin: center;
+}
+
+.lucide-brain-circuit circle:nth-of-type(1) { animation: role-node 3.2s ease-in-out 0s infinite; }
+.lucide-brain-circuit circle:nth-of-type(2) { animation: role-node 3.2s ease-in-out 2.4s infinite; }
+.lucide-brain-circuit circle:nth-of-type(3) { animation: role-node 3.2s ease-in-out 0.8s infinite; }
+.lucide-brain-circuit circle:nth-of-type(4) { animation: role-node 3.2s ease-in-out 1.6s infinite; }
+
+.feature-card-anim {
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                background-color 0.35s ease;
+}
+
+.feature-card-anim:hover {
+    transform: translateY(-3px);
+}
+
+.feature-card-anim:hover .preview-icon {
+    transform: scale(1.12);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal-item {
+    opacity: 0;
+    transform: translateY(14px);
+    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal-item.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
 @media (prefers-reduced-motion: reduce) {
     .title-glow,
-    .title-glow::before {
-        animation: none;
+    .title-glow::before,
+    .lucide-folder-code *,
+    .lucide-graph-hub *,
+    .lucide-brain-circuit * {
+        animation: none !important;
+    }
+    .reveal-item {
+        opacity: 1 !important;
+        transform: none !important;
     }
 }

@@ -4,51 +4,95 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <link rel="stylesheet" href="/static/pages/landing/landing.css" />
+    <link rel="stylesheet" href="/static/pages/landing/landing.css?v=3" />
     <title>Thinker</title>
   </head>
-  <body class="bg-zinc-950 text-zinc-50 p-6 max-w-4xl mx-auto">
-    <ul class="text-xs flex gap-6 items-center fixed top-0 left-0 right-0 backdrop-blur-sm p-6 z-100">
+  <body class="bg-zinc-950 text-zinc-50 p-6 pb-36 max-w-4xl mx-auto">
+    <ul class="text-xs flex gap-6 items-center fixed top-0 left-0 right-0 backdrop-blur-sm p-6" style="z-index: 100;">
       <li>
-        <h1 class="text-cyan-500 font-bold">Tk</h1>
+        <button id="tk-btn" type="button" class="text-cyan-500 font-bold cursor-pointer sm:cursor-default select-none active:scale-95 transition-transform sm:active:scale-100 focus:outline-none flex items-center p-1 -m-1">Tk</button>
       </li>
 
-      <li class="cursor-pointer hover:text-zinc-500 transition-all">
-        Documentación
-      </li>
+      <li class="desktop-nav-item cursor-pointer hover:text-zinc-500 transition-all hidden sm:block">Documentación</li>
 
-      <li class="cursor-pointer hover:text-zinc-500 transition-all">Soporte</li>
+      <li class="desktop-nav-item cursor-pointer hover:text-zinc-500 transition-all hidden sm:block">Características</li>
 
-      <li class="cursor-pointer hover:text-zinc-500 transition-all border border-zinc-400 rounded-sm p-0.5">
+      <li class="desktop-nav-item cursor-pointer hover:text-zinc-500 transition-all hidden sm:block">Soporte</li>
+
+      <li class="desktop-nav-item cursor-pointer hover:text-zinc-500 transition-all hidden sm:block">Demo</li>
+
+      <li class="cursor-pointer hover:text-zinc-500 hover:border-zinc-500 transition-all border border-zinc-400 rounded-sm p-0.5 ml-auto sm:ml-0">
         Regístrate
       </li>
 
-      <li class="cursor-pointer hover:text-zinc-500 transition-all border border-cyan-500 text-cyan-500 rounded-sm p-0.5">
-        Iniciar sesión
+      <li class="cursor-pointer hover:text-zinc-500 hover:border-zinc-500 transition-all border border-cyan-500 text-cyan-500 rounded-sm p-0.5">
+        <a href='{{url "ideas:list"}}'>
+          Iniciar sesión
+        </a>
       </li>
     </ul>
+
+    <div
+      id="mobile-backdrop"
+      class="fixed inset-0 bg-zinc-950/90 backdrop-blur-md transition-opacity duration-300 sm:hidden"
+      style="z-index: 90; display: none; opacity: 0;"
+    ></div>
+
+    <nav
+      id="mobile-menu"
+      class="fixed top-20 left-6 right-6 flex flex-col gap-4 text-base font-medium transition-all duration-300 sm:hidden"
+      style="z-index: 100; display: none; opacity: 0; transform: translateY(-8px);"
+    >
+      <div class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80">Documentación</div>
+      <div class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80">Características</div>
+      <div class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80">Soporte</div>
+      <div class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2">Demo</div>
+    </nav>
 
     {{ template "landing_graph_top" . }}
 
     <p class="title-glow font-bold text-6xl text-center sm:text-left">
-      Genera ideas,<br/>
+      Genera ideas,<br />
       <span class="text-cyan-500">Thinker</span> hace lo demás.
     </p>
 
     {{ template "landing_graph_bottom" . }}
 
-    <div class="text-zinc-400 mt-6 leading-relaxed space-y-4">
-      <p class="text-2xl">
-        El lugar para tus notas y los documentos de tu equipo donde
+    <div class="text-zinc-400 mt-12 leading-relaxed space-y-4">
+      <p class="text-3xl text-center">
+        El cerebro digital de tu equipo donde
         <br />
-        <span class="text-zinc-200">no tienes que organizar nada</span>.
-      </p>
-      <p class="text-sm text-zinc-500">
-        Tú solo escribe como te salga. Thinker lee tus notas, entiende de qué
-        hablan y las conecta automáticamente con ideas pasadas, proyectos o
-        apuntes de tus compañeros. Sin carpetas, sin etiquetas.
+        <span class="text-zinc-200">el conocimiento se organiza solo</span>.
       </p>
     </div>
+    
+    <div class=" mt-12 text-xl">
+        <p class=" text-zinc-500 text-left bg-cyan-500/10 p-4 rounded-sm">
+          <span class="text-zinc-50 flex gap-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder-code preview-icon"><path d="M10 10.5 8 13l2 2.5"/><path d="m14 10.5 2 2.5-2 2.5"/><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/></svg>
+            Cero organización manual</span><br>
+          Ingresa texto, documentos, <span class="text-zinc-50">ideas</span>... Thinker lee, extrae entidades y términos clave, clasifica, oragniza y relaciona automáticamente. No más carpetas ni etiquetas.
+        </p>
+
+        <p class=" text-zinc-500 text-left bg-teal-500/10 p-4 rounded-sm mt-6">
+          <span class="text-zinc-50 flex gap-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-graph-hub preview-icon"><circle cx="12" cy="7" r="4"/><circle cx="4" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="20" cy="19" r="2"/><path d="M8 7a4 4 0 0 0-4 4v6"/><path d="M12 11v6"/><path d="M16 7a4 4 0 0 1 4 4v6"/></svg>
+            Tu conocimiento conectado</span><br>
+          Tus ideas se compilan en una <span class="text-zinc-50">red semántica viva</span>. El sistema detecta similitudes y conceptos compartidos, conectando el documento de hoy con proyectos anteriores y hallando relaciones que ni recordabas.
+        </p>
+
+        <p class=" text-zinc-500 text-left bg-emerald-500/10 p-4 rounded-sm mt-6">
+          <span class="text-zinc-50 flex gap-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-brain-circuit preview-icon"><path d="M12 13h4"/><path d="M12 18h6a2 2 0 012 2v1"/><path d="M12 8h8"/><path d="M12 9a4.17 4.17 0 01-3 4"/><path d="M16 8V5a2 2 0 012-2"/><path d="M6 18a4 4 0 01-2-7.465"/><path d="M6.004 5.125a4 4 0 00-2.526 5.77"/><path d="M6.294 6.294A3 3 0 1112 5v13a4 4 0 11-7.967-.518"/><circle cx="16" cy="13" r="0.5" fill="currentColor"/><circle cx="18" cy="3" r="0.5" fill="currentColor"/><circle cx="20" cy="21" r="0.5" fill="currentColor"/><circle cx="20" cy="8" r="0.5" fill="currentColor"/></svg>
+            Un cerebro colectivo</span><br>
+          Todo el conocimiento de un equipo completo en un solo lugar con <span class="text-zinc-50">control de acceso por roles</span>. Cada usuario explora, busca y navega únicamente por las ramas y la información que le corresponden por su rol.
+        </p>
+
+    </div>
+
+    <p class="text-cyan-500 font-bold text-3xl mt-24 text-center">
+      Prueba Thinker ahora.
+    </p>
 
     <div
       class="fixed bottom-0 left-0 right-0 h-24 pointer-events-none backdrop-blur-md bg-gradient-to-t from-zinc-950 via-zinc-950/80 to-transparent [mask-image:linear-gradient(to_top,black_30%,transparent_100%)]"
@@ -59,8 +103,86 @@
           transparent 100%
         );
         mask-image: linear-gradient(to top, black 30%, transparent 100%);
-      "></div>
+      "
+    ></div>
 
-    <script src="/static/pages/landing/landing.js"></script>
+    <script>
+      (function () {
+        const tkBtn = document.getElementById('tk-btn');
+        const backdrop = document.getElementById('mobile-backdrop');
+        const menu = document.getElementById('mobile-menu');
+
+        if (!tkBtn || !backdrop || !menu) return;
+
+        let isOpen = false;
+
+        function isMobile() {
+          const sampleItem = document.querySelector('.desktop-nav-item');
+          if (sampleItem) {
+            return window.getComputedStyle(sampleItem).display === 'none';
+          }
+          return window.innerWidth < 640;
+        }
+
+        function openMenu() {
+          isOpen = true;
+          backdrop.style.display = 'block';
+          menu.style.display = 'flex';
+          requestAnimationFrame(() => {
+            backdrop.style.opacity = '1';
+            backdrop.style.pointerEvents = 'auto';
+            menu.style.opacity = '1';
+            menu.style.pointerEvents = 'auto';
+            menu.style.transform = 'translateY(0)';
+          });
+        }
+
+        function closeMenu() {
+          if (!isOpen) return;
+          isOpen = false;
+          backdrop.style.opacity = '0';
+          backdrop.style.pointerEvents = 'none';
+          menu.style.opacity = '0';
+          menu.style.pointerEvents = 'none';
+          menu.style.transform = 'translateY(-8px)';
+          setTimeout(() => {
+            if (!isOpen) {
+              backdrop.style.display = 'none';
+              menu.style.display = 'none';
+            }
+          }, 300);
+        }
+
+        tkBtn.addEventListener('click', function (e) {
+          if (!isMobile()) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (isOpen) {
+            closeMenu();
+          } else {
+            openMenu();
+          }
+        });
+
+        backdrop.addEventListener('click', closeMenu);
+
+        menu.querySelectorAll('div, a').forEach(function (item) {
+          item.addEventListener('click', closeMenu);
+        });
+
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && isOpen) {
+            closeMenu();
+          }
+        });
+
+        window.addEventListener('resize', function () {
+          if (!isMobile() && isOpen) {
+            closeMenu();
+          }
+        });
+      })();
+    </script>
+    <script src="/static/pages/landing/landing.js?v=3"></script>
   </body>
 </html>
