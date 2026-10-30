@@ -14,6 +14,7 @@ import (
 func SetUpRouter(queries *database.Queries) *gin.Engine {
 	// base router
 	router := gin.Default()
+	router.Use(config.GlobalContextMiddleware())
 	router.Static("/static", "./static")
 	router.HTMLRender = config.LoadTemplates("./templates/")
 

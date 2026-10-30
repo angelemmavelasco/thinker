@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"thinker/internal/config"
 	"thinker/internal/database"
 
 	"github.com/gin-gonic/gin"
@@ -32,7 +33,7 @@ func (h *UserHandler) ListUsersView(c *gin.Context) {
 		return
 	}
 
-	c.HTML(http.StatusOK, "users_list.html", gin.H{
+	config.Render(c, http.StatusOK, "users_list.html", gin.H{
 		"title": "Usuarios asociados",
 		"users": users,
 	})

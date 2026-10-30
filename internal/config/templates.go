@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/gin-contrib/multitemplate"
+	"github.com/gin-gonic/gin"
 
 	"thinker/internal/urls"
 )
@@ -97,4 +98,13 @@ func LoadTemplates(templatesDir string) multitemplate.Renderer {
 	}
 
 	return r
+}
+
+func Render(c *gin.Context, status int, templateName string, data gin.H) {
+	if data == nil {
+		data = gin.H{}
+	}
+	data["user"] = c.GetString("user")
+
+	c.HTML(status, templateName, data)
 }

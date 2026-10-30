@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"thinker/internal/config"
 	"thinker/internal/database"
 )
 
@@ -30,11 +31,11 @@ func (h *IdeaHandler) ListIdeas(c *gin.Context) {
 	}
 
 	if c.GetHeader("HX-Request") == "true" {
-		c.HTML(http.StatusOK, "_ideas_list.html", data)
+		config.Render(c, http.StatusOK, "_ideas_list.html", data)
 		return
 	}
 
-	c.HTML(http.StatusOK, "ideas_list.html", data)
+	config.Render(c, http.StatusOK, "ideas_list.html", data)
 
 }
 
@@ -44,9 +45,10 @@ func (h *IdeaHandler) NewIdea(c *gin.Context) {
 	}
 
 	if c.GetHeader("HX-Request") == "true" {
-		c.HTML(http.StatusOK, "_ideas_new.html", data)
+		config.Render(c, http.StatusOK, "_ideas_new.html", data)
 		return
 	}
 
-	c.HTML(http.StatusOK, "ideas_new.html", data)
+	config.Render(c, http.StatusOK, "ideas_new.html", data)
+
 }
