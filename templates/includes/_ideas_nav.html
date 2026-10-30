@@ -1,5 +1,3 @@
-{{define "content"}}
-
 <div>
     <p class="border-b border-cyan-500 py-1">Acciones</p>
     <ul class="flex gap-4 py-1">
@@ -8,6 +6,7 @@
             hx-get="/web/ideas/list"
             hx-target="#workspace"
             hx-swap="innerHTML"
+            hx-push-url="true"
             class="hover:text-zinc-400 transition-all cursor-pointer"
             >
                 Repositorio de ideas
@@ -19,20 +18,11 @@
             hx-get="/web/ideas/new"
             hx-target="#workspace"
             hx-swap="innerHTML"
+            hx-push-url="true"
             class="hover:text-zinc-400 transition-all cursor-pointer"
             >
-                Nueva ideas
+                Nueva idea
             </button>
-        </li>
-        <li class="hover:text-zinc-400 transition-all cursor-pointer">
-            Subir archivo
         </li>
     </ul>
 </div>
-
-<section id="workspace">
-    {{template "_ideas_list.html" .}}
-</section>
-
-
-{{end}}

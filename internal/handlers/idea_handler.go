@@ -34,7 +34,7 @@ func (h *IdeaHandler) ListIdeas(c *gin.Context) {
 		return
 	}
 
-	c.HTML(http.StatusOK, "ideas_actions.html", data)
+	c.HTML(http.StatusOK, "ideas_list.html", data)
 
 }
 
@@ -47,6 +47,6 @@ func (h *IdeaHandler) NewIdea(c *gin.Context) {
 		c.HTML(http.StatusOK, "_ideas_new.html", data)
 		return
 	}
-	
-	c.HTML(http.StatusOK, "ideas_actions.html", data)
+
+	c.HTML(http.StatusOK, "ideas_new.html", data)
 }

@@ -1,18 +1,47 @@
-<form hx-post="/web/ideas" hx-target="#workspace" hx-swap="innerHTML" class="max-w-xl space-y-4 bg-zinc-900/50 p-6 border border-zinc-800 rounded">
-    <h3 class="text-sm font-medium text-zinc-100">Registrar nueva idea</h3>
+<form
+hx-post="/web/ideas/new"
+hx-target="#workspace"
+hx-swap="innerHTML"
+hx-push-url="true"
+class="
+max-w-xl mx-auto
+border border-zinc-800 rounded-xs
+bg-zinc-900 p-2 flex flex-col gap-4
+">
+    
+    <h3 class="text-sm font-medium text-zinc-100">Nueva idea</h3>
+
+    <!-- title -->
     <div>
-        <input type="text" name="title" placeholder="Título de la idea..." required
-               class="w-full bg-zinc-950 border border-zinc-800 p-2 text-sm text-zinc-100 rounded focus:border-cyan-500 outline-none" />
+        <input type="text" name="title" placeholder="Título" required
+            class="w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1 transition-all" />
     </div>
+
+
+    <!-- content -->
     <div>
-        <textarea name="content" rows="5" placeholder="Escribe tu nota en bruto..." required
-                  class="w-full bg-zinc-950 border border-zinc-800 p-2 text-sm text-zinc-100 rounded focus:border-cyan-500 outline-none"></textarea>
+        <textarea name="content" rows="5" placeholder="Contenido de la idea" required
+            class="w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1 transition-all"></textarea>
     </div>
-    <div class="flex gap-3">
-        <button type="submit" class="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-4 py-2 rounded font-medium">
-            Procesar idea
+
+    
+    <div>
+        <input type="file" name="doc" hidden>
+        <button type="button" onclick="this.previousElementSibling.click()" class="cursor-pointer w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1 transition-all">
+            Subir archivo
         </button>
-        <button type="button" hx-get="/web/ideas/grid" hx-target="#workspace" class="text-zinc-400 hover:text-zinc-200 text-xs px-3 py-2">
+    </div>
+
+    <div class="flex gap-3 items-center justify-start">
+        <button type="submit" class="border border-zinc-50 hover:border-cyan-500 text-zinc-50 hover:text-cyan-500 rounded p-1 cursor-pointer transition-all">
+            Confirmar
+        </button>
+        <button
+        type="button"
+        hx-get="/web/ideas/list"
+        hx-target="#workspace"
+        hx-swap="innerHTML"
+        class="text-zinc-50 hover:text-red-500 cursor-pointer transition-all">
             Cancelar
         </button>
     </div>
