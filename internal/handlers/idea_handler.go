@@ -2,9 +2,10 @@ package handlers
 
 import (
 	"net/http"
-	"thinker/internal/database"
 
 	"github.com/gin-gonic/gin"
+
+	"thinker/internal/database"
 )
 
 type IdeaHandler struct {
@@ -22,9 +23,30 @@ func (h *IdeaHandler) ListIdeas(c *gin.Context) {
 		return
 	}
 
-	c.HTML(http.StatusOK, "ideas_list.html", gin.H{
+	//define context for templates
+	data := gin.H{
 		"title": "Repositorio de ideas",
 		"ideas": ideas,
-	})
+	}
 
+	if c.GetHeader("HX-Request") == "true" {
+		c.HTML(http.StatusOK, "_ideas_list.html", data)
+		return
+	}
+
+	c.HTML(http.StatusOK, "ideas_actions.html", data)
+
+}
+
+func (h *IdeaHandler) NewIdea(c *gin.Context) {
+	data := gin.H{
+		"title": "Nueva idea",
+	}
+
+	if c.GetHeader("HX-Request") == "true" {
+		c.HTML(http.StatusOK, "_ideas_new.html", data)
+		return
+	}
+	
+	c.HTML(http.StatusOK, "ideas_actions.html", data)
 }

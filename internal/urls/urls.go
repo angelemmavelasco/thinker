@@ -13,7 +13,7 @@ var RouteNames = map[string]string{
 	"users:list": "/web/users",
 	"users:new":  "/web/users/new",
 
-	"ideas:list": "/web/ideas",
+	"ideas:list": "/web/ideas/list",
 	"ideas:new":  "/web/ideas/new",
 }
 
