@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- tailwind -->
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- htmx -->
+     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
     <title>
         Thinker: {{ .title }}
     </title>
@@ -35,11 +38,19 @@
             <li class="hover:text-cyan-500 transition-all cursor-pointer">Configuración</li>
 
             <li class="hover:text-cyan-500 transition-all cursor-pointer">Soporte</li>
+
+            <li class="hover:text-red-500 transition-all cursor-pointer">
+                <a href='{{ url "landing" }}'>
+                    Cerrar sesión
+                </a>
+            </li>
         </ul>
 
-        <p class="text-cyan-500">
-            Genera ideas, Thinker lo demás.
+        <p class="text-zinc-500 font-medium">
+            Genera ideas, Thinker hace lo demás.
         </p>
+
+
                 
     </header>
     <main class="mt-12 flex flex-col gap-4">

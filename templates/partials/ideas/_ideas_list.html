@@ -1,20 +1,3 @@
-{{define "content"}}
-
-<div>
-    <p class="border-b border-cyan-500 py-1">Acciones</p>
-    <ul class="flex gap-4 py-1">
-        <li class="hover:text-zinc-400 transition-all cursor-pointer">
-            Repositorio de ideas
-        </li>
-        <li class="hover:text-zinc-400 transition-all cursor-pointer">
-            Nueva idea
-        </li>
-        <li class="hover:text-zinc-400 transition-all cursor-pointer">
-            Subir archivo
-        </li>
-    </ul>
-</div>
-
 <ul class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
     {{range $idea := .ideas}}
     <li class="border-l-[4px] border-pink-400 p-1 flex flex-col gap-2">
@@ -30,10 +13,10 @@
             <li class="bg-pink-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Matemáticas</li>
         </ul>
     </li>
+    {{else}}
+    <li class="col-span-full py-12 text-center text-sm text-zinc-500">
+        No hay ideas registradas todavía. Crea una nueva o sube un documento.
+    </li>
     {{end}}
 
 </ul>
-
-
-
-{{end}}

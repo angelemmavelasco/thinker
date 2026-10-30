@@ -1,0 +1,19 @@
+<form hx-post="/web/ideas" hx-target="#workspace" hx-swap="innerHTML" class="max-w-xl space-y-4 bg-zinc-900/50 p-6 border border-zinc-800 rounded">
+    <h3 class="text-sm font-medium text-zinc-100">Registrar nueva idea</h3>
+    <div>
+        <input type="text" name="title" placeholder="Título de la idea..." required
+               class="w-full bg-zinc-950 border border-zinc-800 p-2 text-sm text-zinc-100 rounded focus:border-cyan-500 outline-none" />
+    </div>
+    <div>
+        <textarea name="content" rows="5" placeholder="Escribe tu nota en bruto..." required
+                  class="w-full bg-zinc-950 border border-zinc-800 p-2 text-sm text-zinc-100 rounded focus:border-cyan-500 outline-none"></textarea>
+    </div>
+    <div class="flex gap-3">
+        <button type="submit" class="bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-4 py-2 rounded font-medium">
+            Procesar idea
+        </button>
+        <button type="button" hx-get="/web/ideas/grid" hx-target="#workspace" class="text-zinc-400 hover:text-zinc-200 text-xs px-3 py-2">
+            Cancelar
+        </button>
+    </div>
+</form>
