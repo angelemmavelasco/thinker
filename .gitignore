@@ -4,3 +4,4 @@ thinker.db
 *.session.sql
 .vscode/
 .idea/README.pdf
+tailwind.config.js
