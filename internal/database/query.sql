@@ -1,6 +1,6 @@
 -- name: CreateUser :one
-INSERT INTO users (email, password_hash)
-VALUES ($1, $2)
+INSERT INTO users (id, email, password_hash)
+VALUES ($1, $2, $3)
 RETURNING *;
 
 -- name: GetUserByEmail :one
@@ -28,6 +28,6 @@ WHERE user_id = $1
 ORDER BY created_at DESC;
 
 -- name: CreateIdea :one
-INSERT INTO ideas (user_id, title, content, status)
-VALUES ($1, $2, $3, $4)
+INSERT INTO ideas (id, user_id, title, content, status)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING *;

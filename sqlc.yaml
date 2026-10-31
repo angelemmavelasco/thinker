@@ -7,4 +7,10 @@ sql:
       go:
         package: "database"
         out: "internal/database"
-        sql_package: "pgx/v5"
+        overrides:
+          - db_type: "uuid"
+            go_type: "github.com/google/uuid.UUID"
+          - db_type: "timestamptz"
+            go_type: "time.Time"
+          - db_type: "pg_catalog.timestamp"
+            go_type: "time.Time"

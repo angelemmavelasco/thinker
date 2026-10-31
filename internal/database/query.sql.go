@@ -7,25 +7,28 @@ package database
 
 import (
 	"context"
+	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 )
 
 const createIdea = `-- name: CreateIdea :one
-INSERT INTO ideas (user_id, title, content, status)
-VALUES ($1, $2, $3, $4)
+INSERT INTO ideas (id, user_id, title, content, status)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id, user_id, title, content, status, created_at, updated_at
 `
 
 type CreateIdeaParams struct {
-	UserID  pgtype.UUID
+	ID      uuid.UUID
+	UserID  uuid.UUID
 	Title   string
 	Content string
 	Status  string
 }
 
 func (q *Queries) CreateIdea(ctx context.Context, arg CreateIdeaParams) (Idea, error) {
-	row := q.db.QueryRow(ctx, createIdea,
+	row := q.db.QueryRowContext(ctx, createIdea,
+		arg.ID,
 		arg.UserID,
 		arg.Title,
 		arg.Content,
@@ -45,18 +48,19 @@ func (q *Queries) CreateIdea(ctx context.Context, arg CreateIdeaParams) (Idea, e
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (email, password_hash)
-VALUES ($1, $2)
+INSERT INTO users (id, email, password_hash)
+VALUES ($1, $2, $3)
 RETURNING id, email, password_hash, created_at
 `
 
 type CreateUserParams struct {
+	ID           uuid.UUID
 	Email        string
 	PasswordHash string
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, createUser, arg.Email, arg.PasswordHash)
+	row := q.db.QueryRowContext(ctx, createUser, arg.ID, arg.Email, arg.PasswordHash)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -73,7 +77,7 @@ WHERE email = $1 LIMIT 1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
-	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	row := q.db.QueryRowContext(ctx, getUserByEmail, email)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -91,7 +95,7 @@ ORDER BY created_at DESC
 `
 
 func (q *Queries) ListIdeas(ctx context.Context) ([]Idea, error) {
-	rows, err := q.db.Query(ctx, listIdeas)
+	rows, err := q.db.QueryContext(ctx, listIdeas)
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +115,9 @@ func (q *Queries) ListIdeas(ctx context.Context) ([]Idea, error) {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -125,8 +132,8 @@ WHERE user_id = $1
 ORDER BY created_at DESC
 `
 
-func (q *Queries) ListIdeasByUserID(ctx context.Context, userID pgtype.UUID) ([]Idea, error) {
-	rows, err := q.db.Query(ctx, listIdeasByUserID, userID)
+func (q *Queries) ListIdeasByUserID(ctx context.Context, userID uuid.UUID) ([]Idea, error) {
+	rows, err := q.db.QueryContext(ctx, listIdeasByUserID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -147,6 +154,9 @@ func (q *Queries) ListIdeasByUserID(ctx context.Context, userID pgtype.UUID) ([]
 		}
 		items = append(items, i)
 	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -160,13 +170,13 @@ ORDER BY created_at DESC
 `
 
 type ListUsersRow struct {
-	ID        pgtype.UUID
+	ID        uuid.UUID
 	Email     string
-	CreatedAt pgtype.Timestamptz
+	CreatedAt time.Time
 }
 
 func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
-	rows, err := q.db.Query(ctx, listUsers)
+	rows, err := q.db.QueryContext(ctx, listUsers)
 	if err != nil {
 		return nil, err
 	}
@@ -178,6 +188,9 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

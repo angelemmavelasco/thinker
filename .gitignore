@@ -5,3 +5,5 @@ thinker.db
 .vscode/
 .idea/README.pdf
 tailwind.config.js
+thinker**.db
+*.db

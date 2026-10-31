@@ -5,22 +5,24 @@
 package database
 
 import (
-	"github.com/jackc/pgx/v5/pgtype"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 type Idea struct {
-	ID        pgtype.UUID
-	UserID    pgtype.UUID
+	ID        uuid.UUID
+	UserID    uuid.UUID
 	Title     string
 	Content   string
 	Status    string
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type User struct {
-	ID           pgtype.UUID
+	ID           uuid.UUID
 	Email        string
 	PasswordHash string
-	CreatedAt    pgtype.Timestamptz
+	CreatedAt    time.Time
 }

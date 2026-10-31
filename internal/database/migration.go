@@ -2,17 +2,16 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	_ "embed"
 	"fmt"
-
-	"github.com/jackc/pgx/v5"
 )
 
 //go:embed schema.sql
 var schemaSQL string
 
-func InitSchema(c context.Context, conn *pgx.Conn) error {
-	_, err := conn.Exec(c, schemaSQL)
+func InitSchema(c context.Context, conn *sql.DB) error {
+	_, err := conn.ExecContext(c, schemaSQL)
 	if err != nil {
 		return fmt.Errorf("Error while defining base schema at database: %w", err)
 	}

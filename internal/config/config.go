@@ -9,6 +9,7 @@ import (
 )
 
 type BaseConfig struct {
+	Debug      bool
 	LLMApiKey  string
 	DBHost     string
 	DBPort     string
@@ -23,8 +24,22 @@ func LoadConfig() (*BaseConfig, error) {
 	if err != nil {
 		log.Fatal("Error while loading env file")
 	}
+	// first, we validate that we are not in debug mode
+	debugVar := os.Getenv("DEBUG")
+	var debug bool
+	switch debugVar {
+	case "true", "1", "True", "yes", "Yes", "Y", "y", "T", "t":
+		debug = true
+	case "false", "False", "F", "f", "No", "no", "0", "N", "n":
+		debug = false
+	default:
+		debug = false
+	}
 
+	// model selection
 	llmApiKey := os.Getenv("LLM_API_KEY")
+
+	// db config
 	dbHost := os.Getenv("DB_HOST")
 	dbPort := os.Getenv("DB_PORT")
 	dbName := os.Getenv("DB_NAME")
@@ -33,6 +48,7 @@ func LoadConfig() (*BaseConfig, error) {
 	connString := os.Getenv("CONN_STRING")
 
 	config := BaseConfig{
+		Debug: debug,
 		LLMApiKey:  llmApiKey,
 		DBHost:     dbHost,
 		DBPort:     dbPort,

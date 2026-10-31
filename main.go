@@ -27,7 +27,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	defer conn.Close(ctx)
+	defer conn.Close()
 
 	//define base schema
 	if err := database.InitSchema(ctx, conn); err != nil {
