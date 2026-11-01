@@ -7,3 +7,4 @@ thinker.db
 tailwind.config.js
 thinker**.db
 *.db
+.DS_Store*
