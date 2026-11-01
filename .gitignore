@@ -8,3 +8,5 @@ tailwind.config.js
 thinker**.db
 *.db
 .DS_Store*
+
+*.gguf

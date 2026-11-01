@@ -193,10 +193,11 @@ This allows Thinker be structured in different modules confortably and following
     └── internal/
         └── config/
         └── database/
+        └── dtos/
         └── handlers/
-        └── models/
         └── routes/
         └── urls/
+    └── models/
     └── static/
     └── templates/
         └── includes/

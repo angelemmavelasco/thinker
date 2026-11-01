@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: thinker_postgres
     restart: always
     environment:
@@ -11,5 +11,37 @@ services:
       - "${DB_PORT}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+
+  llm-engine:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    container_name: thinker_llm
+    restart: always
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./models:/models:ro
+    command: >
+      -m /models/qwen2.5-3b-instruct-q4_k_m.gguf
+      --port 8081
+      --host 0.0.0.0
+      -c 4096
+      --threads 4
+
+  embeddings-engine:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    container_name: thinker_embeddings
+    restart: always
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./models:/models:ro
+    command: >
+      -m /models/bge-small-en-v1.5-q4_k_m.gguf
+      --port 8082
+      --host 0.0.0.0
+      -c 512
+      --threads 2
+      --embedding
+
 volumes:
   postgres-data:
