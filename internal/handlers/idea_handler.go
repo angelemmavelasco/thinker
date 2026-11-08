@@ -89,21 +89,21 @@ func (h *IdeaHandler) CreateIdea(c *gin.Context) {
 		return
 	}
 
-	go func(ideaID string, t, cont string) {
+	go func(idea database.Idea, t, cont string) {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 
-		log.Printf("[llm] Iniciando análisis para la idea [%s]...", ideaID)
-		result, err := h.service.AnalyzeIdea(bgCtx, t, cont)
+		log.Printf("[llm] Iniciando análisis para la idea [%s]...", idea.ID)
+		result, savedKeywords, err := h.service.ProcessIdeaAnalysis(bgCtx, idea.ID, t, cont)
 		if err != nil {
-			log.Printf("[llm] Error analizando idea [%s]: %v", ideaID, err)
+			log.Printf("[llm] Error procesando idea [%s]: %v", idea.ID, err)
 			return
 		}
 
-		log.Printf("[llm] Análisis completado con éxito para [%s]:", ideaID)
+		log.Printf("[llm] Análisis y persistencia completados para [%s]:", idea.ID)
 		log.Printf("  -> Nota reestructurada: %s", result.RestructuredNote)
-		log.Printf("  -> Entidades clave (%d): %v", len(result.KeyEntities), result.KeyEntities)
-	}(createdIdea.ID.String(), title, content)
+		log.Printf("  -> Keywords guardados (%d): %v", len(savedKeywords), result.KeyEntities)
+	}(createdIdea, title, content)
 
 	if c.GetHeader("HX-Request") == "true" {
 		ideas, err := h.queries.ListIdeas(c.Request.Context())
