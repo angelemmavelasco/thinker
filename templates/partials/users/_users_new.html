@@ -1,0 +1,50 @@
+<form
+hx-post="/web/users/new"
+hx-target="#workspace"
+hx-swap="innerHTML"
+hx-push-url="/web/users"
+class="
+max-w-xl mx-auto
+border border-zinc-800 rounded-xs
+bg-zinc-900 p-2 flex flex-col gap-4
+">
+    <h3 class="text-sm font-medium text-zinc-100">Nuevo usuario</h3>
+
+    {{if .error}}
+    <p class="border border-red-500/50 bg-red-500/10 text-red-300 p-2 rounded-xs">
+        {{.error}}
+    </p>
+    {{end}}
+
+    <div>
+        <input type="email" name="email" placeholder="Correo electrónico" value="{{.email}}" required
+            class="w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1 transition-all" />
+    </div>
+
+    <div>
+        <input type="password" name="password" placeholder="Contraseña" required
+            class="w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1 transition-all" />
+    </div>
+
+    <div>
+        <select name="role"
+            class="w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1 transition-all text-zinc-100">
+            <option value="member" {{if eq .role "member"}}selected{{end}}>Miembro</option>
+            <option value="admin" {{if eq .role "admin"}}selected{{end}}>Administrador</option>
+        </select>
+    </div>
+
+    <div class="flex gap-3 items-center justify-start">
+        <button type="submit" class="border border-zinc-50 hover:border-cyan-500 text-zinc-50 hover:text-cyan-500 rounded p-1 cursor-pointer transition-all">
+            Confirmar
+        </button>
+        <button
+        type="button"
+        hx-get="/web/users"
+        hx-target="#workspace"
+        hx-swap="innerHTML"
+        class="text-zinc-50 hover:text-red-500 cursor-pointer transition-all">
+            Cancelar
+        </button>
+    </div>
+</form>

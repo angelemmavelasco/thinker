@@ -86,8 +86,8 @@ func (q *Queries) CreateIdeaLink(ctx context.Context, arg CreateIdeaLinkParams) 
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (id, email, password_hash)
-VALUES ($1, $2, $3)
+INSERT INTO users (id, email, password_hash, role)
+VALUES ($1, $2, $3, $4)
 RETURNING id, email, password_hash, role, created_at
 `
 
@@ -95,10 +95,16 @@ type CreateUserParams struct {
 	ID           uuid.UUID
 	Email        string
 	PasswordHash string
+	Role         string
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRowContext(ctx, createUser, arg.ID, arg.Email, arg.PasswordHash)
+	row := q.db.QueryRowContext(ctx, createUser,
+		arg.ID,
+		arg.Email,
+		arg.PasswordHash,
+		arg.Role,
+	)
 	var i User
 	err := row.Scan(
 		&i.ID,

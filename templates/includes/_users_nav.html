@@ -1,0 +1,30 @@
+<div>
+    <p class="border-b border-cyan-500 py-1">Acciones</p>
+    <ul class="flex gap-4 py-1">
+        <li>
+            <button
+            hx-get="/web/users"
+            hx-target="#workspace"
+            hx-swap="innerHTML"
+            hx-push-url="true"
+            class="hover:text-zinc-400 transition-all cursor-pointer"
+            >
+                Usuarios asociados
+            </button>
+        </li>
+        <li>
+            <button
+            hx-get="/web/users/new"
+            hx-target="#workspace"
+            hx-swap="innerHTML"
+            hx-push-url="true"
+            class="hover:text-zinc-400 transition-all cursor-pointer"
+            >
+                Nuevo usuario
+            </button>
+        </li>
+        <li class="hover:text-zinc-400 transition-all cursor-pointer">
+            Mi perfíl
+        </li>
+    </ul>
+</div>

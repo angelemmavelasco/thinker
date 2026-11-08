@@ -1,54 +1,9 @@
 {{define "content"}}
 
-<div>
-    <p class="border-b border-cyan-500 py-1">Acciones</p>
-    <ul class="flex gap-4 py-1">
-        <li class="hover:text-zinc-400 transition-all cursor-pointer">
-            Usuarios asociados
-        </li>
-        <li class="hover:text-zinc-400 transition-all cursor-pointer">
-            Nuevo usuario
-        </li>
-        <li class="hover:text-zinc-400 transition-all cursor-pointer">
-            Mi perfíl
-        </li>
-    </ul>
-</div>
+{{template "_users_nav.html" .}}
 
-
-<div class="overflow-x-auto border border-zinc-800 rounded-lg">
-    <table class="w-full text-left text-sm text-zinc-300">
-        <thead class="bg-zinc-900 border-b border-zinc-800 text-zinc-400 uppercase text-xs">
-            <tr>
-                <th class="p-1 font-normal">ID</th>
-                <th class="p-1 font-normal">Usuario</th>
-                <th class="p-1 font-normal">Creación</th>
-            </tr>
-        </thead>
-        <tbody class="divide-y divide-zinc-800/60 bg-zinc-950/40">
-            {{range $user := .users}}
-                <tr class="hover:bg-zinc-900/50 transition-colors">
-                    <td class="p-1 text-zinc-500">
-                        {{$user.ID}}
-                    </td>
-
-                    <td class="p-1 text-zinc-200">
-                        {{$user.Email}}
-                    </td>
-
-                    <td class="p-1 text-zinc-400">
-                        {{$user.CreatedAt.Format "02/01/2006 15:04"}}
-                    </td>
-                </tr>
-            {{else}}
-                <tr>
-                    <td colspan="3" class="px-4 py-20 text-center text-zinc-500">
-                        No hay usuarios registrados.
-                    </td>
-                </tr>
-            {{end}}
-        </tbody>
-    </table>
-</div>
+<section id="workspace">
+    {{template "_users_list.html" .}}
+</section>
 
 {{end}}

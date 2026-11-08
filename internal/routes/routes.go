@@ -29,6 +29,8 @@ func SetUpRouter(queries *database.Queries, llm *services.LLMService) *gin.Engin
 	router.POST(urls.Get("ideas:new"), ideaHandler.CreateIdea)
 
 	router.GET(urls.Get("users:list"), userHandler.ListUsersView)
+	router.GET(urls.Get("users:new"), userHandler.NewUser)
+	router.POST(urls.Get("users:new"), userHandler.CreateUser)
 	router.GET(urls.Get("landing"), func(c *gin.Context) {
 		c.HTML(http.StatusOK, "landing.html", gin.H{})
 	})
