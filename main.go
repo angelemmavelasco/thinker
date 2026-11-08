@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 
@@ -27,11 +28,21 @@ func main() {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	defer conn.Close()
+	defer func(conn *sql.DB) {
+		err := conn.Close()
+		if err != nil {
+			log.Printf("Error while closing database connection: %v", err)
+		}
+	}(conn)
 
 	//define base schema
 	if err := database.InitSchema(ctx, conn); err != nil {
 		log.Fatal(err.Error())
+	}
+	if baseConfig.Debug {
+		if err := database.EnsureDevelopmentUser(ctx, conn); err != nil {
+			log.Fatal(err.Error())
+		}
 	}
 
 	//init queries

@@ -17,6 +17,7 @@ import (
 var schemaSQL string
 
 const migrationsDir = "internal/database/migrations"
+const developmentUserID = "00000000-0000-0000-0000-000000000001"
 
 const createMigrationsTableSQL = `
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -44,6 +45,23 @@ func InitSchema(ctx context.Context, conn *sql.DB) error {
 	}
 
 	return nil
+}
+
+func EnsureDevelopmentUser(ctx context.Context, conn *sql.DB) error {
+	const query = `
+		INSERT INTO users (id, email, password_hash)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (id) DO NOTHING
+	`
+
+	_, err := conn.ExecContext(
+		ctx,
+		query,
+		developmentUserID,
+		"development@thinker.local",
+		"development-only",
+	)
+	return err
 }
 
 func runVersionedMigrations(ctx context.Context, conn *sql.DB) error {
@@ -169,7 +187,11 @@ func getExistingColumns(ctx context.Context, conn *sql.DB, tableName string) (ma
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); err == nil && closeErr != nil {
+			err = fmt.Errorf("error closing database rows: %w", closeErr)
+		}
+	}()
 
 	cols, err := rows.Columns()
 	if err != nil {

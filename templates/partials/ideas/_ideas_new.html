@@ -2,7 +2,7 @@
 hx-post="/web/ideas/new"
 hx-target="#workspace"
 hx-swap="innerHTML"
-hx-push-url="true"
+hx-push-url="/web/ideas/list"
 class="
 max-w-xl mx-auto
 border border-zinc-800 rounded-xs
@@ -11,9 +11,15 @@ bg-zinc-900 p-2 flex flex-col gap-4
     
     <h3 class="text-sm font-medium text-zinc-100">Nueva idea</h3>
 
+    {{if .error}}
+    <p class="border border-red-500/50 bg-red-500/10 text-red-300 p-2 rounded-xs">
+        {{.error}}
+    </p>
+    {{end}}
+
     <!-- title -->
     <div>
-        <input type="text" name="title" placeholder="Título" required
+        <input type="text" name="title" placeholder="Título" value="{{.ideaTitle}}" required
             class="w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1 transition-all" />
     </div>
 
@@ -21,7 +27,7 @@ bg-zinc-900 p-2 flex flex-col gap-4
     <!-- content -->
     <div>
         <textarea name="content" rows="5" placeholder="Contenido de la idea" required
-            class="w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1 transition-all"></textarea>
+            class="w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1 transition-all">{{.content}}</textarea>
     </div>
 
     

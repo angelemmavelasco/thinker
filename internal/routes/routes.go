@@ -25,6 +25,7 @@ func SetUpRouter(queries *database.Queries) *gin.Engine {
 	router.GET(urls.Get("api:users:list"), userHandler.ListUsers)
 	router.GET(urls.Get("ideas:list"), ideaHandler.ListIdeas)
 	router.GET(urls.Get("ideas:new"), ideaHandler.NewIdea)
+	router.POST(urls.Get("ideas:new"), ideaHandler.CreateIdea)
 
 	router.GET(urls.Get("users:list"), userHandler.ListUsersView)
 	router.GET(urls.Get("landing"), func(c *gin.Context) {
