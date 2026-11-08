@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"sort"
+	"sync"
 
 	"github.com/google/uuid"
 	"thinker/internal/database"
@@ -46,19 +47,61 @@ type semanticCandidate struct {
 	score  float64
 }
 
+type ideaJob struct {
+	idea    database.Idea
+	title   string
+	content string
+}
+
 type IdeaService struct {
 	queries        *database.Queries
 	llm            *LLMService
 	embedding      *EmbeddingService
 	keywordService *KeywordService
+	jobQueue       chan ideaJob
+	inFlight       sync.Map
 }
 
 func NewIdeaService(queries *database.Queries, llm *LLMService, embedding *EmbeddingService) *IdeaService {
-	return &IdeaService{
+	svc := &IdeaService{
 		queries:        queries,
 		llm:            llm,
 		embedding:      embedding,
 		keywordService: NewKeywordService(queries, embedding),
+		jobQueue:       make(chan ideaJob, 100),
+	}
+	go svc.startWorker()
+	return svc
+}
+
+func (s *IdeaService) startWorker() {
+	for job := range s.jobQueue {
+		idKey := job.idea.ID.String()
+		log.Printf("[llm] Iniciando análisis para la idea [%s] (%s)...", job.idea.ID, job.title)
+		result, savedKeywords, links, err := s.ProcessIdeaAnalysis(context.Background(), job.idea.ID, job.title, job.content)
+		s.inFlight.Delete(idKey)
+		if err != nil {
+			log.Printf("[llm] Error procesando idea [%s]: %v", job.idea.ID, err)
+			continue
+		}
+		log.Printf("[llm] Análisis y persistencia completados para [%s]:", job.idea.ID)
+		log.Printf("  -> Nota reestructurada: %s", result.RestructuredNote)
+		log.Printf("  -> Keywords guardados (%d): %v", len(savedKeywords), result.KeyEntities)
+		log.Printf("  -> Conexiones creadas/actualizadas (%d)", len(links))
+	}
+}
+
+func (s *IdeaService) EnqueueIdeaAnalysis(idea database.Idea, title, content string) {
+	idKey := idea.ID.String()
+	if _, loaded := s.inFlight.LoadOrStore(idKey, true); loaded {
+		return
+	}
+	select {
+	case s.jobQueue <- ideaJob{idea: idea, title: title, content: content}:
+	default:
+		go func() {
+			s.jobQueue <- ideaJob{idea: idea, title: title, content: content}
+		}()
 	}
 }
 
@@ -70,6 +113,9 @@ func (s *IdeaService) ListIdeas(ctx context.Context) ([]IdeaWithKeywords, error)
 
 	items := make([]IdeaWithKeywords, 0, len(ideas))
 	for _, idea := range ideas {
+		if idea.Status == "borrador" || idea.Status == "draft" {
+			s.EnqueueIdeaAnalysis(idea, idea.Title, idea.Content)
+		}
 		kws, err := s.keywordService.ListKeywordsByIdeaID(ctx, idea.ID)
 		if err != nil {
 			return nil, err
@@ -249,6 +295,18 @@ func (s *IdeaService) ProcessIdeaAnalysis(ctx context.Context, ideaID uuid.UUID,
 
 	allLinks := append(overlapLinks, semanticLinks...)
 	return result, keywords, allLinks, nil
+}
+
+func (s *IdeaService) ProcessPendingIdeas(ctx context.Context) {
+	ideas, err := s.queries.ListIdeas(ctx)
+	if err != nil {
+		return
+	}
+	for _, idea := range ideas {
+		if idea.Status == "borrador" || idea.Status == "draft" {
+			s.EnqueueIdeaAnalysis(idea, idea.Title, idea.Content)
+		}
+	}
 }
 
 func (s *IdeaService) GetNetworkGraph(ctx context.Context) (*GraphData, error) {

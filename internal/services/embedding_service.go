@@ -43,6 +43,10 @@ func (s *EmbeddingService) GenerateEmbedding(ctx context.Context, text string) (
 	if cleaned == "" {
 		return nil, fmt.Errorf("el texto para embedding está vacío")
 	}
+	runes := []rune(cleaned)
+	if len(runes) > 1200 {
+		cleaned = string(runes[:1200])
+	}
 
 	body, err := json.Marshal(embeddingRequest{Input: cleaned})
 	if err != nil {

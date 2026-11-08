@@ -35,7 +35,7 @@ func (c *dbConn) Connect(ctx context.Context) (*sql.DB, error) {
 	)
 
 	if c.baseConfig.Debug {
-		db, err = sql.Open("sqlite", "file:internal/database/thinker_dev.db?_pragma=foreign_keys(1)")
+		db, err = sql.Open("sqlite", "file:internal/database/thinker_dev.db?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
 	} else {
 		db, err = sql.Open("pgx", c.baseConfig.ConnString)
 	}

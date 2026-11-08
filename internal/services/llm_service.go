@@ -66,7 +66,7 @@ No inventes información que no aparezca en la nota.`,
 			},
 		},
 		Temperature: 0.2,
-		MaxTokens:   500,
+		MaxTokens:   1500,
 	}
 
 	body, err := json.Marshal(requestBody)
@@ -106,13 +106,7 @@ No inventes información que no aparezca en la nota.`,
 		return nil, fmt.Errorf("el LLM respondió sin resultados")
 	}
 
-	rawContent := strings.TrimSpace(completion.Choices[0].Message.Content)
-	if strings.HasPrefix(rawContent, "```") {
-		rawContent = strings.TrimPrefix(rawContent, "```json")
-		rawContent = strings.TrimPrefix(rawContent, "```")
-		rawContent = strings.TrimSuffix(rawContent, "```")
-		rawContent = strings.TrimSpace(rawContent)
-	}
+	rawContent := cleanLLMJSON(completion.Choices[0].Message.Content)
 
 	var result IdeaAnalysisResult
 	if err := json.Unmarshal([]byte(rawContent), &result); err != nil {
@@ -120,4 +114,52 @@ No inventes información que no aparezca en la nota.`,
 	}
 
 	return &result, nil
+}
+
+func cleanLLMJSON(raw string) string {
+	s := strings.TrimSpace(raw)
+	if start := strings.IndexByte(s, '{'); start != -1 {
+		if end := strings.LastIndexByte(s, '}'); end != -1 && end > start {
+			s = s[start : end+1]
+		}
+	}
+
+	var out strings.Builder
+	out.Grow(len(s))
+	inString := false
+	escaped := false
+
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if escaped {
+			out.WriteByte(ch)
+			escaped = false
+			continue
+		}
+		if ch == '\\' && inString {
+			out.WriteByte(ch)
+			escaped = true
+			continue
+		}
+		if ch == '"' {
+			inString = !inString
+			out.WriteByte(ch)
+			continue
+		}
+		if inString {
+			switch ch {
+			case '\n':
+				out.WriteString(`\n`)
+				continue
+			case '\r':
+				continue
+			case '\t':
+				out.WriteString(`\t`)
+				continue
+			}
+		}
+		out.WriteByte(ch)
+	}
+
+	return out.String()
 }

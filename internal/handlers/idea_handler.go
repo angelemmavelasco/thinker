@@ -2,10 +2,8 @@ package handlers
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -19,8 +17,10 @@ type IdeaHandler struct {
 }
 
 func NewIdeaHandler(queries *database.Queries, llm *services.LLMService, embedding *services.EmbeddingService) *IdeaHandler {
+	svc := services.NewIdeaService(queries, llm, embedding)
+	go svc.ProcessPendingIdeas(context.Background())
 	return &IdeaHandler{
-		service: services.NewIdeaService(queries, llm, embedding),
+		service: svc,
 	}
 }
 
@@ -84,22 +84,7 @@ func (h *IdeaHandler) CreateIdea(c *gin.Context) {
 		return
 	}
 
-	go func(idea database.Idea, t, cont string) {
-		bgCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-
-		log.Printf("[llm] Iniciando análisis para la idea [%s]...", idea.ID)
-		result, savedKeywords, links, err := h.service.ProcessIdeaAnalysis(bgCtx, idea.ID, t, cont)
-		if err != nil {
-			log.Printf("[llm] Error procesando idea [%s]: %v", idea.ID, err)
-			return
-		}
-
-		log.Printf("[llm] Análisis y persistencia completados para [%s]:", idea.ID)
-		log.Printf("  -> Nota reestructurada: %s", result.RestructuredNote)
-		log.Printf("  -> Keywords guardados (%d): %v", len(savedKeywords), result.KeyEntities)
-		log.Printf("  -> Aristas por overlap creadas/actualizadas (%d)", len(links))
-	}(createdIdea, title, content)
+	h.service.EnqueueIdeaAnalysis(createdIdea, title, content)
 
 	if c.GetHeader("HX-Request") == "true" {
 		ideas, err := h.service.ListIdeas(c.Request.Context())
