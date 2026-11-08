@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -61,10 +62,40 @@ func (h *IdeaHandler) CreateIdea(c *gin.Context) {
 	title := strings.TrimSpace(c.PostForm("title"))
 	content := strings.TrimSpace(c.PostForm("content"))
 
+	fileHeader, fileErr := c.FormFile("doc")
+	if fileErr == nil && fileHeader != nil && fileHeader.Size > 0 {
+		extractedText, err := services.ExtractTextFromUpload(fileHeader)
+		if err != nil {
+			data := gin.H{
+				"title":     "Nueva idea",
+				"error":     err.Error(),
+				"ideaTitle": title,
+				"content":   content,
+			}
+			if c.GetHeader("HX-Request") == "true" {
+				config.Render(c, http.StatusBadRequest, "_ideas_new.html", data)
+				return
+			}
+			config.Render(c, http.StatusBadRequest, "ideas_new.html", data)
+			return
+		}
+
+		if title == "" {
+			ext := filepath.Ext(fileHeader.Filename)
+			title = strings.TrimSpace(strings.TrimSuffix(fileHeader.Filename, ext))
+		}
+
+		if content == "" {
+			content = extractedText
+		} else if extractedText != "" {
+			content = content + "\n\n" + extractedText
+		}
+	}
+
 	if title == "" || content == "" {
 		data := gin.H{
 			"title":     "Nueva idea",
-			"error":     "El título y el contenido son obligatorios.",
+			"error":     "El título y el contenido son obligatorios (o sube un archivo .txt, .md, .pdf, .docx, .csv).",
 			"ideaTitle": title,
 			"content":   content,
 		}
@@ -78,13 +109,11 @@ func (h *IdeaHandler) CreateIdea(c *gin.Context) {
 		return
 	}
 
-	createdIdea, err := h.service.CreateIdea(c.Request.Context(), c.GetString("user"), title, content)
+	_, err := h.service.CreateIdeasFromInput(c.Request.Context(), c.GetString("user"), title, content)
 	if err != nil {
 		c.String(http.StatusInternalServerError, "Error al guardar la idea: %v", err)
 		return
 	}
-
-	h.service.EnqueueIdeaAnalysis(createdIdea, title, content)
 
 	if c.GetHeader("HX-Request") == "true" {
 		ideas, err := h.service.ListIdeas(c.Request.Context())

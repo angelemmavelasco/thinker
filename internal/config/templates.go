@@ -31,6 +31,15 @@ type reloadableHTMLRender struct {
 }
 
 func (rr *reloadableHTMLRender) Instance(name string, data any) render.Render {
+	if gin.IsDebugging() {
+		inner, known := buildRenderer(rr.templatesDir)
+		rr.mu.Lock()
+		rr.inner = inner
+		rr.known = known
+		rr.mu.Unlock()
+		return inner.Instance(name, data)
+	}
+
 	rr.mu.RLock()
 	exists := rr.known[name]
 	inner := rr.inner

@@ -84,3 +84,11 @@ GROUP BY ik2.idea_id;
 SELECT *
 FROM idea_links
 ORDER BY weight DESC;
+
+-- name: CreateIdeaChunk :one
+INSERT INTO idea_chunks (id, idea_id, chunk_index, content, embedding)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING *;
+
+-- name: DeleteIdea :exec
+DELETE FROM ideas WHERE id = $1;

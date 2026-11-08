@@ -49,6 +49,40 @@ func (q *Queries) CreateIdea(ctx context.Context, arg CreateIdeaParams) (Idea, e
 	return i, err
 }
 
+const createIdeaChunk = `-- name: CreateIdeaChunk :one
+INSERT INTO idea_chunks (id, idea_id, chunk_index, content, embedding)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, idea_id, chunk_index, content, embedding, created_at
+`
+
+type CreateIdeaChunkParams struct {
+	ID         uuid.UUID
+	IdeaID     uuid.UUID
+	ChunkIndex int32
+	Content    string
+	Embedding  string
+}
+
+func (q *Queries) CreateIdeaChunk(ctx context.Context, arg CreateIdeaChunkParams) (IdeaChunk, error) {
+	row := q.db.QueryRowContext(ctx, createIdeaChunk,
+		arg.ID,
+		arg.IdeaID,
+		arg.ChunkIndex,
+		arg.Content,
+		arg.Embedding,
+	)
+	var i IdeaChunk
+	err := row.Scan(
+		&i.ID,
+		&i.IdeaID,
+		&i.ChunkIndex,
+		&i.Content,
+		&i.Embedding,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createIdeaLink = `-- name: CreateIdeaLink :one
 INSERT INTO idea_links (id, source_idea_id, target_idea_id, relation_type, weight)
 VALUES ($1, $2, $3, $4, $5)
@@ -114,6 +148,15 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const deleteIdea = `-- name: DeleteIdea :exec
+DELETE FROM ideas WHERE id = $1
+`
+
+func (q *Queries) DeleteIdea(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteIdea, id)
+	return err
 }
 
 const findOverlappingIdeas = `-- name: FindOverlappingIdeas :many

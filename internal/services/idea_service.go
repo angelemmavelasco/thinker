@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sort"
 	"sync"
@@ -111,6 +112,23 @@ func (s *IdeaService) ListIdeas(ctx context.Context) ([]IdeaWithKeywords, error)
 		return nil, err
 	}
 
+	splitOccurred := false
+	for _, idea := range ideas {
+		if (idea.Status == "borrador" || idea.Status == "draft") && len([]rune(idea.Content)) > DefaultChunkMaxChars {
+			if _, err := s.CreateIdeasFromInput(ctx, idea.UserID.String(), idea.Title, idea.Content); err == nil {
+				_ = s.queries.DeleteIdea(ctx, idea.ID)
+				splitOccurred = true
+			}
+		}
+	}
+
+	if splitOccurred {
+		ideas, err = s.queries.ListIdeas(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	items := make([]IdeaWithKeywords, 0, len(ideas))
 	for _, idea := range ideas {
 		if idea.Status == "borrador" || idea.Status == "draft" {
@@ -142,6 +160,72 @@ func (s *IdeaService) CreateIdea(ctx context.Context, userIDStr, title, content 
 		Content: content,
 		Status:  "borrador",
 	})
+}
+
+func (s *IdeaService) CreateIdeasFromInput(ctx context.Context, userIDStr, title, content string) ([]database.Idea, error) {
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return nil, err
+	}
+
+	chunks := ChunkText(content, DefaultChunkMaxChars)
+	if len(chunks) == 0 {
+		return nil, fmt.Errorf("el contenido está vacío")
+	}
+
+	created := make([]database.Idea, 0, len(chunks))
+	for i, chunk := range chunks {
+		chunkTitle := title
+		if len(chunks) > 1 {
+			chunkTitle = fmt.Sprintf("%s (%d/%d)", title, i+1, len(chunks))
+		}
+
+		idea, err := s.queries.CreateIdea(ctx, database.CreateIdeaParams{
+			ID:      uuid.New(),
+			UserID:  userID,
+			Title:   chunkTitle,
+			Content: chunk,
+			Status:  "borrador",
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		_, _ = s.queries.CreateIdeaChunk(ctx, database.CreateIdeaChunkParams{
+			ID:         uuid.New(),
+			IdeaID:     idea.ID,
+			ChunkIndex: int32(i),
+			Content:    chunk,
+			Embedding:  "",
+		})
+
+		created = append(created, idea)
+	}
+
+	for i := 1; i < len(created); i++ {
+		prevID := created[i-1].ID
+		currID := created[i].ID
+		_, _ = s.queries.CreateIdeaLink(ctx, database.CreateIdeaLinkParams{
+			ID:           uuid.New(),
+			SourceIdeaID: prevID,
+			TargetIdeaID: currID,
+			RelationType: "semantic",
+			Weight:       0.90,
+		})
+		_, _ = s.queries.CreateIdeaLink(ctx, database.CreateIdeaLinkParams{
+			ID:           uuid.New(),
+			SourceIdeaID: currID,
+			TargetIdeaID: prevID,
+			RelationType: "semantic",
+			Weight:       0.90,
+		})
+	}
+
+	for _, idea := range created {
+		s.EnqueueIdeaAnalysis(idea, idea.Title, idea.Content)
+	}
+
+	return created, nil
 }
 
 func (s *IdeaService) AnalyzeIdea(ctx context.Context, title, content string) (*IdeaAnalysisResult, error) {
@@ -304,6 +388,12 @@ func (s *IdeaService) ProcessPendingIdeas(ctx context.Context) {
 	}
 	for _, idea := range ideas {
 		if idea.Status == "borrador" || idea.Status == "draft" {
+			if len([]rune(idea.Content)) > DefaultChunkMaxChars {
+				if _, err := s.CreateIdeasFromInput(ctx, idea.UserID.String(), idea.Title, idea.Content); err == nil {
+					_ = s.queries.DeleteIdea(ctx, idea.ID)
+					continue
+				}
+			}
 			s.EnqueueIdeaAnalysis(idea, idea.Title, idea.Content)
 		}
 	}

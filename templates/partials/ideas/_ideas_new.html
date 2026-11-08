@@ -1,5 +1,7 @@
 <form
 hx-post="/web/ideas/new"
+hx-encoding="multipart/form-data"
+enctype="multipart/form-data"
 hx-target="#workspace"
 hx-swap="innerHTML"
 hx-push-url="/web/ideas/list"
@@ -17,26 +19,74 @@ bg-zinc-900 p-2 flex flex-col gap-4
     </p>
     {{end}}
 
-    <!-- title -->
     <div>
-        <input type="text" name="title" placeholder="Título" value="{{.ideaTitle}}" required
+        <input type="text" name="title" placeholder="Título (opcional si subes archivo)" value="{{.ideaTitle}}"
             class="w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1 transition-all" />
     </div>
 
-
-    <!-- content -->
     <div>
-        <textarea name="content" rows="5" placeholder="Contenido de la idea" required
+        <textarea name="content" rows="5" placeholder="Contenido de la idea (o sube un documento abajo)"
             class="w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1 transition-all">{{.content}}</textarea>
     </div>
 
-    
-    <div>
-        <input type="file" name="doc" hidden>
-        <button type="button" onclick="this.previousElementSibling.click()" class="cursor-pointer w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1 transition-all">
-            Subir archivo
+    <div class="flex flex-col gap-2">
+        <input id="idea-doc-input" type="file" name="doc" accept=".txt,.md,.pdf,.docx,.csv" hidden onchange="handleIdeaFileChange(this)">
+        <button id="idea-doc-btn" type="button" onclick="document.getElementById('idea-doc-input').click()" class="cursor-pointer w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1.5 transition-all text-zinc-300 text-sm">
+            Subir archivo (.txt, .md, .pdf, .docx, .csv)
         </button>
+
+        <div id="idea-doc-preview" class="hidden items-center justify-between gap-2 border border-cyan-500/40 bg-cyan-950/20 px-2.5 py-1.5 rounded-xs text-xs">
+            <div class="flex items-center gap-2 min-w-0">
+                <span id="idea-doc-type" class="shrink-0 uppercase font-semibold tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"></span>
+                <span id="idea-doc-name" class="text-zinc-200 truncate"></span>
+            </div>
+            <button type="button" onclick="clearIdeaFile()" class="shrink-0 text-zinc-400 hover:text-red-400 cursor-pointer transition-colors">
+                Quitar
+            </button>
+        </div>
     </div>
+
+    <script>
+        window.handleIdeaFileChange = function(input) {
+            var preview = document.getElementById('idea-doc-preview');
+            var typeBadge = document.getElementById('idea-doc-type');
+            var nameLabel = document.getElementById('idea-doc-name');
+            var btn = document.getElementById('idea-doc-btn');
+
+            if (!input.files || !input.files.length) {
+                window.clearIdeaFile();
+                return;
+            }
+
+            var file = input.files[0];
+            var parts = file.name.split('.');
+            var ext = parts.length > 1 ? parts.pop().toUpperCase() : 'ARCHIVO';
+            var typeLabels = {
+                'TXT': 'TXT · Texto',
+                'MD': 'MD · Markdown',
+                'PDF': 'PDF · Documento',
+                'DOCX': 'DOCX · Word',
+                'CSV': 'CSV · Tabla'
+            };
+
+            typeBadge.textContent = typeLabels[ext] || ext;
+            nameLabel.textContent = file.name;
+            preview.classList.remove('hidden');
+            preview.classList.add('flex');
+            btn.textContent = 'Cambiar archivo';
+        };
+
+        window.clearIdeaFile = function() {
+            var input = document.getElementById('idea-doc-input');
+            var preview = document.getElementById('idea-doc-preview');
+            var btn = document.getElementById('idea-doc-btn');
+
+            input.value = '';
+            preview.classList.add('hidden');
+            preview.classList.remove('flex');
+            btn.textContent = 'Subir archivo (.txt, .md, .pdf, .docx, .csv)';
+        };
+    </script>
 
     <div class="flex gap-3 items-center justify-start">
         <button type="submit" class="border border-zinc-50 hover:border-cyan-500 text-zinc-50 hover:text-cyan-500 rounded p-1 cursor-pointer transition-all">

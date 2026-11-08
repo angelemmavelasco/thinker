@@ -53,12 +53,12 @@ func (s *LLMService) AnalyzeIdea(ctx context.Context, title, content string) (*I
 		Messages: []chatMessage{
 			{
 				Role: "system",
-				Content: `Analiza la idea y responde únicamente con JSON válido, sin markdown, usando exactamente esta estructura:
+				Content: `Analiza la nota y responde únicamente con JSON válido, sin markdown, usando esta estructura:
 {
-  "restructured_note": "Una versión clara y organizada de la nota",
-  "key_entities": ["Entidad o concepto clave"]
+  "restructured_note": "Síntesis clara y organizada de la nota en máximo 3 oraciones",
+  "key_entities": ["Concepto clave 1", "Concepto clave 2"]
 }
-No inventes información que no aparezca en la nota.`,
+Extrae entre 3 y 7 conceptos clave cortos. No inventes información.`,
 			},
 			{
 				Role:    "user",
@@ -66,7 +66,7 @@ No inventes información que no aparezca en la nota.`,
 			},
 		},
 		Temperature: 0.2,
-		MaxTokens:   1500,
+		MaxTokens:   500,
 	}
 
 	body, err := json.Marshal(requestBody)
