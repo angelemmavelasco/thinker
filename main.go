@@ -9,6 +9,7 @@ import (
 	"thinker/internal/config"
 	"thinker/internal/database"
 	"thinker/internal/routes"
+	"thinker/internal/services"
 )
 
 func main() {
@@ -47,8 +48,9 @@ func main() {
 
 	//init queries
 	queries := database.New(conn)
+	llmService := services.NewLLMService(baseConfig.LLMBaseURL, baseConfig.LLMApiKey)
 	// initi router
-	router := routes.SetUpRouter(queries)
+	router := routes.SetUpRouter(queries, llmService)
 
 	if err := router.Run(":8080"); err != nil {
 		log.Fatalf("Error al ejecutar el servidor HTTP: %v", err)

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"strings"
 
@@ -16,10 +17,10 @@ type IdeaHandler struct {
 	service *services.IdeaService
 }
 
-func NewIdeaHandler(queries *database.Queries) *IdeaHandler {
+func NewIdeaHandler(queries *database.Queries, llm *services.LLMService) *IdeaHandler {
 	return &IdeaHandler{
 		queries: queries,
-		service: services.NewIdeaService(queries),
+		service: services.NewIdeaService(queries, llm),
 	}
 }
 
@@ -83,6 +84,13 @@ func (h *IdeaHandler) CreateIdea(c *gin.Context) {
 	if _, err := h.service.CreateIdea(c.Request.Context(), c.GetString("user"), title, content); err != nil {
 		c.String(http.StatusInternalServerError, "Error al guardar la idea: %v", err)
 		return
+	}
+
+	llmResult, err := h.service.AnalyzeIdea(c.Request.Context(), title, content)
+	if err != nil {
+		log.Printf("[llm] Error analizando idea: %v", err)
+	} else {
+		log.Printf("[llm] Resultado del análisis:\n%s", llmResult)
 	}
 
 	if c.GetHeader("HX-Request") == "true" {

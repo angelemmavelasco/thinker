@@ -9,10 +9,11 @@ import (
 
 type IdeaService struct {
 	queries *database.Queries
+	llm     *LLMService
 }
 
-func NewIdeaService(queries *database.Queries) *IdeaService {
-	return &IdeaService{queries: queries}
+func NewIdeaService(queries *database.Queries, llm *LLMService) *IdeaService {
+	return &IdeaService{queries: queries, llm: llm}
 }
 
 func (s *IdeaService) ListIdeas(ctx context.Context) ([]database.Idea, error) {
@@ -32,4 +33,8 @@ func (s *IdeaService) CreateIdea(ctx context.Context, userIDStr, title, content 
 		Content: content,
 		Status:  "draft",
 	})
+}
+
+func (s *IdeaService) AnalyzeIdea(ctx context.Context, title, content string) (string, error) {
+	return s.llm.AnalyzeIdea(ctx, title, content)
 }

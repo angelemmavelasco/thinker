@@ -8,10 +8,11 @@ import (
 	"thinker/internal/config"
 	"thinker/internal/database"
 	"thinker/internal/handlers"
+	"thinker/internal/services"
 	"thinker/internal/urls"
 )
 
-func SetUpRouter(queries *database.Queries) *gin.Engine {
+func SetUpRouter(queries *database.Queries, llm *services.LLMService) *gin.Engine {
 	// base router
 	router := gin.Default()
 	router.Use(config.GlobalContextMiddleware())
@@ -19,7 +20,7 @@ func SetUpRouter(queries *database.Queries) *gin.Engine {
 	router.HTMLRender = config.LoadTemplates("./templates/")
 
 	// needed handlers
-	ideaHandler := handlers.NewIdeaHandler(queries)
+	ideaHandler := handlers.NewIdeaHandler(queries, llm)
 	userHandler := handlers.NewUserHandler(queries)
 
 	router.GET(urls.Get("api:users:list"), userHandler.ListUsers)

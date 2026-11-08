@@ -11,6 +11,7 @@ import (
 type BaseConfig struct {
 	Debug      bool
 	LLMApiKey  string
+	LLMBaseURL string
 	DBHost     string
 	DBPort     string
 	DBName     string
@@ -38,6 +39,10 @@ func LoadConfig() (*BaseConfig, error) {
 
 	// model selection
 	llmApiKey := os.Getenv("LLM_API_KEY")
+	llmBaseURL := os.Getenv("LLM_BASE_URL")
+	if llmBaseURL == "" {
+		llmBaseURL = "http://localhost:8081"
+	}
 
 	// db config
 	dbHost := os.Getenv("DB_HOST")
@@ -48,8 +53,9 @@ func LoadConfig() (*BaseConfig, error) {
 	connString := os.Getenv("CONN_STRING")
 
 	config := BaseConfig{
-		Debug: debug,
+		Debug:      debug,
 		LLMApiKey:  llmApiKey,
+		LLMBaseURL: llmBaseURL,
 		DBHost:     dbHost,
 		DBPort:     dbPort,
 		DBName:     dbName,
