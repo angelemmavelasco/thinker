@@ -11,18 +11,52 @@ import (
 )
 
 type Idea struct {
-	ID        uuid.UUID
-	UserID    uuid.UUID
-	Title     string
-	Content   string
-	Status    string
+	ID                  uuid.UUID
+	UserID              uuid.UUID
+	Title               string
+	Content             string
+	RestructuredContent string
+	Status              string
+	Embedding           string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
+
+type IdeaChunk struct {
+	ID         uuid.UUID
+	IdeaID     uuid.UUID
+	ChunkIndex int32
+	Content    string
+	Embedding  string
+	CreatedAt  time.Time
+}
+
+type IdeaKeyword struct {
+	IdeaID    uuid.UUID
+	KeywordID uuid.UUID
 	CreatedAt time.Time
-	UpdatedAt time.Time
+}
+
+type IdeaLink struct {
+	ID           uuid.UUID
+	SourceIdeaID uuid.UUID
+	TargetIdeaID uuid.UUID
+	RelationType string
+	Weight       float64
+	CreatedAt    time.Time
+}
+
+type Keyword struct {
+	ID        uuid.UUID
+	Name      string
+	Embedding string
+	CreatedAt time.Time
 }
 
 type User struct {
 	ID           uuid.UUID
 	Email        string
 	PasswordHash string
+	Role         string
 	CreatedAt    time.Time
 }

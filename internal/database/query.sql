@@ -12,17 +12,13 @@ SELECT id, email, created_at
 FROM users
 ORDER BY created_at DESC;
 
-
-
-
-
 -- name: ListIdeas :many
-SELECT id, user_id, title, content, status, created_at, updated_at
+SELECT *
 FROM ideas
 ORDER BY created_at DESC;
 
 -- name: ListIdeasByUserID :many
-SELECT id, user_id, title, content, status, created_at, updated_at
+SELECT *
 FROM ideas
 WHERE user_id = $1
 ORDER BY created_at DESC;
@@ -30,4 +26,37 @@ ORDER BY created_at DESC;
 -- name: CreateIdea :one
 INSERT INTO ideas (id, user_id, title, content, status)
 VALUES ($1, $2, $3, $4, $5)
+RETURNING *;
+
+-- name: UpdateIdeaAnalysis :one
+UPDATE ideas
+SET restructured_content = $2,
+    status = $3,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING *;
+
+-- name: UpsertKeyword :one
+INSERT INTO keywords (id, name)
+VALUES ($1, $2)
+ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+RETURNING *;
+
+-- name: LinkIdeaKeyword :exec
+INSERT INTO idea_keywords (idea_id, keyword_id)
+VALUES ($1, $2)
+ON CONFLICT (idea_id, keyword_id) DO NOTHING;
+
+-- name: ListKeywordsByIdeaID :many
+SELECT k.*
+FROM keywords k
+JOIN idea_keywords ik ON ik.keyword_id = k.id
+WHERE ik.idea_id = $1
+ORDER BY k.name ASC;
+
+-- name: CreateIdeaLink :one
+INSERT INTO idea_links (id, source_idea_id, target_idea_id, relation_type, weight)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (source_idea_id, target_idea_id, relation_type)
+DO UPDATE SET weight = EXCLUDED.weight
 RETURNING *;

@@ -15,7 +15,7 @@ import (
 const createIdea = `-- name: CreateIdea :one
 INSERT INTO ideas (id, user_id, title, content, status)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, user_id, title, content, status, created_at, updated_at
+RETURNING id, user_id, title, content, restructured_content, status, embedding, created_at, updated_at
 `
 
 type CreateIdeaParams struct {
@@ -40,9 +40,47 @@ func (q *Queries) CreateIdea(ctx context.Context, arg CreateIdeaParams) (Idea, e
 		&i.UserID,
 		&i.Title,
 		&i.Content,
+		&i.RestructuredContent,
 		&i.Status,
+		&i.Embedding,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createIdeaLink = `-- name: CreateIdeaLink :one
+INSERT INTO idea_links (id, source_idea_id, target_idea_id, relation_type, weight)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (source_idea_id, target_idea_id, relation_type)
+DO UPDATE SET weight = EXCLUDED.weight
+RETURNING id, source_idea_id, target_idea_id, relation_type, weight, created_at
+`
+
+type CreateIdeaLinkParams struct {
+	ID           uuid.UUID
+	SourceIdeaID uuid.UUID
+	TargetIdeaID uuid.UUID
+	RelationType string
+	Weight       float64
+}
+
+func (q *Queries) CreateIdeaLink(ctx context.Context, arg CreateIdeaLinkParams) (IdeaLink, error) {
+	row := q.db.QueryRowContext(ctx, createIdeaLink,
+		arg.ID,
+		arg.SourceIdeaID,
+		arg.TargetIdeaID,
+		arg.RelationType,
+		arg.Weight,
+	)
+	var i IdeaLink
+	err := row.Scan(
+		&i.ID,
+		&i.SourceIdeaID,
+		&i.TargetIdeaID,
+		&i.RelationType,
+		&i.Weight,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -50,7 +88,7 @@ func (q *Queries) CreateIdea(ctx context.Context, arg CreateIdeaParams) (Idea, e
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, email, password_hash)
 VALUES ($1, $2, $3)
-RETURNING id, email, password_hash, created_at
+RETURNING id, email, password_hash, role, created_at
 `
 
 type CreateUserParams struct {
@@ -66,13 +104,14 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.ID,
 		&i.Email,
 		&i.PasswordHash,
+		&i.Role,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, created_at FROM users
+SELECT id, email, password_hash, role, created_at FROM users
 WHERE email = $1 LIMIT 1
 `
 
@@ -83,13 +122,30 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.ID,
 		&i.Email,
 		&i.PasswordHash,
+		&i.Role,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
+const linkIdeaKeyword = `-- name: LinkIdeaKeyword :exec
+INSERT INTO idea_keywords (idea_id, keyword_id)
+VALUES ($1, $2)
+ON CONFLICT (idea_id, keyword_id) DO NOTHING
+`
+
+type LinkIdeaKeywordParams struct {
+	IdeaID    uuid.UUID
+	KeywordID uuid.UUID
+}
+
+func (q *Queries) LinkIdeaKeyword(ctx context.Context, arg LinkIdeaKeywordParams) error {
+	_, err := q.db.ExecContext(ctx, linkIdeaKeyword, arg.IdeaID, arg.KeywordID)
+	return err
+}
+
 const listIdeas = `-- name: ListIdeas :many
-SELECT id, user_id, title, content, status, created_at, updated_at
+SELECT id, user_id, title, content, restructured_content, status, embedding, created_at, updated_at
 FROM ideas
 ORDER BY created_at DESC
 `
@@ -108,7 +164,9 @@ func (q *Queries) ListIdeas(ctx context.Context) ([]Idea, error) {
 			&i.UserID,
 			&i.Title,
 			&i.Content,
+			&i.RestructuredContent,
 			&i.Status,
+			&i.Embedding,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -126,7 +184,7 @@ func (q *Queries) ListIdeas(ctx context.Context) ([]Idea, error) {
 }
 
 const listIdeasByUserID = `-- name: ListIdeasByUserID :many
-SELECT id, user_id, title, content, status, created_at, updated_at
+SELECT id, user_id, title, content, restructured_content, status, embedding, created_at, updated_at
 FROM ideas
 WHERE user_id = $1
 ORDER BY created_at DESC
@@ -146,9 +204,47 @@ func (q *Queries) ListIdeasByUserID(ctx context.Context, userID uuid.UUID) ([]Id
 			&i.UserID,
 			&i.Title,
 			&i.Content,
+			&i.RestructuredContent,
 			&i.Status,
+			&i.Embedding,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKeywordsByIdeaID = `-- name: ListKeywordsByIdeaID :many
+SELECT k.id, k.name, k.embedding, k.created_at
+FROM keywords k
+JOIN idea_keywords ik ON ik.keyword_id = k.id
+WHERE ik.idea_id = $1
+ORDER BY k.name ASC
+`
+
+func (q *Queries) ListKeywordsByIdeaID(ctx context.Context, ideaID uuid.UUID) ([]Keyword, error) {
+	rows, err := q.db.QueryContext(ctx, listKeywordsByIdeaID, ideaID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Keyword
+	for rows.Next() {
+		var i Keyword
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Embedding,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -196,4 +292,60 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateIdeaAnalysis = `-- name: UpdateIdeaAnalysis :one
+UPDATE ideas
+SET restructured_content = $2,
+    status = $3,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING id, user_id, title, content, restructured_content, status, embedding, created_at, updated_at
+`
+
+type UpdateIdeaAnalysisParams struct {
+	ID                  uuid.UUID
+	RestructuredContent string
+	Status              string
+}
+
+func (q *Queries) UpdateIdeaAnalysis(ctx context.Context, arg UpdateIdeaAnalysisParams) (Idea, error) {
+	row := q.db.QueryRowContext(ctx, updateIdeaAnalysis, arg.ID, arg.RestructuredContent, arg.Status)
+	var i Idea
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.Content,
+		&i.RestructuredContent,
+		&i.Status,
+		&i.Embedding,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertKeyword = `-- name: UpsertKeyword :one
+INSERT INTO keywords (id, name)
+VALUES ($1, $2)
+ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+RETURNING id, name, embedding, created_at
+`
+
+type UpsertKeywordParams struct {
+	ID   uuid.UUID
+	Name string
+}
+
+func (q *Queries) UpsertKeyword(ctx context.Context, arg UpsertKeywordParams) (Keyword, error) {
+	row := q.db.QueryRowContext(ctx, upsertKeyword, arg.ID, arg.Name)
+	var i Keyword
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Embedding,
+		&i.CreatedAt,
+	)
+	return i, err
 }
