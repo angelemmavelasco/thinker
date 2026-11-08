@@ -195,6 +195,30 @@ func (q *Queries) FindOverlappingIdeas(ctx context.Context, ideaID uuid.UUID) ([
 	return items, nil
 }
 
+const getIdeaByID = `-- name: GetIdeaByID :one
+SELECT id, user_id, title, content, restructured_content, status, embedding, created_at, updated_at
+FROM ideas
+WHERE id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetIdeaByID(ctx context.Context, id uuid.UUID) (Idea, error) {
+	row := q.db.QueryRowContext(ctx, getIdeaByID, id)
+	var i Idea
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.Content,
+		&i.RestructuredContent,
+		&i.Status,
+		&i.Embedding,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, email, password_hash, role, created_at FROM users
 WHERE email = $1 LIMIT 1
@@ -251,6 +275,62 @@ func (q *Queries) ListAllIdeaLinks(ctx context.Context) ([]IdeaLink, error) {
 			&i.RelationType,
 			&i.Weight,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectConnectedIdeas = `-- name: ListDirectConnectedIdeas :many
+SELECT
+    i.id,
+    i.title,
+    i.content,
+    i.restructured_content,
+    i.status,
+    il.relation_type,
+    il.weight
+FROM idea_links il
+JOIN ideas i ON i.id = il.target_idea_id
+WHERE il.source_idea_id = $1
+ORDER BY il.weight DESC
+`
+
+type ListDirectConnectedIdeasRow struct {
+	ID                  uuid.UUID
+	Title               string
+	Content             string
+	RestructuredContent string
+	Status              string
+	RelationType        string
+	Weight              float64
+}
+
+func (q *Queries) ListDirectConnectedIdeas(ctx context.Context, sourceIdeaID uuid.UUID) ([]ListDirectConnectedIdeasRow, error) {
+	rows, err := q.db.QueryContext(ctx, listDirectConnectedIdeas, sourceIdeaID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectConnectedIdeasRow
+	for rows.Next() {
+		var i ListDirectConnectedIdeasRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Content,
+			&i.RestructuredContent,
+			&i.Status,
+			&i.RelationType,
+			&i.Weight,
 		); err != nil {
 			return nil, err
 		}

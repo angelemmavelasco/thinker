@@ -92,3 +92,23 @@ RETURNING *;
 
 -- name: DeleteIdea :exec
 DELETE FROM ideas WHERE id = $1;
+
+-- name: GetIdeaByID :one
+SELECT *
+FROM ideas
+WHERE id = $1
+LIMIT 1;
+
+-- name: ListDirectConnectedIdeas :many
+SELECT
+    i.id,
+    i.title,
+    i.content,
+    i.restructured_content,
+    i.status,
+    il.relation_type,
+    il.weight
+FROM idea_links il
+JOIN ideas i ON i.id = il.target_idea_id
+WHERE il.source_idea_id = $1
+ORDER BY il.weight DESC;

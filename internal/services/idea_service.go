@@ -22,13 +22,14 @@ type IdeaWithKeywords struct {
 }
 
 type GraphNode struct {
-	ID       string   `json:"id"`
-	Label    string   `json:"label"`
-	Type     string   `json:"type"`
-	Content  string   `json:"content,omitempty"`
-	Status   string   `json:"status,omitempty"`
-	UserID   string   `json:"userId,omitempty"`
-	Keywords []string `json:"keywords,omitempty"`
+	ID              string   `json:"id"`
+	Label           string   `json:"label"`
+	Type            string   `json:"type"`
+	Content         string   `json:"content,omitempty"`
+	OriginalContent string   `json:"originalContent,omitempty"`
+	Status          string   `json:"status,omitempty"`
+	UserID          string   `json:"userId,omitempty"`
+	Keywords        []string `json:"keywords,omitempty"`
 }
 
 type GraphLink struct {
@@ -78,17 +79,12 @@ func NewIdeaService(queries *database.Queries, llm *LLMService, embedding *Embed
 func (s *IdeaService) startWorker() {
 	for job := range s.jobQueue {
 		idKey := job.idea.ID.String()
-		log.Printf("[llm] Iniciando análisis para la idea [%s] (%s)...", job.idea.ID, job.title)
-		result, savedKeywords, links, err := s.ProcessIdeaAnalysis(context.Background(), job.idea.ID, job.title, job.content)
+		_, _, _, err := s.ProcessIdeaAnalysis(context.Background(), job.idea.ID, job.title, job.content)
 		s.inFlight.Delete(idKey)
 		if err != nil {
 			log.Printf("[llm] Error procesando idea [%s]: %v", job.idea.ID, err)
 			continue
 		}
-		log.Printf("[llm] Análisis y persistencia completados para [%s]:", job.idea.ID)
-		log.Printf("  -> Nota reestructurada: %s", result.RestructuredNote)
-		log.Printf("  -> Keywords guardados (%d): %v", len(savedKeywords), result.KeyEntities)
-		log.Printf("  -> Conexiones creadas/actualizadas (%d)", len(links))
 	}
 }
 
@@ -441,13 +437,14 @@ func (s *IdeaService) GetNetworkGraph(ctx context.Context) (*GraphData, error) {
 		}
 
 		nodes = append(nodes, GraphNode{
-			ID:       ideaID,
-			Label:    item.Title,
-			Type:     "idea",
-			Content:  displayContent,
-			Status:   item.Status,
-			UserID:   item.UserID.String(),
-			Keywords: kwNames,
+			ID:              ideaID,
+			Label:           item.Title,
+			Type:            "idea",
+			Content:         displayContent,
+			OriginalContent: item.Content,
+			Status:          item.Status,
+			UserID:          item.UserID.String(),
+			Keywords:        kwNames,
 		})
 	}
 
@@ -480,5 +477,78 @@ func (s *IdeaService) GetNetworkGraph(ctx context.Context) (*GraphData, error) {
 	return &GraphData{
 		Nodes: nodes,
 		Links: links,
+	}, nil
+}
+
+type ConnectedIdeaInfo struct {
+	ID                  uuid.UUID
+	Title               string
+	Preview             string
+	Status              string
+	RelationDescription string
+}
+
+type IdeaDetail struct {
+	Idea        database.Idea
+	Keywords    []database.Keyword
+	Connections []ConnectedIdeaInfo
+}
+
+func (s *IdeaService) GetIdeaDetail(ctx context.Context, ideaIDStr string) (*IdeaDetail, error) {
+	ideaID, err := uuid.Parse(ideaIDStr)
+	if err != nil {
+		return nil, err
+	}
+
+	idea, err := s.queries.GetIdeaByID(ctx, ideaID)
+	if err != nil {
+		return nil, err
+	}
+
+	kws, err := s.keywordService.ListKeywordsByIdeaID(ctx, ideaID)
+	if err != nil {
+		return nil, err
+	}
+
+	rawLinks, err := s.queries.ListDirectConnectedIdeas(ctx, ideaID)
+	if err != nil {
+		return nil, err
+	}
+
+	indexByID := make(map[uuid.UUID]int)
+	var connections []ConnectedIdeaInfo
+
+	for _, row := range rawLinks {
+		relLabel := "Ideas afines"
+		if row.RelationType == "concept_overlap" {
+			relLabel = "Temas en común"
+		}
+
+		if idx, exists := indexByID[row.ID]; exists {
+			if connections[idx].RelationDescription != relLabel {
+				connections[idx].RelationDescription = "Afinidad y temas en común"
+			}
+			continue
+		}
+
+		preview := row.Content
+		if row.RestructuredContent != "" {
+			preview = row.RestructuredContent
+		}
+
+		indexByID[row.ID] = len(connections)
+		connections = append(connections, ConnectedIdeaInfo{
+			ID:                  row.ID,
+			Title:               row.Title,
+			Preview:             preview,
+			Status:              row.Status,
+			RelationDescription: relLabel,
+		})
+	}
+
+	return &IdeaDetail{
+		Idea:        idea,
+		Keywords:    kws,
+		Connections: connections,
 	}, nil
 }

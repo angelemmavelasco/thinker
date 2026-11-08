@@ -29,6 +29,7 @@ func SetUpRouter(queries *database.Queries, llm *services.LLMService, embedding 
 	router.GET(urls.Get("ideas:list"), ideaHandler.ListIdeas)
 	router.GET(urls.Get("ideas:new"), ideaHandler.NewIdea)
 	router.POST(urls.Get("ideas:new"), ideaHandler.CreateIdea)
+	router.GET(urls.Get("ideas:detail:route"), ideaHandler.IdeaDetail)
 
 	router.GET(urls.Get("users:list"), userHandler.ListUsersView)
 	router.GET(urls.Get("users:new"), userHandler.NewUser)

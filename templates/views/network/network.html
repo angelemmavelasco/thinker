@@ -59,10 +59,21 @@
                     <h4 id="inspector-title" class="text-sm font-medium text-zinc-100 mt-1"></h4>
                     <p id="inspector-meta" class="text-[10px] text-zinc-500 mt-0.5"></p>
                 </div>
-                <p id="inspector-body" class="text-zinc-300 leading-relaxed whitespace-pre-line border-l-2 border-cyan-500 pl-2"></p>
+                <div id="inspector-summary-box" class="flex flex-col gap-1">
+                    <span class="text-[10px] text-cyan-400 uppercase font-medium">Síntesis</span>
+                    <p id="inspector-body" class="text-zinc-200 leading-relaxed whitespace-pre-line border-l-2 border-cyan-500 pl-2"></p>
+                </div>
+                <div id="inspector-original-box" class="flex flex-col gap-1">
+                    <span class="text-[10px] text-zinc-400 uppercase font-medium">Nota original</span>
+                    <p id="inspector-original" class="text-zinc-400 leading-relaxed whitespace-pre-line border-l-2 border-zinc-700 pl-2"></p>
+                </div>
                 <div id="inspector-keywords-box" class="flex flex-col gap-1.5 mt-2">
                     <span class="text-[10px] text-zinc-400 uppercase">Temas clave</span>
                     <ul id="inspector-keywords" class="flex flex-wrap gap-1.5 text-[9px]"></ul>
+                </div>
+                <div id="inspector-neighbors-box" class="flex flex-col gap-1.5 mt-2">
+                    <span class="text-[10px] text-emerald-400 uppercase font-medium">Conexiones directas</span>
+                    <ul id="inspector-neighbors" class="flex flex-col gap-1 text-[11px]"></ul>
                 </div>
             </div>
         </aside>
@@ -82,13 +93,74 @@
     const badgeEl = document.getElementById("inspector-badge");
     const titleEl = document.getElementById("inspector-title");
     const metaEl = document.getElementById("inspector-meta");
+    const summaryBoxEl = document.getElementById("inspector-summary-box");
     const bodyEl = document.getElementById("inspector-body");
+    const originalBoxEl = document.getElementById("inspector-original-box");
+    const originalEl = document.getElementById("inspector-original");
     const kwBoxEl = document.getElementById("inspector-keywords-box");
     const kwListEl = document.getElementById("inspector-keywords");
+    const neighborsBoxEl = document.getElementById("inspector-neighbors-box");
+    const neighborsListEl = document.getElementById("inspector-neighbors");
 
     let rawData = { nodes: [], links: [] };
     let showKeywords = true;
     let selectedNode = null;
+    let neighborIds = new Set();
+    let activeLinks = new Set();
+
+    function getLinkEndpointId(endpoint) {
+        return typeof endpoint === "object" && endpoint !== null ? endpoint.id : endpoint;
+    }
+
+    function computeHighlightSet(node) {
+        neighborIds.clear();
+        activeLinks.clear();
+        if (!node) return;
+
+        neighborIds.add(node.id);
+        const currentLinks = Graph.graphData().links || [];
+
+        currentLinks.forEach(link => {
+            const srcId = getLinkEndpointId(link.source);
+            const tgtId = getLinkEndpointId(link.target);
+            if (srcId === node.id) {
+                neighborIds.add(tgtId);
+                activeLinks.add(link);
+            } else if (tgtId === node.id) {
+                neighborIds.add(srcId);
+                activeLinks.add(link);
+            }
+        });
+
+        if (node.type === "idea") {
+            rawData.links.forEach(link => {
+                if (link.type !== "semantic" && link.type !== "concept_overlap") return;
+                const srcId = getLinkEndpointId(link.source);
+                const tgtId = getLinkEndpointId(link.target);
+                if (srcId === node.id) neighborIds.add(tgtId);
+                if (tgtId === node.id) neighborIds.add(srcId);
+            });
+        }
+    }
+
+    function clearSelection() {
+        selectedNode = null;
+        neighborIds.clear();
+        activeLinks.clear();
+        emptyEl.classList.remove("hidden");
+        contentEl.classList.add("hidden");
+        contentEl.classList.remove("flex");
+    }
+
+    function selectNode(node) {
+        selectedNode = node;
+        computeHighlightSet(node);
+        renderInspector(node);
+        if (typeof node.x === "number" && typeof node.y === "number") {
+            Graph.centerAt(node.x, node.y, 500);
+            Graph.zoom(1.8, 500);
+        }
+    }
 
     function formatStatus(status) {
         const s = (status || "").toLowerCase();
@@ -97,52 +169,129 @@
         return status || "Borrador";
     }
 
+    function formatNodeLabel(label) {
+        if (!label) return "";
+        if (label.length <= 24) return label;
+        const chunkMatch = label.match(/\s*\(\d+\/\d+\)$/);
+        if (chunkMatch) {
+            const suffix = chunkMatch[0];
+            const base = label.slice(0, label.length - suffix.length);
+            const maxBase = Math.max(8, 22 - suffix.length);
+            if (base.length > maxBase) {
+                return base.slice(0, maxBase) + "…" + suffix;
+            }
+            return label;
+        }
+        return label.slice(0, 24) + "…";
+    }
+
     const Graph = ForceGraph()(container)
         .backgroundColor("#09090b")
         .nodeId("id")
         .nodeLabel(node => node.label)
-        .nodeVal(node => node.type === "idea" ? 6 : 2.5)
+        .nodeVal(node => node.type === "idea" ? 5 : 2)
         .nodeColor(node => {
-            if (selectedNode && selectedNode.id === node.id) return "#ffffff";
-            return node.type === "idea" ? "#06b6d4" : "#fcd34d";
+            if (!selectedNode) {
+                return node.type === "idea" ? "#06b6d4" : "#fcd34d";
+            }
+            if (selectedNode.id === node.id) {
+                return "#ffffff";
+            }
+            if (neighborIds.has(node.id)) {
+                return node.type === "idea" ? "#34d399" : "#fbbf24";
+            }
+            return "rgba(63, 63, 70, 0.22)";
         })
         .nodeCanvasObjectMode(() => "after")
         .nodeCanvasObject((node, ctx, globalScale) => {
-            if (globalScale < 1.2 && node.type === "keyword") return;
-            const label = node.label || "";
-            const fontSize = Math.max(10 / globalScale, 2.5);
+            const hasSelection = Boolean(selectedNode);
+            const isSelected = hasSelection && selectedNode.id === node.id;
+            const isNeighbor = hasSelection && !isSelected && neighborIds.has(node.id);
+
+            if (isSelected || isNeighbor) {
+                const ringRadius = (node.type === "idea" ? 6.5 : 4.2) + (isSelected ? 2 : 1);
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, ringRadius, 0, 2 * Math.PI, false);
+                ctx.strokeStyle = isSelected ? "#22d3ee" : (node.type === "idea" ? "#34d399" : "#fbbf24");
+                ctx.lineWidth = (isSelected ? 2 : 1.4) / Math.max(1, globalScale * 0.6);
+                ctx.stroke();
+            }
+
+            if (hasSelection && !isSelected && !isNeighbor) return;
+            if (!hasSelection && node.type === "keyword" && globalScale < 1.35) return;
+            if (!hasSelection && node.type === "idea" && globalScale < 0.55) return;
+
+            const text = formatNodeLabel(node.label);
+            const fontSize = Math.min(12, Math.max(10 / globalScale, 3.2));
             ctx.font = `${fontSize}px monospace`;
+            const textWidth = ctx.measureText(text).width;
+            const padX = fontSize * 0.35;
+            const padY = fontSize * 0.2;
+            const offsetY = node.type === "idea" ? 7 : 5;
+            const boxX = node.x - textWidth / 2 - padX;
+            const boxY = node.y + offsetY - padY;
+            const boxW = textWidth + padX * 2;
+            const boxH = fontSize + padY * 2;
+
+            ctx.fillStyle = isSelected ? "rgba(8, 51, 68, 0.92)" : (isNeighbor ? "rgba(6, 78, 59, 0.88)" : "rgba(9, 9, 11, 0.78)");
+            ctx.fillRect(boxX, boxY, boxW, boxH);
+
             ctx.textAlign = "center";
             ctx.textBaseline = "top";
-            ctx.fillStyle = node.type === "idea" ? "#e4e4e7" : "#a1a1aa";
-            ctx.fillText(label.length > 26 ? label.slice(0, 26) + "..." : label, node.x, node.y + (node.type === "idea" ? 6 : 4));
+            ctx.fillStyle = isSelected ? "#ffffff" : (isNeighbor ? "#ecfdf5" : (node.type === "idea" ? "#e4e4e7" : "#d4d4d8"));
+            ctx.fillText(text, node.x, node.y + offsetY);
         })
         .linkColor(link => {
-            if (link.type === "semantic") return "rgba(34, 211, 238, 0.75)";
-            if (link.type === "concept_overlap") return "rgba(52, 211, 153, 0.75)";
-            return "rgba(113, 113, 122, 0.35)";
+            if (selectedNode) {
+                if (activeLinks.has(link)) {
+                    if (link.type === "semantic") return "rgba(34, 211, 238, 0.95)";
+                    if (link.type === "concept_overlap") return "rgba(52, 211, 153, 0.95)";
+                    return "rgba(251, 191, 36, 0.85)";
+                }
+                return "rgba(39, 39, 42, 0.12)";
+            }
+            if (link.type === "semantic") return "rgba(34, 211, 238, 0.45)";
+            if (link.type === "concept_overlap") return "rgba(52, 211, 153, 0.45)";
+            return "rgba(113, 113, 122, 0.28)";
         })
         .linkWidth(link => {
-            if (link.type === "semantic") return Math.max(1.5, link.weight * 3);
-            if (link.type === "concept_overlap") return Math.min(5, 1 + link.weight * 0.8);
-            return 0.8;
+            const isHighlighted = selectedNode && activeLinks.has(link);
+            if (selectedNode && !isHighlighted) return 0.4;
+            const boost = isHighlighted ? 1.4 : 0;
+            if (link.type === "semantic") return Math.max(1, link.weight * 2) + boost;
+            if (link.type === "concept_overlap") return Math.min(3.5, 0.8 + link.weight * 0.6) + boost;
+            return 0.7 + boost * 0.6;
         })
-        .linkDirectionalParticles(link => (link.type === "semantic" || link.type === "concept_overlap") ? 2 : 0)
-        .linkDirectionalParticleWidth(2)
+        .linkDirectionalParticles(link => {
+            if (selectedNode) {
+                return activeLinks.has(link) ? 3 : 0;
+            }
+            return (link.type === "semantic" || link.type === "concept_overlap") ? 1 : 0;
+        })
+        .linkDirectionalParticleWidth(link => (selectedNode && activeLinks.has(link)) ? 2.6 : 1.8)
         .linkDirectionalParticleSpeed(0.004)
         .onNodeClick(node => {
-            selectedNode = node;
-            renderInspector(node);
-            Graph.centerAt(node.x, node.y, 500);
-            Graph.zoom(2.2, 500);
+            selectNode(node);
+        })
+        .onBackgroundClick(() => {
+            clearSelection();
         });
 
-    Graph.d3Force("charge").strength(-110);
-    Graph.d3Force("link").distance(link => {
-        if (link.type === "semantic") return 70 * (1.2 - Math.min(0.9, link.weight));
-        if (link.type === "concept_overlap") return 80;
-        return 45;
-    });
+    Graph.d3Force("charge")
+        .strength(node => node.type === "idea" ? -420 : -190)
+        .distanceMax(800);
+
+    Graph.d3Force("link")
+        .distance(link => {
+            if (link.type === "semantic") return 210 * (1.35 - Math.min(0.85, link.weight * 0.5));
+            if (link.type === "concept_overlap") return 220;
+            return 115;
+        })
+        .strength(link => {
+            if (link.type === "semantic") return 0.16;
+            if (link.type === "concept_overlap") return 0.14;
+            return 0.35;
+        });
 
     function renderInspector(node) {
         emptyEl.classList.add("hidden");
@@ -154,8 +303,26 @@
             badgeEl.className = "text-[9px] uppercase px-1.5 py-0.5 rounded-xs font-semibold bg-cyan-500/20 text-cyan-300";
             titleEl.textContent = node.label;
             metaEl.textContent = "Creado por: " + (node.userId || "-");
-            bodyEl.textContent = node.content || "";
-            bodyEl.classList.remove("hidden");
+
+            const summaryText = node.content || "";
+            const origText = node.originalContent || "";
+
+            if (summaryText && summaryText !== origText) {
+                bodyEl.textContent = summaryText;
+                summaryBoxEl.classList.remove("hidden");
+            } else {
+                summaryBoxEl.classList.add("hidden");
+            }
+
+            if (origText) {
+                originalEl.textContent = origText;
+                originalBoxEl.classList.remove("hidden");
+            } else if (summaryText) {
+                originalEl.textContent = summaryText;
+                originalBoxEl.classList.remove("hidden");
+            } else {
+                originalBoxEl.classList.add("hidden");
+            }
 
             kwListEl.innerHTML = "";
             if (node.keywords && node.keywords.length > 0) {
@@ -174,8 +341,27 @@
             badgeEl.className = "text-[9px] uppercase px-1.5 py-0.5 rounded-xs font-semibold bg-amber-400/20 text-amber-300";
             titleEl.textContent = "#" + node.label;
             metaEl.textContent = "Tema compartido en tu red";
-            bodyEl.classList.add("hidden");
+            summaryBoxEl.classList.add("hidden");
+            originalBoxEl.classList.add("hidden");
             kwBoxEl.classList.add("hidden");
+        }
+        const currentNodes = Graph.graphData().nodes || [];
+        const connectedIdeas = currentNodes.filter(n => n.id !== node.id && n.type === "idea" && neighborIds.has(n.id));
+        neighborsListEl.innerHTML = "";
+        if (connectedIdeas.length > 0) {
+            neighborsBoxEl.classList.remove("hidden");
+            connectedIdeas.forEach(nb => {
+                const li = document.createElement("li");
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "w-full text-left px-2 py-1 rounded-xs bg-zinc-950 border border-zinc-800 hover:border-emerald-400 text-zinc-200 hover:text-emerald-300 cursor-pointer transition-all truncate";
+                btn.textContent = nb.label;
+                btn.addEventListener("click", () => selectNode(nb));
+                li.appendChild(btn);
+                neighborsListEl.appendChild(li);
+            });
+        } else {
+            neighborsBoxEl.classList.add("hidden");
         }
     }
 
@@ -194,6 +380,9 @@
             .filter(l => allowedIds.has(l.source) && allowedIds.has(l.target));
 
         Graph.graphData({ nodes, links });
+        if (selectedNode) {
+            computeHighlightSet(selectedNode);
+        }
         statsEl.textContent = `Elementos: ${nodes.length} | Conexiones: ${links.length}`;
     }
 

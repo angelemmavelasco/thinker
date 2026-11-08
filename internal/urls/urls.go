@@ -13,8 +13,10 @@ var RouteNames = map[string]string{
 	"users:list": "/web/users",
 	"users:new":  "/web/users/new",
 
-	"ideas:list": "/web/ideas/list",
-	"ideas:new":  "/web/ideas/new",
+	"ideas:list":         "/web/ideas/list",
+	"ideas:new":          "/web/ideas/new",
+	"ideas:detail:route": "/web/ideas/:id",
+	"ideas:detail":       "/web/ideas/%v",
 
 	"network:view":      "/web/network",
 	"api:network:graph": "/api/network/graph",

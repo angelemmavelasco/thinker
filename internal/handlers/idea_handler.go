@@ -147,3 +147,24 @@ func (h *IdeaHandler) NetworkGraphJSON(c *gin.Context) {
 
 	c.JSON(http.StatusOK, graph)
 }
+
+func (h *IdeaHandler) IdeaDetail(c *gin.Context) {
+	ideaID := c.Param("id")
+	detail, err := h.service.GetIdeaDetail(c.Request.Context(), ideaID)
+	if err != nil {
+		c.String(http.StatusNotFound, "No se encontró la idea solicitada: %v", err)
+		return
+	}
+
+	data := gin.H{
+		"title":  detail.Idea.Title,
+		"detail": detail,
+	}
+
+	if c.GetHeader("HX-Request") == "true" {
+		config.Render(c, http.StatusOK, "_idea_detail.html", data)
+		return
+	}
+
+	config.Render(c, http.StatusOK, "idea_detail.html", data)
+}
