@@ -3,9 +3,11 @@ package config
 import (
 	"html/template"
 	"path/filepath"
+	"sync"
 
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/render"
 
 	"thinker/internal/urls"
 )
@@ -21,8 +23,43 @@ var TemplateFuncs = template.FuncMap{
 	},
 }
 
-func LoadTemplates(templatesDir string) multitemplate.Renderer {
+type reloadableHTMLRender struct {
+	mu           sync.RWMutex
+	templatesDir string
+	inner        multitemplate.Renderer
+	known        map[string]bool
+}
+
+func (rr *reloadableHTMLRender) Instance(name string, data any) render.Render {
+	rr.mu.RLock()
+	exists := rr.known[name]
+	inner := rr.inner
+	rr.mu.RUnlock()
+
+	if !exists {
+		rr.mu.Lock()
+		if !rr.known[name] {
+			rr.inner, rr.known = buildRenderer(rr.templatesDir)
+		}
+		inner = rr.inner
+		rr.mu.Unlock()
+	}
+
+	return inner.Instance(name, data)
+}
+
+func LoadTemplates(templatesDir string) render.HTMLRender {
+	inner, known := buildRenderer(templatesDir)
+	return &reloadableHTMLRender{
+		templatesDir: templatesDir,
+		inner:        inner,
+		known:        known,
+	}
+}
+
+func buildRenderer(templatesDir string) (multitemplate.Renderer, map[string]bool) {
 	r := multitemplate.NewRenderer()
+	known := make(map[string]bool)
 
 	includes, err := filepath.Glob(filepath.Join(templatesDir, "includes", "*.html"))
 	if err != nil {
@@ -34,7 +71,6 @@ func LoadTemplates(templatesDir string) multitemplate.Renderer {
 		panic(err.Error())
 	}
 
-	//partials for templates/partials/*/*.html and templates/partials/*.html
 	partials, err := filepath.Glob(filepath.Join(templatesDir, "partials", "*", "*.html"))
 	if err != nil {
 		panic(err.Error())
@@ -61,8 +97,10 @@ func LoadTemplates(templatesDir string) multitemplate.Renderer {
 			template.New("base.html").Funcs(TemplateFuncs).ParseFiles(files...),
 		)
 		r.Add(baseName, tmpl)
+		known[baseName] = true
 		if slashName != baseName {
 			r.Add(slashName, tmpl)
+			known[slashName] = true
 		}
 	}
 
@@ -83,8 +121,10 @@ func LoadTemplates(templatesDir string) multitemplate.Renderer {
 			template.New(baseName).Funcs(TemplateFuncs).ParseFiles(files...),
 		)
 		r.Add(baseName, tmpl)
+		known[baseName] = true
 		if slashName != baseName {
 			r.Add(slashName, tmpl)
+			known[slashName] = true
 		}
 	}
 
@@ -99,12 +139,14 @@ func LoadTemplates(templatesDir string) multitemplate.Renderer {
 		tmpl := template.Must(template.New(baseName).Funcs(TemplateFuncs).ParseFiles(files...))
 
 		r.Add(baseName, tmpl)
+		known[baseName] = true
 		if slashName != baseName {
 			r.Add(slashName, tmpl)
+			known[slashName] = true
 		}
 	}
 
-	return r
+	return r, known
 }
 
 func Render(c *gin.Context, status int, templateName string, data gin.H) {

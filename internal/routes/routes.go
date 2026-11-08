@@ -12,7 +12,7 @@ import (
 	"thinker/internal/urls"
 )
 
-func SetUpRouter(queries *database.Queries, llm *services.LLMService) *gin.Engine {
+func SetUpRouter(queries *database.Queries, llm *services.LLMService, embedding *services.EmbeddingService) *gin.Engine {
 	// base router
 	router := gin.Default()
 	router.Use(config.GlobalContextMiddleware())
@@ -20,10 +20,12 @@ func SetUpRouter(queries *database.Queries, llm *services.LLMService) *gin.Engin
 	router.HTMLRender = config.LoadTemplates("./templates/")
 
 	// needed handlers
-	ideaHandler := handlers.NewIdeaHandler(queries, llm)
+	ideaHandler := handlers.NewIdeaHandler(queries, llm, embedding)
 	userHandler := handlers.NewUserHandler(queries)
 
 	router.GET(urls.Get("api:users:list"), userHandler.ListUsers)
+	router.GET(urls.Get("api:network:graph"), ideaHandler.NetworkGraphJSON)
+	router.GET(urls.Get("network:view"), ideaHandler.NetworkView)
 	router.GET(urls.Get("ideas:list"), ideaHandler.ListIdeas)
 	router.GET(urls.Get("ideas:new"), ideaHandler.NewIdea)
 	router.POST(urls.Get("ideas:new"), ideaHandler.CreateIdea)

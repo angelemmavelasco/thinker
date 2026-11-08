@@ -49,8 +49,9 @@ func main() {
 	//init queries
 	queries := database.New(conn)
 	llmService := services.NewLLMService(baseConfig.LLMBaseURL, baseConfig.LLMApiKey)
+	embeddingService := services.NewEmbeddingService(baseConfig.EmbeddingBaseURL, baseConfig.LLMApiKey)
 	// initi router
-	router := routes.SetUpRouter(queries, llmService)
+	router := routes.SetUpRouter(queries, llmService, embeddingService)
 
 	if err := router.Run(":8080"); err != nil {
 		log.Fatalf("Error al ejecutar el servidor HTTP: %v", err)

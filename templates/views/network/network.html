@@ -1,0 +1,234 @@
+{{define "content"}}
+
+<script src="https://unpkg.com/force-graph"></script>
+
+<div class="flex flex-col gap-4">
+    <div class="flex flex-wrap items-center justify-between border-b border-cyan-500 py-1 gap-4">
+        <div class="flex items-center gap-6">
+            <span class="font-medium text-zinc-100">Red de pensamiento</span>
+            <div class="flex items-center gap-4 text-[11px] text-zinc-400">
+                <span class="flex items-center gap-1.5">
+                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+                    Idea
+                </span>
+                <span class="flex items-center gap-1.5">
+                    <span class="inline-block w-2 h-2 rounded-full bg-amber-300"></span>
+                    Tema clave
+                </span>
+                <span class="flex items-center gap-1.5">
+                    <span class="inline-block w-4 h-[2px] bg-cyan-400"></span>
+                    Ideas afines
+                </span>
+                <span class="flex items-center gap-1.5">
+                    <span class="inline-block w-4 h-[2px] bg-emerald-400"></span>
+                    Temas en común
+                </span>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button id="toggle-keywords-btn" type="button"
+                class="border border-zinc-800 hover:border-cyan-500 bg-zinc-900 px-2 py-0.5 rounded-xs cursor-pointer transition-all text-zinc-200">
+                Ocultar temas
+            </button>
+            <button id="fit-graph-btn" type="button"
+                class="border border-zinc-800 hover:border-cyan-500 bg-zinc-900 px-2 py-0.5 rounded-xs cursor-pointer transition-all text-zinc-200">
+                Centrar red
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        <div id="graph-wrapper" class="lg:col-span-3 relative border border-zinc-800 rounded-xs bg-zinc-950 h-[72vh] overflow-hidden">
+            <div id="network-graph" class="w-full h-full"></div>
+            <div id="graph-stats" class="absolute bottom-2 left-2 bg-zinc-900/80 border border-zinc-800 px-2 py-1 rounded-xs text-[10px] text-zinc-400 pointer-events-none">
+                Cargando red...
+            </div>
+        </div>
+
+        <aside id="node-inspector" class="border border-zinc-800 rounded-xs bg-zinc-900 p-3 flex flex-col gap-3 h-[72vh] overflow-y-auto">
+            <h3 class="text-sm font-medium text-zinc-100 border-b border-zinc-800 pb-1">
+                Detalle de selección
+            </h3>
+            <div id="inspector-empty" class="text-zinc-500 my-auto text-center py-8">
+                Selecciona una idea o tema en la red para ver su contenido y conexiones.
+            </div>
+            <div id="inspector-content" class="hidden flex-col gap-3">
+                <div>
+                    <span id="inspector-badge" class="text-[9px] uppercase px-1.5 py-0.5 rounded-xs font-semibold bg-cyan-500/20 text-cyan-300"></span>
+                    <h4 id="inspector-title" class="text-sm font-medium text-zinc-100 mt-1"></h4>
+                    <p id="inspector-meta" class="text-[10px] text-zinc-500 mt-0.5"></p>
+                </div>
+                <p id="inspector-body" class="text-zinc-300 leading-relaxed whitespace-pre-line border-l-2 border-cyan-500 pl-2"></p>
+                <div id="inspector-keywords-box" class="flex flex-col gap-1.5 mt-2">
+                    <span class="text-[10px] text-zinc-400 uppercase">Temas clave</span>
+                    <ul id="inspector-keywords" class="flex flex-wrap gap-1.5 text-[9px]"></ul>
+                </div>
+            </div>
+        </aside>
+    </div>
+</div>
+
+<script>
+(() => {
+    const container = document.getElementById("network-graph");
+    const wrapper = document.getElementById("graph-wrapper");
+    const statsEl = document.getElementById("graph-stats");
+    const toggleKwBtn = document.getElementById("toggle-keywords-btn");
+    const fitBtn = document.getElementById("fit-graph-btn");
+
+    const emptyEl = document.getElementById("inspector-empty");
+    const contentEl = document.getElementById("inspector-content");
+    const badgeEl = document.getElementById("inspector-badge");
+    const titleEl = document.getElementById("inspector-title");
+    const metaEl = document.getElementById("inspector-meta");
+    const bodyEl = document.getElementById("inspector-body");
+    const kwBoxEl = document.getElementById("inspector-keywords-box");
+    const kwListEl = document.getElementById("inspector-keywords");
+
+    let rawData = { nodes: [], links: [] };
+    let showKeywords = true;
+    let selectedNode = null;
+
+    function formatStatus(status) {
+        const s = (status || "").toLowerCase();
+        if (s === "processed" || s === "procesada") return "Procesada";
+        if (s === "draft" || s === "borrador") return "Borrador";
+        return status || "Borrador";
+    }
+
+    const Graph = ForceGraph()(container)
+        .backgroundColor("#09090b")
+        .nodeId("id")
+        .nodeLabel(node => node.label)
+        .nodeVal(node => node.type === "idea" ? 6 : 2.5)
+        .nodeColor(node => {
+            if (selectedNode && selectedNode.id === node.id) return "#ffffff";
+            return node.type === "idea" ? "#06b6d4" : "#fcd34d";
+        })
+        .nodeCanvasObjectMode(() => "after")
+        .nodeCanvasObject((node, ctx, globalScale) => {
+            if (globalScale < 1.2 && node.type === "keyword") return;
+            const label = node.label || "";
+            const fontSize = Math.max(10 / globalScale, 2.5);
+            ctx.font = `${fontSize}px monospace`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "top";
+            ctx.fillStyle = node.type === "idea" ? "#e4e4e7" : "#a1a1aa";
+            ctx.fillText(label.length > 26 ? label.slice(0, 26) + "..." : label, node.x, node.y + (node.type === "idea" ? 6 : 4));
+        })
+        .linkColor(link => {
+            if (link.type === "semantic") return "rgba(34, 211, 238, 0.75)";
+            if (link.type === "concept_overlap") return "rgba(52, 211, 153, 0.75)";
+            return "rgba(113, 113, 122, 0.35)";
+        })
+        .linkWidth(link => {
+            if (link.type === "semantic") return Math.max(1.5, link.weight * 3);
+            if (link.type === "concept_overlap") return Math.min(5, 1 + link.weight * 0.8);
+            return 0.8;
+        })
+        .linkDirectionalParticles(link => (link.type === "semantic" || link.type === "concept_overlap") ? 2 : 0)
+        .linkDirectionalParticleWidth(2)
+        .linkDirectionalParticleSpeed(0.004)
+        .onNodeClick(node => {
+            selectedNode = node;
+            renderInspector(node);
+            Graph.centerAt(node.x, node.y, 500);
+            Graph.zoom(2.2, 500);
+        });
+
+    Graph.d3Force("charge").strength(-110);
+    Graph.d3Force("link").distance(link => {
+        if (link.type === "semantic") return 70 * (1.2 - Math.min(0.9, link.weight));
+        if (link.type === "concept_overlap") return 80;
+        return 45;
+    });
+
+    function renderInspector(node) {
+        emptyEl.classList.add("hidden");
+        contentEl.classList.remove("hidden");
+        contentEl.classList.add("flex");
+
+        if (node.type === "idea") {
+            badgeEl.textContent = "Idea · " + formatStatus(node.status);
+            badgeEl.className = "text-[9px] uppercase px-1.5 py-0.5 rounded-xs font-semibold bg-cyan-500/20 text-cyan-300";
+            titleEl.textContent = node.label;
+            metaEl.textContent = "Creado por: " + (node.userId || "-");
+            bodyEl.textContent = node.content || "";
+            bodyEl.classList.remove("hidden");
+
+            kwListEl.innerHTML = "";
+            if (node.keywords && node.keywords.length > 0) {
+                kwBoxEl.classList.remove("hidden");
+                node.keywords.forEach(kw => {
+                    const li = document.createElement("li");
+                    li.className = "bg-cyan-200 text-zinc-950 p-0.5 rounded-xs font-semibold";
+                    li.textContent = kw;
+                    kwListEl.appendChild(li);
+                });
+            } else {
+                kwBoxEl.classList.add("hidden");
+            }
+        } else {
+            badgeEl.textContent = "Tema clave";
+            badgeEl.className = "text-[9px] uppercase px-1.5 py-0.5 rounded-xs font-semibold bg-amber-400/20 text-amber-300";
+            titleEl.textContent = "#" + node.label;
+            metaEl.textContent = "Tema compartido en tu red";
+            bodyEl.classList.add("hidden");
+            kwBoxEl.classList.add("hidden");
+        }
+    }
+
+    function applyFilter() {
+        const nodes = showKeywords
+            ? rawData.nodes
+            : rawData.nodes.filter(n => n.type === "idea");
+        const allowedIds = new Set(nodes.map(n => n.id));
+        const links = rawData.links
+            .map(l => ({
+                source: typeof l.source === "object" ? l.source.id : l.source,
+                target: typeof l.target === "object" ? l.target.id : l.target,
+                type: l.type,
+                weight: l.weight
+            }))
+            .filter(l => allowedIds.has(l.source) && allowedIds.has(l.target));
+
+        Graph.graphData({ nodes, links });
+        statsEl.textContent = `Elementos: ${nodes.length} | Conexiones: ${links.length}`;
+    }
+
+    function resizeGraph() {
+        Graph.width(wrapper.clientWidth);
+        Graph.height(wrapper.clientHeight);
+    }
+
+    window.addEventListener("resize", resizeGraph);
+    resizeGraph();
+
+    toggleKwBtn.addEventListener("click", () => {
+        showKeywords = !showKeywords;
+        toggleKwBtn.textContent = showKeywords ? "Ocultar temas" : "Mostrar temas";
+        applyFilter();
+    });
+
+    fitBtn.addEventListener("click", () => {
+        Graph.zoomToFit(400, 40);
+    });
+
+    fetch('{{url "api:network:graph"}}')
+        .then(res => res.json())
+        .then(data => {
+            rawData = {
+                nodes: data.nodes || [],
+                links: data.links || []
+            };
+            applyFilter();
+            setTimeout(() => Graph.zoomToFit(500, 40), 250);
+        })
+        .catch(() => {
+            statsEl.textContent = "Error al cargar los datos de la red.";
+        });
+})();
+</script>
+
+{{end}}

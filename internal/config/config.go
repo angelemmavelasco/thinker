@@ -9,15 +9,16 @@ import (
 )
 
 type BaseConfig struct {
-	Debug      bool
-	LLMApiKey  string
-	LLMBaseURL string
-	DBHost     string
-	DBPort     string
-	DBName     string
-	DBUsername string
-	DBPassword string
-	ConnString string
+	Debug            bool
+	LLMApiKey        string
+	LLMBaseURL       string
+	EmbeddingBaseURL string
+	DBHost           string
+	DBPort           string
+	DBName           string
+	DBUsername       string
+	DBPassword       string
+	ConnString       string
 }
 
 func LoadConfig() (*BaseConfig, error) {
@@ -43,6 +44,10 @@ func LoadConfig() (*BaseConfig, error) {
 	if llmBaseURL == "" {
 		llmBaseURL = "http://localhost:8081"
 	}
+	embeddingBaseURL := os.Getenv("EMBEDDING_BASE_URL")
+	if embeddingBaseURL == "" {
+		embeddingBaseURL = "http://localhost:8082"
+	}
 
 	// db config
 	dbHost := os.Getenv("DB_HOST")
@@ -53,15 +58,16 @@ func LoadConfig() (*BaseConfig, error) {
 	connString := os.Getenv("CONN_STRING")
 
 	config := BaseConfig{
-		Debug:      debug,
-		LLMApiKey:  llmApiKey,
-		LLMBaseURL: llmBaseURL,
-		DBHost:     dbHost,
-		DBPort:     dbPort,
-		DBName:     dbName,
-		DBUsername: dbUsername,
-		DBPassword: dbPassword,
-		ConnString: connString,
+		Debug:            debug,
+		LLMApiKey:        llmApiKey,
+		LLMBaseURL:       llmBaseURL,
+		EmbeddingBaseURL: embeddingBaseURL,
+		DBHost:           dbHost,
+		DBPort:           dbPort,
+		DBName:           dbName,
+		DBUsername:       dbUsername,
+		DBPassword:       dbPassword,
+		ConnString:       connString,
 	}
 	fmt.Println("Base config loaded successfully:")
 	return &config, nil

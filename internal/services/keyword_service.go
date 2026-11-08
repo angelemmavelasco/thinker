@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"log"
 	"strings"
 
 	"github.com/google/uuid"
@@ -9,11 +10,15 @@ import (
 )
 
 type KeywordService struct {
-	queries *database.Queries
+	queries   *database.Queries
+	embedding *EmbeddingService
 }
 
-func NewKeywordService(queries *database.Queries) *KeywordService {
-	return &KeywordService{queries: queries}
+func NewKeywordService(queries *database.Queries, embedding *EmbeddingService) *KeywordService {
+	return &KeywordService{
+		queries:   queries,
+		embedding: embedding,
+	}
 }
 
 func (s *KeywordService) SaveKeywordsForIdea(ctx context.Context, ideaID uuid.UUID, rawEntities []string) ([]database.Keyword, error) {
@@ -38,6 +43,20 @@ func (s *KeywordService) SaveKeywordsForIdea(ctx context.Context, ideaID uuid.UU
 		})
 		if err != nil {
 			return nil, err
+		}
+
+		if s.embedding != nil && strings.TrimSpace(kw.Embedding) == "" {
+			vec, embErr := s.embedding.GenerateEmbedding(ctx, kw.Name)
+			if embErr != nil {
+				log.Printf("[embedding] Error generando embedding para keyword %q: %v", kw.Name, embErr)
+			} else if serialized, serErr := SerializeVector(vec); serErr == nil && serialized != "" {
+				if updatedKw, upErr := s.queries.UpdateKeywordEmbedding(ctx, database.UpdateKeywordEmbeddingParams{
+					ID:        kw.ID,
+					Embedding: serialized,
+				}); upErr == nil {
+					kw = updatedKw
+				}
+			}
 		}
 
 		if err := s.queries.LinkIdeaKeyword(ctx, database.LinkIdeaKeywordParams{

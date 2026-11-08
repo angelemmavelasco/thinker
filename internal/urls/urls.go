@@ -15,6 +15,9 @@ var RouteNames = map[string]string{
 
 	"ideas:list": "/web/ideas/list",
 	"ideas:new":  "/web/ideas/new",
+
+	"network:view":      "/web/network",
+	"api:network:graph": "/api/network/graph",
 }
 
 // Get resolves registered url path for gin

@@ -31,10 +31,22 @@ RETURNING *;
 -- name: UpdateIdeaAnalysis :one
 UPDATE ideas
 SET restructured_content = $2,
-    status = $3,
+    embedding = $3,
+    status = $4,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $1
 RETURNING *;
+
+-- name: UpdateKeywordEmbedding :one
+UPDATE keywords
+SET embedding = $2
+WHERE id = $1
+RETURNING *;
+
+-- name: ListIdeasWithEmbeddings :many
+SELECT id, title, embedding
+FROM ideas
+WHERE id != $1 AND embedding != '';
 
 -- name: UpsertKeyword :one
 INSERT INTO keywords (id, name)
@@ -60,3 +72,15 @@ VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (source_idea_id, target_idea_id, relation_type)
 DO UPDATE SET weight = EXCLUDED.weight
 RETURNING *;
+
+-- name: FindOverlappingIdeas :many
+SELECT ik2.idea_id, COUNT(ik2.keyword_id) AS shared_count
+FROM idea_keywords ik1
+JOIN idea_keywords ik2 ON ik1.keyword_id = ik2.keyword_id
+WHERE ik1.idea_id = $1 AND ik2.idea_id != $1
+GROUP BY ik2.idea_id;
+
+-- name: ListAllIdeaLinks :many
+SELECT *
+FROM idea_links
+ORDER BY weight DESC;

@@ -116,6 +116,42 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const findOverlappingIdeas = `-- name: FindOverlappingIdeas :many
+SELECT ik2.idea_id, COUNT(ik2.keyword_id) AS shared_count
+FROM idea_keywords ik1
+JOIN idea_keywords ik2 ON ik1.keyword_id = ik2.keyword_id
+WHERE ik1.idea_id = $1 AND ik2.idea_id != $1
+GROUP BY ik2.idea_id
+`
+
+type FindOverlappingIdeasRow struct {
+	IdeaID      uuid.UUID
+	SharedCount int64
+}
+
+func (q *Queries) FindOverlappingIdeas(ctx context.Context, ideaID uuid.UUID) ([]FindOverlappingIdeasRow, error) {
+	rows, err := q.db.QueryContext(ctx, findOverlappingIdeas, ideaID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindOverlappingIdeasRow
+	for rows.Next() {
+		var i FindOverlappingIdeasRow
+		if err := rows.Scan(&i.IdeaID, &i.SharedCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, email, password_hash, role, created_at FROM users
 WHERE email = $1 LIMIT 1
@@ -148,6 +184,42 @@ type LinkIdeaKeywordParams struct {
 func (q *Queries) LinkIdeaKeyword(ctx context.Context, arg LinkIdeaKeywordParams) error {
 	_, err := q.db.ExecContext(ctx, linkIdeaKeyword, arg.IdeaID, arg.KeywordID)
 	return err
+}
+
+const listAllIdeaLinks = `-- name: ListAllIdeaLinks :many
+SELECT id, source_idea_id, target_idea_id, relation_type, weight, created_at
+FROM idea_links
+ORDER BY weight DESC
+`
+
+func (q *Queries) ListAllIdeaLinks(ctx context.Context) ([]IdeaLink, error) {
+	rows, err := q.db.QueryContext(ctx, listAllIdeaLinks)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []IdeaLink
+	for rows.Next() {
+		var i IdeaLink
+		if err := rows.Scan(
+			&i.ID,
+			&i.SourceIdeaID,
+			&i.TargetIdeaID,
+			&i.RelationType,
+			&i.Weight,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listIdeas = `-- name: ListIdeas :many
@@ -216,6 +288,41 @@ func (q *Queries) ListIdeasByUserID(ctx context.Context, userID uuid.UUID) ([]Id
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIdeasWithEmbeddings = `-- name: ListIdeasWithEmbeddings :many
+SELECT id, title, embedding
+FROM ideas
+WHERE id != $1 AND embedding != ''
+`
+
+type ListIdeasWithEmbeddingsRow struct {
+	ID        uuid.UUID
+	Title     string
+	Embedding string
+}
+
+func (q *Queries) ListIdeasWithEmbeddings(ctx context.Context, id uuid.UUID) ([]ListIdeasWithEmbeddingsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listIdeasWithEmbeddings, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIdeasWithEmbeddingsRow
+	for rows.Next() {
+		var i ListIdeasWithEmbeddingsRow
+		if err := rows.Scan(&i.ID, &i.Title, &i.Embedding); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -303,7 +410,8 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 const updateIdeaAnalysis = `-- name: UpdateIdeaAnalysis :one
 UPDATE ideas
 SET restructured_content = $2,
-    status = $3,
+    embedding = $3,
+    status = $4,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $1
 RETURNING id, user_id, title, content, restructured_content, status, embedding, created_at, updated_at
@@ -312,11 +420,17 @@ RETURNING id, user_id, title, content, restructured_content, status, embedding, 
 type UpdateIdeaAnalysisParams struct {
 	ID                  uuid.UUID
 	RestructuredContent string
+	Embedding           string
 	Status              string
 }
 
 func (q *Queries) UpdateIdeaAnalysis(ctx context.Context, arg UpdateIdeaAnalysisParams) (Idea, error) {
-	row := q.db.QueryRowContext(ctx, updateIdeaAnalysis, arg.ID, arg.RestructuredContent, arg.Status)
+	row := q.db.QueryRowContext(ctx, updateIdeaAnalysis,
+		arg.ID,
+		arg.RestructuredContent,
+		arg.Embedding,
+		arg.Status,
+	)
 	var i Idea
 	err := row.Scan(
 		&i.ID,
@@ -328,6 +442,30 @@ func (q *Queries) UpdateIdeaAnalysis(ctx context.Context, arg UpdateIdeaAnalysis
 		&i.Embedding,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateKeywordEmbedding = `-- name: UpdateKeywordEmbedding :one
+UPDATE keywords
+SET embedding = $2
+WHERE id = $1
+RETURNING id, name, embedding, created_at
+`
+
+type UpdateKeywordEmbeddingParams struct {
+	ID        uuid.UUID
+	Embedding string
+}
+
+func (q *Queries) UpdateKeywordEmbedding(ctx context.Context, arg UpdateKeywordEmbeddingParams) (Keyword, error) {
+	row := q.db.QueryRowContext(ctx, updateKeywordEmbedding, arg.ID, arg.Embedding)
+	var i Keyword
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Embedding,
+		&i.CreatedAt,
 	)
 	return i, err
 }
