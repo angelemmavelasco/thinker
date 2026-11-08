@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -81,17 +83,27 @@ func (h *IdeaHandler) CreateIdea(c *gin.Context) {
 		return
 	}
 
-	if _, err := h.service.CreateIdea(c.Request.Context(), c.GetString("user"), title, content); err != nil {
+	createdIdea, err := h.service.CreateIdea(c.Request.Context(), c.GetString("user"), title, content)
+	if err != nil {
 		c.String(http.StatusInternalServerError, "Error al guardar la idea: %v", err)
 		return
 	}
 
-	llmResult, err := h.service.AnalyzeIdea(c.Request.Context(), title, content)
-	if err != nil {
-		log.Printf("[llm] Error analizando idea: %v", err)
-	} else {
-		log.Printf("[llm] Resultado del análisis:\n%s", llmResult)
-	}
+	go func(ideaID string, t, cont string) {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+
+		log.Printf("[llm] Iniciando análisis para la idea [%s]...", ideaID)
+		result, err := h.service.AnalyzeIdea(bgCtx, t, cont)
+		if err != nil {
+			log.Printf("[llm] Error analizando idea [%s]: %v", ideaID, err)
+			return
+		}
+
+		log.Printf("[llm] Análisis completado con éxito para [%s]:", ideaID)
+		log.Printf("  -> Nota reestructurada: %s", result.RestructuredNote)
+		log.Printf("  -> Entidades clave (%d): %v", len(result.KeyEntities), result.KeyEntities)
+	}(createdIdea.ID.String(), title, content)
 
 	if c.GetHeader("HX-Request") == "true" {
 		ideas, err := h.queries.ListIdeas(c.Request.Context())

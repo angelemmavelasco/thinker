@@ -1,14 +1,16 @@
 <ul class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
     {{range $idea := .ideas}}
     <li class="border-l-[4px] border-cyan-500 p-1 flex flex-col gap-2">
+        
         <p class="font-medium text-sm capitalize">
             {{$idea.Title}}
         </p>
+        
         <p class="text-[9px] text-zinc-500">
             Creado por: {{$idea.UserID}}
         </p>
         <p class="italic text-zinc-400">
-            {{$idea.Content}}
+            {{truncate $idea.Content 255}}
         </p>
         <ul class="flex gap-2 text-[9px] mt-auto">
             <li class="bg-cyan-200 text-zinc-950 p-0.5 rounded-xs font-semibold">Machine learning</li>

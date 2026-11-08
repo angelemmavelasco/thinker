@@ -35,6 +35,6 @@ func (s *IdeaService) CreateIdea(ctx context.Context, userIDStr, title, content 
 	})
 }
 
-func (s *IdeaService) AnalyzeIdea(ctx context.Context, title, content string) (string, error) {
+func (s *IdeaService) AnalyzeIdea(ctx context.Context, title, content string) (*IdeaAnalysisResult, error) {
 	return s.llm.AnalyzeIdea(ctx, title, content)
 }

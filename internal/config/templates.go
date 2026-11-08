@@ -12,6 +12,13 @@ import (
 
 var TemplateFuncs = template.FuncMap{
 	"url": urls.URLFor,
+	"truncate": func(s string, max int) string {
+		runes := []rune(s)
+		if len(runes) <= max {
+			return s
+		}
+		return string(runes[:max]) + "..."
+	},
 }
 
 func LoadTemplates(templatesDir string) multitemplate.Renderer {

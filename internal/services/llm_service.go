@@ -43,7 +43,12 @@ type chatCompletionResponse struct {
 	} `json:"choices"`
 }
 
-func (s *LLMService) AnalyzeIdea(ctx context.Context, title, content string) (string, error) {
+type IdeaAnalysisResult struct {
+	RestructuredNote string   `json:"restructured_note"`
+	KeyEntities      []string `json:"key_entities"`
+}
+
+func (s *LLMService) AnalyzeIdea(ctx context.Context, title, content string) (*IdeaAnalysisResult, error) {
 	requestBody := chatCompletionRequest{
 		Messages: []chatMessage{
 			{
@@ -66,7 +71,7 @@ No inventes información que no aparezca en la nota.`,
 
 	body, err := json.Marshal(requestBody)
 	if err != nil {
-		return "", fmt.Errorf("error serializando solicitud al LLM: %w", err)
+		return nil, fmt.Errorf("error serializando solicitud al LLM: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(
@@ -76,7 +81,7 @@ No inventes información que no aparezca en la nota.`,
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		return "", fmt.Errorf("error creando solicitud al LLM: %w", err)
+		return nil, fmt.Errorf("error creando solicitud al LLM: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if s.apiKey != "" {
@@ -85,21 +90,34 @@ No inventes información que no aparezca en la nota.`,
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("error conectando con el LLM: %w", err)
+		return nil, fmt.Errorf("error conectando con el LLM: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return "", fmt.Errorf("el LLM respondió con HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("el LLM respondió con HTTP %d", resp.StatusCode)
 	}
 
 	var completion chatCompletionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&completion); err != nil {
-		return "", fmt.Errorf("error leyendo respuesta del LLM: %w", err)
+		return nil, fmt.Errorf("error leyendo respuesta del LLM: %w", err)
 	}
 	if len(completion.Choices) == 0 {
-		return "", fmt.Errorf("el LLM respondió sin resultados")
+		return nil, fmt.Errorf("el LLM respondió sin resultados")
 	}
 
-	return completion.Choices[0].Message.Content, nil
+	rawContent := strings.TrimSpace(completion.Choices[0].Message.Content)
+	if strings.HasPrefix(rawContent, "```") {
+		rawContent = strings.TrimPrefix(rawContent, "```json")
+		rawContent = strings.TrimPrefix(rawContent, "```")
+		rawContent = strings.TrimSuffix(rawContent, "```")
+		rawContent = strings.TrimSpace(rawContent)
+	}
+
+	var result IdeaAnalysisResult
+	if err := json.Unmarshal([]byte(rawContent), &result); err != nil {
+		return nil, fmt.Errorf("error parseando JSON del LLM (%w). Respuesta cruda: %s", err, rawContent)
+	}
+
+	return &result, nil
 }
