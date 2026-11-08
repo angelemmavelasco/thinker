@@ -12,4 +12,4 @@ thinker**.db
 *.gguf
 
 .air.toml
-main
+main.idea/
