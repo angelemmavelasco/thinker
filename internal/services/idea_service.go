@@ -714,3 +714,239 @@ func (s *IdeaService) DeleteIdeaGroup(ctx context.Context, ideaIDStr string) err
 	_ = s.queries.DeleteOrphanKeywords(ctx)
 	return nil
 }
+
+type TraversalOptions struct {
+	Max1HopPerNode int
+	Max2HopPerNode int
+	MaxTotalNodes  int
+	MinWeight      float64
+}
+
+func DefaultTraversalOptions() TraversalOptions {
+	return TraversalOptions{
+		Max1HopPerNode: 4,
+		Max2HopPerNode: 2,
+		MaxTotalNodes:  10,
+		MinWeight:      0.1,
+	}
+}
+
+type TraversalNode struct {
+	ID                  uuid.UUID
+	Title               string
+	Content             string
+	RestructuredContent string
+	Status              string
+	HopDistance         int
+	LinkedFromID        uuid.UUID
+	RelationType        string
+	Weight              float64
+}
+
+func (n TraversalNode) IsSeed() bool {
+	return n.HopDistance == 0
+}
+
+type TraversalEdge struct {
+	SourceID     uuid.UUID
+	TargetID     uuid.UUID
+	RelationType string
+	Weight       float64
+	HopLevel     int
+}
+
+type TraversalSubGraph struct {
+	SeedIDs []uuid.UUID
+	Nodes   []TraversalNode
+	Edges   []TraversalEdge
+}
+
+func (s *IdeaService) TraverseSubGraph(ctx context.Context, seedIDs []uuid.UUID, opts TraversalOptions) (*TraversalSubGraph, error) {
+	if opts.Max1HopPerNode <= 0 {
+		opts.Max1HopPerNode = 4
+	}
+	if opts.Max2HopPerNode <= 0 {
+		opts.Max2HopPerNode = 2
+	}
+	if opts.MaxTotalNodes <= 0 {
+		opts.MaxTotalNodes = 10
+	}
+
+	result := &TraversalSubGraph{
+		SeedIDs: make([]uuid.UUID, 0, len(seedIDs)),
+		Nodes:   make([]TraversalNode, 0),
+		Edges:   make([]TraversalEdge, 0),
+	}
+
+	if len(seedIDs) == 0 {
+		return result, nil
+	}
+
+	visited := make(map[uuid.UUID]bool)
+	seenEdges := make(map[string]bool)
+
+	for _, seedID := range seedIDs {
+		if seedID == uuid.Nil || visited[seedID] {
+			continue
+		}
+		if len(result.Nodes) >= opts.MaxTotalNodes {
+			break
+		}
+
+		idea, err := s.queries.GetIdeaByID(ctx, seedID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			return nil, err
+		}
+
+		visited[seedID] = true
+		result.SeedIDs = append(result.SeedIDs, seedID)
+		result.Nodes = append(result.Nodes, TraversalNode{
+			ID:                  seedID,
+			Title:               idea.Title,
+			Content:             idea.Content,
+			RestructuredContent: idea.RestructuredContent,
+			Status:              idea.Status,
+			HopDistance:         0,
+			LinkedFromID:        uuid.Nil,
+			RelationType:        "seed",
+			Weight:              1.0,
+		})
+	}
+
+	if len(result.Nodes) == 0 || len(result.Nodes) >= opts.MaxTotalNodes {
+		return result, nil
+	}
+
+	var hop1IDs []uuid.UUID
+	for _, seedID := range result.SeedIDs {
+		if len(result.Nodes) >= opts.MaxTotalNodes {
+			break
+		}
+
+		neighbors, err := s.queries.ListDirectConnectedIdeas(ctx, seedID)
+		if err != nil {
+			return nil, err
+		}
+
+		addedForSeed := 0
+		for _, neighbor := range neighbors {
+			if neighbor.Weight < opts.MinWeight {
+				continue
+			}
+
+			aStr := seedID.String()
+			bStr := neighbor.ID.String()
+			if aStr > bStr {
+				aStr, bStr = bStr, aStr
+			}
+			edgeKey := aStr + "<->" + bStr + ":" + neighbor.RelationType
+
+			if !seenEdges[edgeKey] {
+				seenEdges[edgeKey] = true
+				result.Edges = append(result.Edges, TraversalEdge{
+					SourceID:     seedID,
+					TargetID:     neighbor.ID,
+					RelationType: neighbor.RelationType,
+					Weight:       neighbor.Weight,
+					HopLevel:     1,
+				})
+			}
+
+			if visited[neighbor.ID] {
+				continue
+			}
+			if addedForSeed >= opts.Max1HopPerNode {
+				continue
+			}
+			if len(result.Nodes) >= opts.MaxTotalNodes {
+				break
+			}
+
+			visited[neighbor.ID] = true
+			addedForSeed++
+			hop1IDs = append(hop1IDs, neighbor.ID)
+
+			result.Nodes = append(result.Nodes, TraversalNode{
+				ID:                  neighbor.ID,
+				Title:               neighbor.Title,
+				Content:             neighbor.Content,
+				RestructuredContent: neighbor.RestructuredContent,
+				Status:              neighbor.Status,
+				HopDistance:         1,
+				LinkedFromID:        seedID,
+				RelationType:        neighbor.RelationType,
+				Weight:              neighbor.Weight,
+			})
+		}
+	}
+
+	if len(result.Nodes) >= opts.MaxTotalNodes || len(hop1IDs) == 0 {
+		return result, nil
+	}
+
+	for _, hop1ID := range hop1IDs {
+		if len(result.Nodes) >= opts.MaxTotalNodes {
+			break
+		}
+
+		neighbors, err := s.queries.ListDirectConnectedIdeas(ctx, hop1ID)
+		if err != nil {
+			return nil, err
+		}
+
+		addedForHop1 := 0
+		for _, neighbor := range neighbors {
+			if neighbor.Weight < opts.MinWeight {
+				continue
+			}
+
+			aStr := hop1ID.String()
+			bStr := neighbor.ID.String()
+			if aStr > bStr {
+				aStr, bStr = bStr, aStr
+			}
+			edgeKey := aStr + "<->" + bStr + ":" + neighbor.RelationType
+
+			if !seenEdges[edgeKey] {
+				seenEdges[edgeKey] = true
+				result.Edges = append(result.Edges, TraversalEdge{
+					SourceID:     hop1ID,
+					TargetID:     neighbor.ID,
+					RelationType: neighbor.RelationType,
+					Weight:       neighbor.Weight,
+					HopLevel:     2,
+				})
+			}
+
+			if visited[neighbor.ID] {
+				continue
+			}
+			if addedForHop1 >= opts.Max2HopPerNode {
+				continue
+			}
+			if len(result.Nodes) >= opts.MaxTotalNodes {
+				break
+			}
+
+			visited[neighbor.ID] = true
+			addedForHop1++
+
+			result.Nodes = append(result.Nodes, TraversalNode{
+				ID:                  neighbor.ID,
+				Title:               neighbor.Title,
+				Content:             neighbor.Content,
+				RestructuredContent: neighbor.RestructuredContent,
+				Status:              neighbor.Status,
+				HopDistance:         2,
+				LinkedFromID:        hop1ID,
+				RelationType:        neighbor.RelationType,
+				Weight:              neighbor.Weight,
+			})
+		}
+	}
+
+	return result, nil
+}
