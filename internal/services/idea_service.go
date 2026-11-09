@@ -211,15 +211,15 @@ func (s *IdeaService) CreateIdeasFromInput(ctx context.Context, userIDStr, title
 			ID:           uuid.New(),
 			SourceIdeaID: prevID,
 			TargetIdeaID: currID,
-			RelationType: "semantic",
-			Weight:       0.90,
+			RelationType: "sequence",
+			Weight:       0.50,
 		})
 		_, _ = s.queries.CreateIdeaLink(ctx, database.CreateIdeaLinkParams{
 			ID:           uuid.New(),
 			SourceIdeaID: currID,
 			TargetIdeaID: prevID,
-			RelationType: "semantic",
-			Weight:       0.90,
+			RelationType: "sequence",
+			Weight:       0.50,
 		})
 	}
 
@@ -613,15 +613,15 @@ func (s *IdeaService) relinkGroupSequence(ctx context.Context, groupID uuid.UUID
 			ID:           uuid.New(),
 			SourceIdeaID: prevID,
 			TargetIdeaID: currID,
-			RelationType: "semantic",
-			Weight:       0.90,
+			RelationType: "sequence",
+			Weight:       0.50,
 		})
 		_, _ = s.queries.CreateIdeaLink(ctx, database.CreateIdeaLinkParams{
 			ID:           uuid.New(),
 			SourceIdeaID: currID,
 			TargetIdeaID: prevID,
-			RelationType: "semantic",
-			Weight:       0.90,
+			RelationType: "sequence",
+			Weight:       0.50,
 		})
 	}
 }
@@ -726,10 +726,10 @@ type TraversalOptions struct {
 
 func DefaultTraversalOptions() TraversalOptions {
 	return TraversalOptions{
-		Max1HopPerNode: 4,
+		Max1HopPerNode: 3,
 		Max2HopPerNode: 2,
-		MaxTotalNodes:  10,
-		MinWeight:      0.1,
+		MaxTotalNodes:  6,
+		MinWeight:      0.60,
 	}
 }
 
@@ -1007,6 +1007,12 @@ func extractQueryWords(raw string) []string {
 	return words
 }
 
+const (
+	DefaultMinSeedScore    = 0.45
+	DefaultMinVectorScore  = 0.40
+	DefaultMinKeywordScore = 0.20
+)
+
 func (s *IdeaService) FindSeedIdeas(ctx context.Context, queryText string, topK int) ([]SeedCandidate, error) {
 	cleanedQuery := strings.TrimSpace(queryText)
 	if cleanedQuery == "" {
@@ -1017,15 +1023,37 @@ func (s *IdeaService) FindSeedIdeas(ctx context.Context, queryText string, topK 
 		topK = 3
 	}
 
+	searchQuery := cleanedQuery
+	if s.llm != nil {
+		if expanded, err := s.llm.ExpandQuery(ctx, cleanedQuery); err == nil && strings.TrimSpace(expanded) != "" {
+			searchQuery = strings.TrimSpace(expanded)
+		}
+	}
+
 	var queryVec []float64
 	if s.embedding != nil {
-		if vec, err := s.embedding.GenerateEmbedding(ctx, cleanedQuery); err == nil && len(vec) > 0 {
+		if vec, err := s.embedding.GenerateEmbedding(ctx, searchQuery); err == nil && len(vec) > 0 {
+			queryVec = vec
+		} else if vec, err := s.embedding.GenerateEmbedding(ctx, cleanedQuery); err == nil && len(vec) > 0 {
 			queryVec = vec
 		}
 	}
 
-	queryWords := extractQueryWords(cleanedQuery)
-	lowerQuery := strings.ToLower(cleanedQuery)
+	queryWords := extractQueryWords(searchQuery)
+	for _, w := range extractQueryWords(cleanedQuery) {
+		found := false
+		for _, qw := range queryWords {
+			if qw == w {
+				found = true
+				break
+			}
+		}
+		if !found {
+			queryWords = append(queryWords, w)
+		}
+	}
+
+	lowerQuery := strings.ToLower(searchQuery + " " + cleanedQuery)
 
 	ideas, err := s.queries.ListIdeas(ctx)
 	if err != nil {
@@ -1085,23 +1113,33 @@ func (s *IdeaService) FindSeedIdeas(ctx context.Context, queryText string, topK 
 
 		var finalScore float64
 		if len(queryVec) > 0 && len(queryWords) > 0 {
+			if vecScore < DefaultMinVectorScore && kwScore < DefaultMinKeywordScore {
+				continue
+			}
 			finalScore = (0.75 * vecScore) + (0.25 * kwScore)
+			if finalScore < DefaultMinSeedScore {
+				continue
+			}
 		} else if len(queryVec) > 0 {
+			if vecScore < DefaultMinSeedScore {
+				continue
+			}
 			finalScore = vecScore
 		} else {
+			if kwScore < DefaultMinKeywordScore {
+				continue
+			}
 			finalScore = kwScore
 		}
 
-		if finalScore > 0 {
-			candidates = append(candidates, SeedCandidate{
-				IdeaID:       idea.ID,
-				Title:        idea.Title,
-				Score:        finalScore,
-				VectorScore:  vecScore,
-				KeywordScore: kwScore,
-				MatchedTerms: matchedTerms,
-			})
-		}
+		candidates = append(candidates, SeedCandidate{
+			IdeaID:       idea.ID,
+			Title:        idea.Title,
+			Score:        finalScore,
+			VectorScore:  vecScore,
+			KeywordScore: kwScore,
+			MatchedTerms: matchedTerms,
+		})
 	}
 
 	sort.Slice(candidates, func(i, j int) bool {

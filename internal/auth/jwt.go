@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// TODO: change this const by env variables and defaults
 const (
 	ExpectedJWTAlg    = "HS256"
 	ExpectedJWTTyp    = "JWT"
