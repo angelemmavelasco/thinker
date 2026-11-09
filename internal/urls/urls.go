@@ -39,6 +39,7 @@ var RouteNames = map[string]string{
 
 	"network:view":      "/web/network",
 	"api:network:graph": "/api/network/graph",
+	"api:network:ask":   "/api/network/ask",
 }
 
 func Get(name string) string {

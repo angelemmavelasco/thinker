@@ -89,6 +89,7 @@ func SetUpRouter(
 	{
 		protected.GET(urls.Get("api:users:list"), userHandler.ListUsers)
 		protected.GET(urls.Get("api:network:graph"), ideaHandler.NetworkGraphJSON)
+		protected.POST(urls.Get("api:network:ask"), ideaHandler.AskNetworkGraph)
 		protected.GET(urls.Get("network:view"), ideaHandler.NetworkView)
 		protected.GET(urls.Get("ideas:list"), ideaHandler.ListIdeas)
 		protected.GET(urls.Get("ideas:new"), ideaHandler.NewIdea)
