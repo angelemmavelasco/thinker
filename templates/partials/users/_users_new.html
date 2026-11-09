@@ -9,6 +9,7 @@ border border-zinc-800 rounded-xs
 bg-zinc-900 p-2 flex flex-col gap-4
 ">
     <h3 class="text-sm font-medium text-zinc-100">Nuevo usuario</h3>
+    <input type="hidden" name="csrf_token" value="{{.csrf_token}}" />
 
     {{if .error}}
     <p class="border border-red-500/50 bg-red-500/10 text-red-300 p-2 rounded-xs">

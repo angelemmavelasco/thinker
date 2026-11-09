@@ -163,6 +163,9 @@ func Render(c *gin.Context, status int, templateName string, data gin.H) {
 		data = gin.H{}
 	}
 	data["user"] = c.GetString("user")
+	data["user_email"] = c.GetString("user_email")
+	data["user_role"] = c.GetString("user_role")
+	data["csrf_token"] = c.GetString("csrf_token")
 
 	c.HTML(status, templateName, data)
 }

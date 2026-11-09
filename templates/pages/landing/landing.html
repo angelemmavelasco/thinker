@@ -22,11 +22,13 @@
       <li class="desktop-nav-item cursor-pointer hover:text-zinc-500 transition-all hidden sm:block">Demo</li>
 
       <li class="cursor-pointer hover:text-zinc-500 hover:border-zinc-500 transition-all border border-zinc-400 rounded-sm p-0.5 ml-auto sm:ml-0">
-        Regístrate
+        <a href='{{url "auth:register"}}'>
+          Regístrate
+        </a>
       </li>
 
       <li class="cursor-pointer hover:text-zinc-500 hover:border-zinc-500 transition-all border border-cyan-500 text-cyan-500 rounded-sm p-0.5">
-        <a href='{{url "ideas:list"}}'>
+        <a href='{{url "auth:login"}}'>
           Iniciar sesión
         </a>
       </li>

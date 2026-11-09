@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="es" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <title>Thinker: {{ .title }}</title>
+  </head>
+  <body class="bg-zinc-950 text-xs text-zinc-50 min-h-screen flex flex-col justify-between p-6">
+    <header class="w-full max-w-4xl mx-auto flex items-center justify-between">
+      <a href='{{url "landing"}}' class="text-cyan-500 hover:text-zinc-400 transition-all font-mono font-bold text-sm">
+        Thinker
+      </a>
+      <a href='{{url "auth:register"}}' class="text-zinc-400 hover:text-cyan-500 transition-all">
+        ¿No tienes cuenta? <span class="text-cyan-500">Regístrate</span>
+      </a>
+    </header>
+
+    <main class="w-full max-w-sm mx-auto my-auto py-8">
+      <div class="border border-zinc-800 rounded-xs bg-zinc-900/90 p-5 flex flex-col gap-4">
+        <div class="flex flex-col gap-1">
+          <h1 class="text-base font-medium text-zinc-50">Iniciar sesión</h1>
+          <p class="text-zinc-400">Ingresa tus credenciales para acceder a tu red de conocimiento.</p>
+        </div>
+
+        {{if .error}}
+        <div class="border border-red-500/50 bg-red-500/10 text-red-300 p-2.5 rounded-xs">
+          {{.error}}
+        </div>
+        {{end}}
+
+        {{if .success}}
+        <div class="border border-emerald-500/50 bg-emerald-500/10 text-emerald-300 p-2.5 rounded-xs">
+          {{.success}}
+        </div>
+        {{end}}
+
+        <form method="POST" action='{{url "auth:login"}}' class="flex flex-col gap-3">
+          <input type="hidden" name="csrf_token" value="{{.csrf_token}}" />
+
+          <div class="flex flex-col gap-1">
+            <label for="email" class="text-zinc-400">Correo electrónico</label>
+            <input
+              id="email"
+              type="email"
+              name="email"
+              value="{{.email}}"
+              placeholder="tu@correo.com"
+              autocomplete="email"
+              required
+              class="w-full outline-none border border-zinc-800 hover:border-cyan-500 focus:border-cyan-500 rounded-xs bg-zinc-950 p-1.5 text-zinc-100 transition-all"
+            />
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center justify-between">
+              <label for="password" class="text-zinc-400">Contraseña</label>
+              <a href='{{url "auth:forgot_password"}}' class="text-cyan-500 hover:text-zinc-400 transition-all">
+                ¿Olvidaste tu contraseña?
+              </a>
+            </div>
+            <input
+              id="password"
+              type="password"
+              name="password"
+              placeholder="••••••••••••"
+              autocomplete="current-password"
+              required
+              class="w-full outline-none border border-zinc-800 hover:border-cyan-500 focus:border-cyan-500 rounded-xs bg-zinc-950 p-1.5 text-zinc-100 transition-all"
+            />
+          </div>
+
+          <button
+            type="submit"
+            class="w-full border border-cyan-500 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 font-medium rounded-xs p-2 cursor-pointer transition-all mt-1"
+          >
+            Entrar
+          </button>
+        </form>
+
+        {{if .unverifiedEmail}}
+        <form method="POST" action='{{url "auth:resend_verification"}}' class="border-t border-zinc-800 pt-3 flex flex-col gap-2">
+          <input type="hidden" name="csrf_token" value="{{.csrf_token}}" />
+          <input type="hidden" name="email" value="{{.unverifiedEmail}}" />
+          <p class="text-zinc-400">¿Tu enlace de 15 minutos expiró?</p>
+          <button
+            type="submit"
+            class="w-full border border-zinc-700 hover:border-cyan-500 text-zinc-200 hover:text-cyan-400 rounded-xs p-1.5 cursor-pointer transition-all"
+          >
+            Reenviar enlace de confirmación
+          </button>
+        </form>
+        {{end}}
+
+        <div class="relative flex py-1 items-center">
+          <div class="flex-grow border-t border-zinc-800"></div>
+          <span class="flex-shrink mx-3 text-zinc-500">o continúa con</span>
+          <div class="flex-grow border-t border-zinc-800"></div>
+        </div>
+
+        <a
+          href='{{url "auth:google:login"}}'
+          class="w-full border border-zinc-800 hover:border-cyan-500 bg-zinc-950 text-zinc-200 hover:text-cyan-400 rounded-xs p-2 flex items-center justify-center gap-2 transition-all"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81Z" />
+          </svg>
+          <span>Continuar con Google</span>
+        </a>
+      </div>
+    </main>
+
+    {{template "footer.html" .}}
+  </body>
+</html>

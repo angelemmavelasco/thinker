@@ -5,10 +5,21 @@
 package database
 
 import (
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+type ActionToken struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	TokenHash  string
+	TokenType  string
+	ExpiresAt  time.Time
+	ConsumedAt sql.NullTime
+	CreatedAt  time.Time
+}
 
 type Idea struct {
 	ID                  uuid.UUID
@@ -56,10 +67,30 @@ type Keyword struct {
 	CreatedAt time.Time
 }
 
-type User struct {
+type RefreshToken struct {
 	ID           uuid.UUID
-	Email        string
-	PasswordHash string
-	Role         string
+	UserID       uuid.UUID
+	TokenHash    string
+	FamilyID     uuid.UUID
+	ReplacedByID uuid.NullUUID
+	Revoked      int32
+	UserAgent    string
+	IpAddress    string
+	ExpiresAt    time.Time
 	CreatedAt    time.Time
+	RevokedAt    sql.NullTime
+}
+
+type User struct {
+	ID                  uuid.UUID
+	Email               string
+	PasswordHash        string
+	Role                string
+	AuthProvider        string
+	GoogleID            string
+	EmailVerified       int32
+	TokenVersion        int32
+	FailedLoginAttempts int32
+	LockedUntil         sql.NullTime
+	CreatedAt           time.Time
 }

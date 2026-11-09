@@ -90,7 +90,7 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 	if _, err := h.service.CreateUser(c.Request.Context(), email, password, role); err != nil {
 		data := gin.H{
 			"title": "Nuevo usuario",
-			"error": "Error al registrar el usuario: " + err.Error(),
+			"error": "No se pudo registrar el usuario. Verifica que el correo sea válido, único y la contraseña tenga al menos 8 caracteres.",
 			"email": email,
 			"role":  role,
 		}

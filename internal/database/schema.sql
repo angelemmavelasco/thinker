@@ -1,8 +1,38 @@
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL DEFAULT '',
     role VARCHAR(50) NOT NULL DEFAULT 'member',
+    auth_provider VARCHAR(50) NOT NULL DEFAULT 'local',
+    google_id VARCHAR(255) NOT NULL DEFAULT '',
+    email_verified INTEGER NOT NULL DEFAULT 0,
+    token_version INTEGER NOT NULL DEFAULT 1,
+    failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+    locked_until TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash VARCHAR(64) UNIQUE NOT NULL,
+    family_id UUID NOT NULL,
+    replaced_by_id UUID,
+    revoked INTEGER NOT NULL DEFAULT 0,
+    user_agent TEXT NOT NULL DEFAULT '',
+    ip_address VARCHAR(64) NOT NULL DEFAULT '',
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    revoked_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS action_tokens (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash VARCHAR(64) UNIQUE NOT NULL,
+    token_type VARCHAR(32) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    consumed_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

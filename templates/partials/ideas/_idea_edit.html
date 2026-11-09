@@ -7,6 +7,7 @@ class="max-w-2xl mx-auto border border-zinc-800 rounded-xs bg-zinc-900 p-4 flex 
 
     <div class="flex items-center justify-between border-b border-zinc-800 pb-2">
         <h3 class="text-sm font-medium text-zinc-100">Editar idea</h3>
+        <input type="hidden" name="csrf_token" value="{{.csrf_token}}" />
         <button
             type="button"
             hx-get='{{url "ideas:detail" .ideaID}}'

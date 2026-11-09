@@ -1,16 +1,121 @@
 -- name: CreateUser :one
-INSERT INTO users (id, email, password_hash, role)
-VALUES ($1, $2, $3, $4)
+INSERT INTO users (id, email, password_hash, role, auth_provider, google_id, email_verified, token_version)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 1)
 RETURNING *;
+
+-- name: GetUserByID :one
+SELECT * FROM users
+WHERE id = $1 LIMIT 1;
 
 -- name: GetUserByEmail :one
 SELECT * FROM users
-WHERE email = $1 LIMIT 1;
+WHERE LOWER(email) = LOWER($1) LIMIT 1;
+
+-- name: GetUserByGoogleID :one
+SELECT * FROM users
+WHERE google_id = $1 AND google_id != '' LIMIT 1;
 
 -- name: ListUsers :many
-SELECT id, email, created_at
+SELECT id, email, role, auth_provider, email_verified, created_at
 FROM users
 ORDER BY created_at DESC;
+
+-- name: LinkGoogleAccount :one
+UPDATE users
+SET google_id = $2,
+    email_verified = 1
+WHERE id = $1
+RETURNING *;
+
+-- name: MarkUserEmailVerified :one
+UPDATE users
+SET email_verified = 1
+WHERE id = $1
+RETURNING *;
+
+-- name: RecordFailedLoginAttempt :one
+UPDATE users
+SET failed_login_attempts = $2,
+    locked_until = $3
+WHERE id = $1
+RETURNING *;
+
+-- name: ResetFailedLoginAttempts :exec
+UPDATE users
+SET failed_login_attempts = 0,
+    locked_until = NULL
+WHERE id = $1;
+
+-- name: UpdateUserPasswordAndBumpTokenVersion :one
+UPDATE users
+SET password_hash = $2,
+    token_version = token_version + 1,
+    failed_login_attempts = 0,
+    locked_until = NULL
+WHERE id = $1
+RETURNING *;
+
+-- name: IncrementUserTokenVersion :one
+UPDATE users
+SET token_version = token_version + 1
+WHERE id = $1
+RETURNING token_version;
+
+-- name: CreateRefreshToken :one
+INSERT INTO refresh_tokens (
+    id, user_id, token_hash, family_id, revoked, user_agent, ip_address, expires_at
+)
+VALUES ($1, $2, $3, $4, 0, $5, $6, $7)
+RETURNING *;
+
+-- name: GetRefreshTokenByHash :one
+SELECT * FROM refresh_tokens
+WHERE token_hash = $1 LIMIT 1;
+
+-- name: MarkRefreshTokenRotated :exec
+UPDATE refresh_tokens
+SET revoked = 1,
+    replaced_by_id = $2,
+    revoked_at = $3
+WHERE id = $1 AND revoked = 0;
+
+-- name: RevokeRefreshTokenFamily :exec
+UPDATE refresh_tokens
+SET revoked = 1,
+    revoked_at = $2
+WHERE family_id = $1 AND revoked = 0;
+
+-- name: RevokeAllUserRefreshTokens :exec
+UPDATE refresh_tokens
+SET revoked = 1,
+    revoked_at = $2
+WHERE user_id = $1 AND revoked = 0;
+
+-- name: DeleteExpiredRefreshTokens :exec
+DELETE FROM refresh_tokens
+WHERE expires_at < $1;
+
+-- name: CreateActionToken :one
+INSERT INTO action_tokens (
+    id, user_id, token_hash, token_type, expires_at
+)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING *;
+
+-- name: GetActionTokenByHash :one
+SELECT * FROM action_tokens
+WHERE token_hash = $1 AND token_type = $2 LIMIT 1;
+
+-- name: ConsumeActionToken :one
+UPDATE action_tokens
+SET consumed_at = $2
+WHERE id = $1 AND consumed_at IS NULL
+RETURNING *;
+
+-- name: InvalidateUserActionTokensByType :exec
+UPDATE action_tokens
+SET consumed_at = $3
+WHERE user_id = $1 AND token_type = $2 AND consumed_at IS NULL;
 
 -- name: ListIdeas :many
 SELECT *

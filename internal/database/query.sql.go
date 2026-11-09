@@ -7,10 +7,75 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+const consumeActionToken = `-- name: ConsumeActionToken :one
+UPDATE action_tokens
+SET consumed_at = $2
+WHERE id = $1 AND consumed_at IS NULL
+RETURNING id, user_id, token_hash, token_type, expires_at, consumed_at, created_at
+`
+
+type ConsumeActionTokenParams struct {
+	ID         uuid.UUID
+	ConsumedAt sql.NullTime
+}
+
+func (q *Queries) ConsumeActionToken(ctx context.Context, arg ConsumeActionTokenParams) (ActionToken, error) {
+	row := q.db.QueryRowContext(ctx, consumeActionToken, arg.ID, arg.ConsumedAt)
+	var i ActionToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.TokenType,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createActionToken = `-- name: CreateActionToken :one
+INSERT INTO action_tokens (
+    id, user_id, token_hash, token_type, expires_at
+)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, user_id, token_hash, token_type, expires_at, consumed_at, created_at
+`
+
+type CreateActionTokenParams struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	TokenHash string
+	TokenType string
+	ExpiresAt time.Time
+}
+
+func (q *Queries) CreateActionToken(ctx context.Context, arg CreateActionTokenParams) (ActionToken, error) {
+	row := q.db.QueryRowContext(ctx, createActionToken,
+		arg.ID,
+		arg.UserID,
+		arg.TokenHash,
+		arg.TokenType,
+		arg.ExpiresAt,
+	)
+	var i ActionToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.TokenType,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
 
 const createIdea = `-- name: CreateIdea :one
 INSERT INTO ideas (id, user_id, group_id, chunk_index, chunk_total, title, content, status)
@@ -128,17 +193,65 @@ func (q *Queries) CreateIdeaLink(ctx context.Context, arg CreateIdeaLinkParams) 
 	return i, err
 }
 
+const createRefreshToken = `-- name: CreateRefreshToken :one
+INSERT INTO refresh_tokens (
+    id, user_id, token_hash, family_id, revoked, user_agent, ip_address, expires_at
+)
+VALUES ($1, $2, $3, $4, 0, $5, $6, $7)
+RETURNING id, user_id, token_hash, family_id, replaced_by_id, revoked, user_agent, ip_address, expires_at, created_at, revoked_at
+`
+
+type CreateRefreshTokenParams struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	TokenHash string
+	FamilyID  uuid.UUID
+	UserAgent string
+	IpAddress string
+	ExpiresAt time.Time
+}
+
+func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error) {
+	row := q.db.QueryRowContext(ctx, createRefreshToken,
+		arg.ID,
+		arg.UserID,
+		arg.TokenHash,
+		arg.FamilyID,
+		arg.UserAgent,
+		arg.IpAddress,
+		arg.ExpiresAt,
+	)
+	var i RefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.FamilyID,
+		&i.ReplacedByID,
+		&i.Revoked,
+		&i.UserAgent,
+		&i.IpAddress,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (id, email, password_hash, role)
-VALUES ($1, $2, $3, $4)
-RETURNING id, email, password_hash, role, created_at
+INSERT INTO users (id, email, password_hash, role, auth_provider, google_id, email_verified, token_version)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 1)
+RETURNING id, email, password_hash, role, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at
 `
 
 type CreateUserParams struct {
-	ID           uuid.UUID
-	Email        string
-	PasswordHash string
-	Role         string
+	ID            uuid.UUID
+	Email         string
+	PasswordHash  string
+	Role          string
+	AuthProvider  string
+	GoogleID      string
+	EmailVerified int32
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
@@ -147,6 +260,9 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.Email,
 		arg.PasswordHash,
 		arg.Role,
+		arg.AuthProvider,
+		arg.GoogleID,
+		arg.EmailVerified,
 	)
 	var i User
 	err := row.Scan(
@@ -154,9 +270,25 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Email,
 		&i.PasswordHash,
 		&i.Role,
+		&i.AuthProvider,
+		&i.GoogleID,
+		&i.EmailVerified,
+		&i.TokenVersion,
+		&i.FailedLoginAttempts,
+		&i.LockedUntil,
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const deleteExpiredRefreshTokens = `-- name: DeleteExpiredRefreshTokens :exec
+DELETE FROM refresh_tokens
+WHERE expires_at < $1
+`
+
+func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context, expiresAt time.Time) error {
+	_, err := q.db.ExecContext(ctx, deleteExpiredRefreshTokens, expiresAt)
+	return err
 }
 
 const deleteIdea = `-- name: DeleteIdea :exec
@@ -244,6 +376,31 @@ func (q *Queries) FindOverlappingIdeas(ctx context.Context, ideaID uuid.UUID) ([
 	return items, nil
 }
 
+const getActionTokenByHash = `-- name: GetActionTokenByHash :one
+SELECT id, user_id, token_hash, token_type, expires_at, consumed_at, created_at FROM action_tokens
+WHERE token_hash = $1 AND token_type = $2 LIMIT 1
+`
+
+type GetActionTokenByHashParams struct {
+	TokenHash string
+	TokenType string
+}
+
+func (q *Queries) GetActionTokenByHash(ctx context.Context, arg GetActionTokenByHashParams) (ActionToken, error) {
+	row := q.db.QueryRowContext(ctx, getActionTokenByHash, arg.TokenHash, arg.TokenType)
+	var i ActionToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.TokenType,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getIdeaByID = `-- name: GetIdeaByID :one
 SELECT id, user_id, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
 FROM ideas
@@ -271,19 +428,160 @@ func (q *Queries) GetIdeaByID(ctx context.Context, id uuid.UUID) (Idea, error) {
 	return i, err
 }
 
-const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, role, created_at FROM users
-WHERE email = $1 LIMIT 1
+const getRefreshTokenByHash = `-- name: GetRefreshTokenByHash :one
+SELECT id, user_id, token_hash, family_id, replaced_by_id, revoked, user_agent, ip_address, expires_at, created_at, revoked_at FROM refresh_tokens
+WHERE token_hash = $1 LIMIT 1
 `
 
-func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
-	row := q.db.QueryRowContext(ctx, getUserByEmail, email)
+func (q *Queries) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error) {
+	row := q.db.QueryRowContext(ctx, getRefreshTokenByHash, tokenHash)
+	var i RefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.FamilyID,
+		&i.ReplacedByID,
+		&i.Revoked,
+		&i.UserAgent,
+		&i.IpAddress,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, email, password_hash, role, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at FROM users
+WHERE LOWER(email) = LOWER($1) LIMIT 1
+`
+
+func (q *Queries) GetUserByEmail(ctx context.Context, lower string) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByEmail, lower)
 	var i User
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
 		&i.PasswordHash,
 		&i.Role,
+		&i.AuthProvider,
+		&i.GoogleID,
+		&i.EmailVerified,
+		&i.TokenVersion,
+		&i.FailedLoginAttempts,
+		&i.LockedUntil,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getUserByGoogleID = `-- name: GetUserByGoogleID :one
+SELECT id, email, password_hash, role, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at FROM users
+WHERE google_id = $1 AND google_id != '' LIMIT 1
+`
+
+func (q *Queries) GetUserByGoogleID(ctx context.Context, googleID string) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByGoogleID, googleID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.AuthProvider,
+		&i.GoogleID,
+		&i.EmailVerified,
+		&i.TokenVersion,
+		&i.FailedLoginAttempts,
+		&i.LockedUntil,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getUserByID = `-- name: GetUserByID :one
+SELECT id, email, password_hash, role, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at FROM users
+WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByID, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.AuthProvider,
+		&i.GoogleID,
+		&i.EmailVerified,
+		&i.TokenVersion,
+		&i.FailedLoginAttempts,
+		&i.LockedUntil,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const incrementUserTokenVersion = `-- name: IncrementUserTokenVersion :one
+UPDATE users
+SET token_version = token_version + 1
+WHERE id = $1
+RETURNING token_version
+`
+
+func (q *Queries) IncrementUserTokenVersion(ctx context.Context, id uuid.UUID) (int32, error) {
+	row := q.db.QueryRowContext(ctx, incrementUserTokenVersion, id)
+	var token_version int32
+	err := row.Scan(&token_version)
+	return token_version, err
+}
+
+const invalidateUserActionTokensByType = `-- name: InvalidateUserActionTokensByType :exec
+UPDATE action_tokens
+SET consumed_at = $3
+WHERE user_id = $1 AND token_type = $2 AND consumed_at IS NULL
+`
+
+type InvalidateUserActionTokensByTypeParams struct {
+	UserID     uuid.UUID
+	TokenType  string
+	ConsumedAt sql.NullTime
+}
+
+func (q *Queries) InvalidateUserActionTokensByType(ctx context.Context, arg InvalidateUserActionTokensByTypeParams) error {
+	_, err := q.db.ExecContext(ctx, invalidateUserActionTokensByType, arg.UserID, arg.TokenType, arg.ConsumedAt)
+	return err
+}
+
+const linkGoogleAccount = `-- name: LinkGoogleAccount :one
+UPDATE users
+SET google_id = $2,
+    email_verified = 1
+WHERE id = $1
+RETURNING id, email, password_hash, role, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at
+`
+
+type LinkGoogleAccountParams struct {
+	ID       uuid.UUID
+	GoogleID string
+}
+
+func (q *Queries) LinkGoogleAccount(ctx context.Context, arg LinkGoogleAccountParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, linkGoogleAccount, arg.ID, arg.GoogleID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.AuthProvider,
+		&i.GoogleID,
+		&i.EmailVerified,
+		&i.TokenVersion,
+		&i.FailedLoginAttempts,
+		&i.LockedUntil,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -598,15 +896,18 @@ func (q *Queries) ListKeywordsByIdeaID(ctx context.Context, ideaID uuid.UUID) ([
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, email, created_at
+SELECT id, email, role, auth_provider, email_verified, created_at
 FROM users
 ORDER BY created_at DESC
 `
 
 type ListUsersRow struct {
-	ID        uuid.UUID
-	Email     string
-	CreatedAt time.Time
+	ID            uuid.UUID
+	Email         string
+	Role          string
+	AuthProvider  string
+	EmailVerified int32
+	CreatedAt     time.Time
 }
 
 func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
@@ -618,7 +919,14 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 	var items []ListUsersRow
 	for rows.Next() {
 		var i ListUsersRow
-		if err := rows.Scan(&i.ID, &i.Email, &i.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.Role,
+			&i.AuthProvider,
+			&i.EmailVerified,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -630,6 +938,96 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const markRefreshTokenRotated = `-- name: MarkRefreshTokenRotated :exec
+UPDATE refresh_tokens
+SET revoked = 1,
+    replaced_by_id = $2,
+    revoked_at = $3
+WHERE id = $1 AND revoked = 0
+`
+
+type MarkRefreshTokenRotatedParams struct {
+	ID           uuid.UUID
+	ReplacedByID uuid.NullUUID
+	RevokedAt    sql.NullTime
+}
+
+func (q *Queries) MarkRefreshTokenRotated(ctx context.Context, arg MarkRefreshTokenRotatedParams) error {
+	_, err := q.db.ExecContext(ctx, markRefreshTokenRotated, arg.ID, arg.ReplacedByID, arg.RevokedAt)
+	return err
+}
+
+const markUserEmailVerified = `-- name: MarkUserEmailVerified :one
+UPDATE users
+SET email_verified = 1
+WHERE id = $1
+RETURNING id, email, password_hash, role, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at
+`
+
+func (q *Queries) MarkUserEmailVerified(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRowContext(ctx, markUserEmailVerified, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.AuthProvider,
+		&i.GoogleID,
+		&i.EmailVerified,
+		&i.TokenVersion,
+		&i.FailedLoginAttempts,
+		&i.LockedUntil,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const recordFailedLoginAttempt = `-- name: RecordFailedLoginAttempt :one
+UPDATE users
+SET failed_login_attempts = $2,
+    locked_until = $3
+WHERE id = $1
+RETURNING id, email, password_hash, role, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at
+`
+
+type RecordFailedLoginAttemptParams struct {
+	ID                  uuid.UUID
+	FailedLoginAttempts int32
+	LockedUntil         sql.NullTime
+}
+
+func (q *Queries) RecordFailedLoginAttempt(ctx context.Context, arg RecordFailedLoginAttemptParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, recordFailedLoginAttempt, arg.ID, arg.FailedLoginAttempts, arg.LockedUntil)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.AuthProvider,
+		&i.GoogleID,
+		&i.EmailVerified,
+		&i.TokenVersion,
+		&i.FailedLoginAttempts,
+		&i.LockedUntil,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const resetFailedLoginAttempts = `-- name: ResetFailedLoginAttempts :exec
+UPDATE users
+SET failed_login_attempts = 0,
+    locked_until = NULL
+WHERE id = $1
+`
+
+func (q *Queries) ResetFailedLoginAttempts(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, resetFailedLoginAttempts, id)
+	return err
 }
 
 const resetIdeaForReanalysis = `-- name: ResetIdeaForReanalysis :one
@@ -660,6 +1058,40 @@ func (q *Queries) ResetIdeaForReanalysis(ctx context.Context, id uuid.UUID) (Ide
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const revokeAllUserRefreshTokens = `-- name: RevokeAllUserRefreshTokens :exec
+UPDATE refresh_tokens
+SET revoked = 1,
+    revoked_at = $2
+WHERE user_id = $1 AND revoked = 0
+`
+
+type RevokeAllUserRefreshTokensParams struct {
+	UserID    uuid.UUID
+	RevokedAt sql.NullTime
+}
+
+func (q *Queries) RevokeAllUserRefreshTokens(ctx context.Context, arg RevokeAllUserRefreshTokensParams) error {
+	_, err := q.db.ExecContext(ctx, revokeAllUserRefreshTokens, arg.UserID, arg.RevokedAt)
+	return err
+}
+
+const revokeRefreshTokenFamily = `-- name: RevokeRefreshTokenFamily :exec
+UPDATE refresh_tokens
+SET revoked = 1,
+    revoked_at = $2
+WHERE family_id = $1 AND revoked = 0
+`
+
+type RevokeRefreshTokenFamilyParams struct {
+	FamilyID  uuid.UUID
+	RevokedAt sql.NullTime
+}
+
+func (q *Queries) RevokeRefreshTokenFamily(ctx context.Context, arg RevokeRefreshTokenFamilyParams) error {
+	_, err := q.db.ExecContext(ctx, revokeRefreshTokenFamily, arg.FamilyID, arg.RevokedAt)
+	return err
 }
 
 const updateIdeaAnalysis = `-- name: UpdateIdeaAnalysis :one
@@ -761,6 +1193,40 @@ func (q *Queries) UpdateKeywordEmbedding(ctx context.Context, arg UpdateKeywordE
 		&i.ID,
 		&i.Name,
 		&i.Embedding,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateUserPasswordAndBumpTokenVersion = `-- name: UpdateUserPasswordAndBumpTokenVersion :one
+UPDATE users
+SET password_hash = $2,
+    token_version = token_version + 1,
+    failed_login_attempts = 0,
+    locked_until = NULL
+WHERE id = $1
+RETURNING id, email, password_hash, role, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at
+`
+
+type UpdateUserPasswordAndBumpTokenVersionParams struct {
+	ID           uuid.UUID
+	PasswordHash string
+}
+
+func (q *Queries) UpdateUserPasswordAndBumpTokenVersion(ctx context.Context, arg UpdateUserPasswordAndBumpTokenVersionParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUserPasswordAndBumpTokenVersion, arg.ID, arg.PasswordHash)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.AuthProvider,
+		&i.GoogleID,
+		&i.EmailVerified,
+		&i.TokenVersion,
+		&i.FailedLoginAttempts,
+		&i.LockedUntil,
 		&i.CreatedAt,
 	)
 	return i, err

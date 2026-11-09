@@ -4,9 +4,20 @@ import (
 	"fmt"
 )
 
-// Routes is a centralized urls catalog to be maped automatically from templates
 var RouteNames = map[string]string{
 	"landing": "/",
+
+	"auth:login":               "/auth/login",
+	"auth:register":            "/auth/register",
+	"auth:verify_email":        "/auth/verify-email",
+	"auth:resend_verification": "/auth/resend-verification",
+	"auth:forgot_password":     "/auth/forgot-password",
+	"auth:reset_password":      "/auth/reset-password",
+	"auth:refresh":             "/auth/refresh",
+	"auth:logout":              "/auth/logout",
+	"auth:logout_all":          "/auth/logout-all",
+	"auth:google:login":        "/auth/google/login",
+	"auth:google:callback":     "/auth/google/callback",
 
 	"api:users:list": "/api/users",
 
@@ -30,7 +41,6 @@ var RouteNames = map[string]string{
 	"api:network:graph": "/api/network/graph",
 }
 
-// Get resolves registered url path for gin
 func Get(name string) string {
 	if path, ok := RouteNames[name]; ok {
 		return path
@@ -38,7 +48,6 @@ func Get(name string) string {
 	panic(fmt.Sprintf("#url-path-not-found: %s", name))
 }
 
-// URLFor resolves url path for templates with optional args
 func URLFor(name string, args ...any) string {
 	pattern, ok := RouteNames[name]
 	if !ok {

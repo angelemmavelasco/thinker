@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
+	"thinker/internal/auth"
 	"thinker/internal/database"
 )
 
@@ -21,21 +21,32 @@ func (s *UserService) ListUsers(ctx context.Context) ([]database.ListUsersRow, e
 	return s.queries.ListUsers(ctx)
 }
 
-func (s *UserService) CreateUser(ctx context.Context, email, password, role string) (database.User, error) {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+func (s *UserService) CreateUser(ctx context.Context, rawEmail, password, role string) (database.User, error) {
+	normalizedEmail, err := auth.NormalizeEmail(rawEmail)
+	if err != nil {
+		return database.User{}, err
+	}
+	if err := auth.ValidatePasswordStrength(password); err != nil {
+		return database.User{}, err
+	}
+
+	hashedPassword, err := auth.HashPassword(password)
 	if err != nil {
 		return database.User{}, err
 	}
 
 	cleanedRole := strings.TrimSpace(role)
-	if cleanedRole == "" {
+	if cleanedRole != "admin" && cleanedRole != "member" {
 		cleanedRole = "member"
 	}
 
 	return s.queries.CreateUser(ctx, database.CreateUserParams{
-		ID:           uuid.New(),
-		Email:        strings.TrimSpace(email),
-		PasswordHash: string(hashedPassword),
-		Role:         cleanedRole,
+		ID:            uuid.New(),
+		Email:         normalizedEmail,
+		PasswordHash:  hashedPassword,
+		Role:          cleanedRole,
+		AuthProvider:  "local",
+		GoogleID:      "",
+		EmailVerified: 1,
 	})
 }

@@ -125,9 +125,9 @@ func backfillIdeaGroups(ctx context.Context, conn *sql.DB) error {
 
 func EnsureDevelopmentUser(ctx context.Context, conn *sql.DB) error {
 	const query = `
-		INSERT INTO users (id, email, password_hash)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (id) DO NOTHING
+		INSERT INTO users (id, email, password_hash, role, auth_provider, email_verified, token_version)
+		VALUES ($1, $2, $3, 'admin', 'local', 1, 1)
+		ON CONFLICT (id) DO UPDATE SET email_verified = 1
 	`
 
 	_, err := conn.ExecContext(

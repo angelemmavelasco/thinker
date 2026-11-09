@@ -15,13 +15,11 @@ import (
 func main() {
 	fmt.Println("Hello from thinker")
 
-	//get base config
 	baseConfig, err := config.LoadConfig()
 	if err != nil {
 		log.Fatal("Error while loading env variables")
 	}
 
-	// base context
 	ctx := context.Background()
 
 	dbConnector := database.NewConnector(baseConfig)
@@ -36,7 +34,6 @@ func main() {
 		}
 	}(conn)
 
-	//define base schema
 	if err := database.InitSchema(ctx, conn); err != nil {
 		log.Fatal(err.Error())
 	}
@@ -46,15 +43,12 @@ func main() {
 		}
 	}
 
-	//init queries
 	queries := database.New(conn)
 	llmService := services.NewLLMService(baseConfig.LLMBaseURL, baseConfig.LLMApiKey)
 	embeddingService := services.NewEmbeddingService(baseConfig.EmbeddingBaseURL, baseConfig.LLMApiKey)
-	// initi router
-	router := routes.SetUpRouter(queries, llmService, embeddingService)
+	router := routes.SetUpRouter(queries, llmService, embeddingService, baseConfig)
 
-	if err := router.Run(":8080"); err != nil {
+	if err := router.Run("127.0.0.1:8080"); err != nil {
 		log.Fatalf("Error al ejecutar el servidor HTTP: %v", err)
 	}
-
 }
