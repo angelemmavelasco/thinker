@@ -26,6 +26,12 @@ func NewLLMService(baseURL, apiKey string) *LLMService {
 	}
 }
 
+func (s *LLMService) SetHTTPClient(client *http.Client) {
+	if client != nil {
+		s.httpClient = client
+	}
+}
+
 type chatCompletionRequest struct {
 	Messages    []chatMessage `json:"messages"`
 	Temperature float64       `json:"temperature"`
@@ -162,4 +168,76 @@ func cleanLLMJSON(raw string) string {
 	}
 
 	return out.String()
+}
+
+func (s *LLMService) AskKnowledgeGraph(ctx context.Context, question string, subGraph *TraversalSubGraph) (string, error) {
+	cleanedQuestion := strings.TrimSpace(question)
+	if cleanedQuestion == "" {
+		return "", fmt.Errorf("la pregunta está vacía")
+	}
+
+	contextPrompt := BuildSubGraphPrompt(subGraph)
+	if contextPrompt == "" {
+		contextPrompt = "(No se encontró contexto relevante en el grafo)"
+	}
+
+	systemInstruction := "Eres el asistente inteligente de Thinker, un cerebro digital y grafo de conocimiento. " +
+		"Responde a la pregunta del usuario utilizando de forma sintética, clara y argumentada la información " +
+		"del contexto primario y del contexto asociativo provistos. Cita los nombres de las ideas relevantes y sus conexiones."
+
+	userContent := fmt.Sprintf("Pregunta:\n%s\n\nContexto del grafo de conocimiento:\n%s", cleanedQuestion, contextPrompt)
+
+	requestBody := chatCompletionRequest{
+		Messages: []chatMessage{
+			{
+				Role:    "system",
+				Content: systemInstruction,
+			},
+			{
+				Role:    "user",
+				Content: userContent,
+			},
+		},
+		Temperature: 0.3,
+		MaxTokens:   800,
+	}
+
+	body, err := json.Marshal(requestBody)
+	if err != nil {
+		return "", fmt.Errorf("error serializando solicitud al LLM: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		s.baseURL+"/v1/chat/completions",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return "", fmt.Errorf("error creando solicitud al LLM: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if s.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+s.apiKey)
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("error conectando con el LLM: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return "", fmt.Errorf("el LLM respondió con HTTP %d", resp.StatusCode)
+	}
+
+	var completion chatCompletionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&completion); err != nil {
+		return "", fmt.Errorf("error leyendo respuesta del LLM: %w", err)
+	}
+	if len(completion.Choices) == 0 {
+		return "", fmt.Errorf("el LLM respondió sin resultados")
+	}
+
+	return strings.TrimSpace(completion.Choices[0].Message.Content), nil
 }

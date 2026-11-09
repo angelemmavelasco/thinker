@@ -1140,3 +1140,95 @@ func (s *IdeaService) SearchAndExpand(ctx context.Context, queryText string, top
 
 	return subGraph, seeds, nil
 }
+
+func BuildSubGraphPrompt(subGraph *TraversalSubGraph) string {
+	if subGraph == nil || len(subGraph.Nodes) == 0 {
+		return ""
+	}
+
+	titleByID := make(map[uuid.UUID]string, len(subGraph.Nodes))
+	for _, node := range subGraph.Nodes {
+		titleByID[node.ID] = node.Title
+	}
+
+	var sb strings.Builder
+
+	sb.WriteString("Contexto primario (Nodos Semilla):\n")
+	hasSeeds := false
+	for _, node := range subGraph.Nodes {
+		if node.HopDistance == 0 {
+			hasSeeds = true
+			content := node.RestructuredContent
+			if strings.TrimSpace(content) == "" {
+				content = node.Content
+			}
+			sb.WriteString(fmt.Sprintf("- [%s]: %s\n", node.Title, strings.TrimSpace(content)))
+		}
+	}
+	if !hasSeeds {
+		sb.WriteString("(Sin nodos semilla directos)\n")
+	}
+
+	sb.WriteString("\nContexto asociativo conectado (Vecinos directos y secundarios):\n")
+	hasNeighbors := false
+	for _, node := range subGraph.Nodes {
+		if node.HopDistance > 0 {
+			hasNeighbors = true
+			content := node.RestructuredContent
+			if strings.TrimSpace(content) == "" {
+				content = node.Content
+			}
+			parentTitle := titleByID[node.LinkedFromID]
+			if parentTitle == "" {
+				parentTitle = "Nodo inicial"
+			}
+			sb.WriteString(fmt.Sprintf("- [%s] (conectada con %s por '%s'): %s\n",
+				node.Title, parentTitle, node.RelationType, strings.TrimSpace(content)))
+		}
+	}
+	if !hasNeighbors {
+		sb.WriteString("(Sin vecinos conectados adicionales)\n")
+	}
+
+	return strings.TrimSpace(sb.String())
+}
+
+type QueryResult struct {
+	Question      string
+	Answer        string
+	SubGraph      *TraversalSubGraph
+	Seeds         []SeedCandidate
+	ContextPrompt string
+}
+
+func (s *IdeaService) QueryGraph(ctx context.Context, userQuery string) (*QueryResult, error) {
+	cleanedQuery := strings.TrimSpace(userQuery)
+	if cleanedQuery == "" {
+		return nil, fmt.Errorf("la consulta está vacía")
+	}
+
+	opts := DefaultTraversalOptions()
+	subGraph, seeds, err := s.SearchAndExpand(ctx, cleanedQuery, 3, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	contextPrompt := BuildSubGraphPrompt(subGraph)
+
+	var answer string
+	if s.llm != nil {
+		ans, err := s.llm.AskKnowledgeGraph(ctx, cleanedQuery, subGraph)
+		if err != nil {
+			return nil, err
+		}
+		answer = ans
+	}
+
+	return &QueryResult{
+		Question:      cleanedQuery,
+		Answer:        answer,
+		SubGraph:      subGraph,
+		Seeds:         seeds,
+		ContextPrompt: contextPrompt,
+	}, nil
+}
