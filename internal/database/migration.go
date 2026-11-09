@@ -10,7 +10,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 //go:embed schema.sql
@@ -42,6 +45,79 @@ func InitSchema(ctx context.Context, conn *sql.DB) error {
 
 	if err := runVersionedMigrations(ctx, conn); err != nil {
 		return fmt.Errorf("error while running versioned migrations: %w", err)
+	}
+
+	if err := backfillIdeaGroups(ctx, conn); err != nil {
+		return fmt.Errorf("error while backfilling idea groups: %w", err)
+	}
+
+	return nil
+}
+
+var chunkTitleSuffixRegex = regexp.MustCompile(`^(.*)\s+\((\d+)/(\d+)\)$`)
+
+func backfillIdeaGroups(ctx context.Context, conn *sql.DB) error {
+	rows, err := conn.QueryContext(
+		ctx,
+		"SELECT id, title FROM ideas WHERE group_id = '00000000-0000-0000-0000-000000000000' OR group_id = ''",
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	type pendingRow struct {
+		id    string
+		title string
+	}
+	var pending []pendingRow
+	for rows.Next() {
+		var r pendingRow
+		if err := rows.Scan(&r.id, &r.title); err != nil {
+			return err
+		}
+		pending = append(pending, r)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+
+	groupByBase := make(map[string]string)
+	for _, r := range pending {
+		groupID := r.id
+		chunkIdx := 1
+		chunkTot := 1
+
+		if m := chunkTitleSuffixRegex.FindStringSubmatch(strings.TrimSpace(r.title)); len(m) == 4 {
+			baseKey := strings.TrimSpace(m[1]) + "|" + m[3]
+			if existingGroupID, ok := groupByBase[baseKey]; ok {
+				groupID = existingGroupID
+			} else {
+				newGroup := uuid.New().String()
+				groupByBase[baseKey] = newGroup
+				groupID = newGroup
+			}
+			if idx, err := strconv.Atoi(m[2]); err == nil {
+				chunkIdx = idx
+			}
+			if tot, err := strconv.Atoi(m[3]); err == nil {
+				chunkTot = tot
+			}
+		}
+
+		if _, err := conn.ExecContext(
+			ctx,
+			"UPDATE ideas SET group_id = $1, chunk_index = $2, chunk_total = $3 WHERE id = $4",
+			groupID,
+			chunkIdx,
+			chunkTot,
+			r.id,
+		); err != nil {
+			return err
+		}
 	}
 
 	return nil

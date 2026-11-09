@@ -13,23 +13,29 @@ import (
 )
 
 const createIdea = `-- name: CreateIdea :one
-INSERT INTO ideas (id, user_id, title, content, status)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, user_id, title, content, restructured_content, status, embedding, created_at, updated_at
+INSERT INTO ideas (id, user_id, group_id, chunk_index, chunk_total, title, content, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, user_id, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
 `
 
 type CreateIdeaParams struct {
-	ID      uuid.UUID
-	UserID  uuid.UUID
-	Title   string
-	Content string
-	Status  string
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	GroupID    uuid.UUID
+	ChunkIndex int32
+	ChunkTotal int32
+	Title      string
+	Content    string
+	Status     string
 }
 
 func (q *Queries) CreateIdea(ctx context.Context, arg CreateIdeaParams) (Idea, error) {
 	row := q.db.QueryRowContext(ctx, createIdea,
 		arg.ID,
 		arg.UserID,
+		arg.GroupID,
+		arg.ChunkIndex,
+		arg.ChunkTotal,
 		arg.Title,
 		arg.Content,
 		arg.Status,
@@ -38,6 +44,9 @@ func (q *Queries) CreateIdea(ctx context.Context, arg CreateIdeaParams) (Idea, e
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.GroupID,
+		&i.ChunkIndex,
+		&i.ChunkTotal,
 		&i.Title,
 		&i.Content,
 		&i.RestructuredContent,
@@ -159,6 +168,46 @@ func (q *Queries) DeleteIdea(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const deleteIdeaKeywordsByIdeaID = `-- name: DeleteIdeaKeywordsByIdeaID :exec
+DELETE FROM idea_keywords
+WHERE idea_id = $1
+`
+
+func (q *Queries) DeleteIdeaKeywordsByIdeaID(ctx context.Context, ideaID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteIdeaKeywordsByIdeaID, ideaID)
+	return err
+}
+
+const deleteIdeaLinksByIdeaID = `-- name: DeleteIdeaLinksByIdeaID :exec
+DELETE FROM idea_links
+WHERE source_idea_id = $1 OR target_idea_id = $1
+`
+
+func (q *Queries) DeleteIdeaLinksByIdeaID(ctx context.Context, sourceIdeaID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteIdeaLinksByIdeaID, sourceIdeaID)
+	return err
+}
+
+const deleteIdeasByGroupID = `-- name: DeleteIdeasByGroupID :exec
+DELETE FROM ideas
+WHERE group_id = $1
+`
+
+func (q *Queries) DeleteIdeasByGroupID(ctx context.Context, groupID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteIdeasByGroupID, groupID)
+	return err
+}
+
+const deleteOrphanKeywords = `-- name: DeleteOrphanKeywords :exec
+DELETE FROM keywords
+WHERE id NOT IN (SELECT DISTINCT keyword_id FROM idea_keywords)
+`
+
+func (q *Queries) DeleteOrphanKeywords(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, deleteOrphanKeywords)
+	return err
+}
+
 const findOverlappingIdeas = `-- name: FindOverlappingIdeas :many
 SELECT ik2.idea_id, COUNT(ik2.keyword_id) AS shared_count
 FROM idea_keywords ik1
@@ -196,7 +245,7 @@ func (q *Queries) FindOverlappingIdeas(ctx context.Context, ideaID uuid.UUID) ([
 }
 
 const getIdeaByID = `-- name: GetIdeaByID :one
-SELECT id, user_id, title, content, restructured_content, status, embedding, created_at, updated_at
+SELECT id, user_id, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
 FROM ideas
 WHERE id = $1
 LIMIT 1
@@ -208,6 +257,9 @@ func (q *Queries) GetIdeaByID(ctx context.Context, id uuid.UUID) (Idea, error) {
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.GroupID,
+		&i.ChunkIndex,
+		&i.ChunkTotal,
 		&i.Title,
 		&i.Content,
 		&i.RestructuredContent,
@@ -346,7 +398,7 @@ func (q *Queries) ListDirectConnectedIdeas(ctx context.Context, sourceIdeaID uui
 }
 
 const listIdeas = `-- name: ListIdeas :many
-SELECT id, user_id, title, content, restructured_content, status, embedding, created_at, updated_at
+SELECT id, user_id, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
 FROM ideas
 ORDER BY created_at DESC
 `
@@ -363,6 +415,9 @@ func (q *Queries) ListIdeas(ctx context.Context) ([]Idea, error) {
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
+			&i.GroupID,
+			&i.ChunkIndex,
+			&i.ChunkTotal,
 			&i.Title,
 			&i.Content,
 			&i.RestructuredContent,
@@ -384,8 +439,52 @@ func (q *Queries) ListIdeas(ctx context.Context) ([]Idea, error) {
 	return items, nil
 }
 
+const listIdeasByGroupID = `-- name: ListIdeasByGroupID :many
+SELECT id, title, chunk_index, chunk_total, status
+FROM ideas
+WHERE group_id = $1
+ORDER BY chunk_index ASC, created_at ASC
+`
+
+type ListIdeasByGroupIDRow struct {
+	ID         uuid.UUID
+	Title      string
+	ChunkIndex int32
+	ChunkTotal int32
+	Status     string
+}
+
+func (q *Queries) ListIdeasByGroupID(ctx context.Context, groupID uuid.UUID) ([]ListIdeasByGroupIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, listIdeasByGroupID, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIdeasByGroupIDRow
+	for rows.Next() {
+		var i ListIdeasByGroupIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.ChunkIndex,
+			&i.ChunkTotal,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listIdeasByUserID = `-- name: ListIdeasByUserID :many
-SELECT id, user_id, title, content, restructured_content, status, embedding, created_at, updated_at
+SELECT id, user_id, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
 FROM ideas
 WHERE user_id = $1
 ORDER BY created_at DESC
@@ -403,6 +502,9 @@ func (q *Queries) ListIdeasByUserID(ctx context.Context, userID uuid.UUID) ([]Id
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
+			&i.GroupID,
+			&i.ChunkIndex,
+			&i.ChunkTotal,
 			&i.Title,
 			&i.Content,
 			&i.RestructuredContent,
@@ -530,6 +632,36 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 	return items, nil
 }
 
+const resetIdeaForReanalysis = `-- name: ResetIdeaForReanalysis :one
+UPDATE ideas
+SET restructured_content = '',
+    embedding = '',
+    status = 'borrador',
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING id, user_id, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
+`
+
+func (q *Queries) ResetIdeaForReanalysis(ctx context.Context, id uuid.UUID) (Idea, error) {
+	row := q.db.QueryRowContext(ctx, resetIdeaForReanalysis, id)
+	var i Idea
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.GroupID,
+		&i.ChunkIndex,
+		&i.ChunkTotal,
+		&i.Title,
+		&i.Content,
+		&i.RestructuredContent,
+		&i.Status,
+		&i.Embedding,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateIdeaAnalysis = `-- name: UpdateIdeaAnalysis :one
 UPDATE ideas
 SET restructured_content = $2,
@@ -537,7 +669,7 @@ SET restructured_content = $2,
     status = $4,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $1
-RETURNING id, user_id, title, content, restructured_content, status, embedding, created_at, updated_at
+RETURNING id, user_id, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
 `
 
 type UpdateIdeaAnalysisParams struct {
@@ -558,6 +690,47 @@ func (q *Queries) UpdateIdeaAnalysis(ctx context.Context, arg UpdateIdeaAnalysis
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.GroupID,
+		&i.ChunkIndex,
+		&i.ChunkTotal,
+		&i.Title,
+		&i.Content,
+		&i.RestructuredContent,
+		&i.Status,
+		&i.Embedding,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateIdeaContentAndReset = `-- name: UpdateIdeaContentAndReset :one
+UPDATE ideas
+SET title = $2,
+    content = $3,
+    restructured_content = '',
+    embedding = '',
+    status = 'borrador',
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING id, user_id, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
+`
+
+type UpdateIdeaContentAndResetParams struct {
+	ID      uuid.UUID
+	Title   string
+	Content string
+}
+
+func (q *Queries) UpdateIdeaContentAndReset(ctx context.Context, arg UpdateIdeaContentAndResetParams) (Idea, error) {
+	row := q.db.QueryRowContext(ctx, updateIdeaContentAndReset, arg.ID, arg.Title, arg.Content)
+	var i Idea
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.GroupID,
+		&i.ChunkIndex,
+		&i.ChunkTotal,
 		&i.Title,
 		&i.Content,
 		&i.RestructuredContent,

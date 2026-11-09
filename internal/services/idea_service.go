@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -79,9 +81,13 @@ func NewIdeaService(queries *database.Queries, llm *LLMService, embedding *Embed
 func (s *IdeaService) startWorker() {
 	for job := range s.jobQueue {
 		idKey := job.idea.ID.String()
+		if _, err := s.queries.GetIdeaByID(context.Background(), job.idea.ID); err != nil {
+			s.inFlight.Delete(idKey)
+			continue
+		}
 		_, _, _, err := s.ProcessIdeaAnalysis(context.Background(), job.idea.ID, job.title, job.content)
 		s.inFlight.Delete(idKey)
-		if err != nil {
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			log.Printf("[llm] Error procesando idea [%s]: %v", job.idea.ID, err)
 			continue
 		}
@@ -108,23 +114,6 @@ func (s *IdeaService) ListIdeas(ctx context.Context) ([]IdeaWithKeywords, error)
 		return nil, err
 	}
 
-	splitOccurred := false
-	for _, idea := range ideas {
-		if (idea.Status == "borrador" || idea.Status == "draft") && len([]rune(idea.Content)) > DefaultChunkMaxChars {
-			if _, err := s.CreateIdeasFromInput(ctx, idea.UserID.String(), idea.Title, idea.Content); err == nil {
-				_ = s.queries.DeleteIdea(ctx, idea.ID)
-				splitOccurred = true
-			}
-		}
-	}
-
-	if splitOccurred {
-		ideas, err = s.queries.ListIdeas(ctx)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	items := make([]IdeaWithKeywords, 0, len(ideas))
 	for _, idea := range ideas {
 		if idea.Status == "borrador" || idea.Status == "draft" {
@@ -149,12 +138,16 @@ func (s *IdeaService) CreateIdea(ctx context.Context, userIDStr, title, content 
 		return database.Idea{}, err
 	}
 
+	newID := uuid.New()
 	return s.queries.CreateIdea(ctx, database.CreateIdeaParams{
-		ID:      uuid.New(),
-		UserID:  userID,
-		Title:   title,
-		Content: content,
-		Status:  "borrador",
+		ID:         newID,
+		UserID:     userID,
+		GroupID:    newID,
+		ChunkIndex: 1,
+		ChunkTotal: 1,
+		Title:      title,
+		Content:    content,
+		Status:     "borrador",
 	})
 }
 
@@ -169,19 +162,30 @@ func (s *IdeaService) CreateIdeasFromInput(ctx context.Context, userIDStr, title
 		return nil, fmt.Errorf("el contenido está vacío")
 	}
 
+	groupID := uuid.New()
+	totalChunks := int32(len(chunks))
 	created := make([]database.Idea, 0, len(chunks))
+
 	for i, chunk := range chunks {
 		chunkTitle := title
 		if len(chunks) > 1 {
 			chunkTitle = fmt.Sprintf("%s (%d/%d)", title, i+1, len(chunks))
 		}
 
+		newID := uuid.New()
+		if len(chunks) == 1 {
+			groupID = newID
+		}
+
 		idea, err := s.queries.CreateIdea(ctx, database.CreateIdeaParams{
-			ID:      uuid.New(),
-			UserID:  userID,
-			Title:   chunkTitle,
-			Content: chunk,
-			Status:  "borrador",
+			ID:         newID,
+			UserID:     userID,
+			GroupID:    groupID,
+			ChunkIndex: int32(i + 1),
+			ChunkTotal: totalChunks,
+			Title:      chunkTitle,
+			Content:    chunk,
+			Status:     "borrador",
 		})
 		if err != nil {
 			return nil, err
@@ -384,7 +388,7 @@ func (s *IdeaService) ProcessPendingIdeas(ctx context.Context) {
 	}
 	for _, idea := range ideas {
 		if idea.Status == "borrador" || idea.Status == "draft" {
-			if len([]rune(idea.Content)) > DefaultChunkMaxChars {
+			if idea.ChunkTotal <= 1 && len([]rune(idea.Content)) > DefaultChunkMaxChars+50 {
 				if _, err := s.CreateIdeasFromInput(ctx, idea.UserID.String(), idea.Title, idea.Content); err == nil {
 					_ = s.queries.DeleteIdea(ctx, idea.ID)
 					continue
@@ -489,9 +493,14 @@ type ConnectedIdeaInfo struct {
 }
 
 type IdeaDetail struct {
-	Idea        database.Idea
-	Keywords    []database.Keyword
-	Connections []ConnectedIdeaInfo
+	Idea            database.Idea
+	Keywords        []database.Keyword
+	Connections     []ConnectedIdeaInfo
+	GroupIdeas      []database.ListIdeasByGroupIDRow
+	GroupCount      int
+	CurrentPosition int
+	PrevFragmentID  *uuid.UUID
+	NextFragmentID  *uuid.UUID
 }
 
 func (s *IdeaService) GetIdeaDetail(ctx context.Context, ideaIDStr string) (*IdeaDetail, error) {
@@ -546,9 +555,162 @@ func (s *IdeaService) GetIdeaDetail(ctx context.Context, ideaIDStr string) (*Ide
 		})
 	}
 
+	var groupIdeas []database.ListIdeasByGroupIDRow
+	var currentPos int
+	var prevID *uuid.UUID
+	var nextID *uuid.UUID
+
+	if idea.GroupID != uuid.Nil {
+		groupIdeas, _ = s.queries.ListIdeasByGroupID(ctx, idea.GroupID)
+		for i, gi := range groupIdeas {
+			if gi.ID == idea.ID {
+				currentPos = i + 1
+				if i > 0 {
+					pid := groupIdeas[i-1].ID
+					prevID = &pid
+				}
+				if i+1 < len(groupIdeas) {
+					nid := groupIdeas[i+1].ID
+					nextID = &nid
+				}
+				break
+			}
+		}
+	}
+
+	groupCount := len(groupIdeas)
+	if groupCount == 0 {
+		groupCount = 1
+		currentPos = 1
+	}
+
 	return &IdeaDetail{
-		Idea:        idea,
-		Keywords:    kws,
-		Connections: connections,
+		Idea:            idea,
+		Keywords:        kws,
+		Connections:     connections,
+		GroupIdeas:      groupIdeas,
+		GroupCount:      groupCount,
+		CurrentPosition: currentPos,
+		PrevFragmentID:  prevID,
+		NextFragmentID:  nextID,
 	}, nil
+}
+
+func (s *IdeaService) relinkGroupSequence(ctx context.Context, groupID uuid.UUID) {
+	if groupID == uuid.Nil {
+		return
+	}
+	groupIdeas, err := s.queries.ListIdeasByGroupID(ctx, groupID)
+	if err != nil || len(groupIdeas) < 2 {
+		return
+	}
+	for i := 1; i < len(groupIdeas); i++ {
+		prevID := groupIdeas[i-1].ID
+		currID := groupIdeas[i].ID
+		_, _ = s.queries.CreateIdeaLink(ctx, database.CreateIdeaLinkParams{
+			ID:           uuid.New(),
+			SourceIdeaID: prevID,
+			TargetIdeaID: currID,
+			RelationType: "semantic",
+			Weight:       0.90,
+		})
+		_, _ = s.queries.CreateIdeaLink(ctx, database.CreateIdeaLinkParams{
+			ID:           uuid.New(),
+			SourceIdeaID: currID,
+			TargetIdeaID: prevID,
+			RelationType: "semantic",
+			Weight:       0.90,
+		})
+	}
+}
+
+func (s *IdeaService) UpdateIdea(ctx context.Context, ideaIDStr, title, content string) (*IdeaDetail, error) {
+	ideaID, err := uuid.Parse(ideaIDStr)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = s.queries.DeleteIdeaLinksByIdeaID(ctx, ideaID)
+	_ = s.queries.DeleteIdeaKeywordsByIdeaID(ctx, ideaID)
+	_ = s.queries.DeleteOrphanKeywords(ctx)
+
+	updated, err := s.queries.UpdateIdeaContentAndReset(ctx, database.UpdateIdeaContentAndResetParams{
+		ID:      ideaID,
+		Title:   title,
+		Content: content,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	s.relinkGroupSequence(ctx, updated.GroupID)
+	s.EnqueueIdeaAnalysis(updated, updated.Title, updated.Content)
+
+	return s.GetIdeaDetail(ctx, ideaIDStr)
+}
+
+func (s *IdeaService) ReanalyzeIdea(ctx context.Context, ideaIDStr string) (*IdeaDetail, error) {
+	ideaID, err := uuid.Parse(ideaIDStr)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = s.queries.DeleteIdeaLinksByIdeaID(ctx, ideaID)
+	_ = s.queries.DeleteIdeaKeywordsByIdeaID(ctx, ideaID)
+	_ = s.queries.DeleteOrphanKeywords(ctx)
+
+	resetIdea, err := s.queries.ResetIdeaForReanalysis(ctx, ideaID)
+	if err != nil {
+		return nil, err
+	}
+
+	s.relinkGroupSequence(ctx, resetIdea.GroupID)
+	s.EnqueueIdeaAnalysis(resetIdea, resetIdea.Title, resetIdea.Content)
+
+	return s.GetIdeaDetail(ctx, ideaIDStr)
+}
+
+func (s *IdeaService) DeleteIdeaFragment(ctx context.Context, ideaIDStr string) error {
+	ideaID, err := uuid.Parse(ideaIDStr)
+	if err != nil {
+		return err
+	}
+
+	idea, err := s.queries.GetIdeaByID(ctx, ideaID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.queries.DeleteIdea(ctx, ideaID); err != nil {
+		return err
+	}
+
+	_ = s.queries.DeleteOrphanKeywords(ctx)
+	s.relinkGroupSequence(ctx, idea.GroupID)
+	return nil
+}
+
+func (s *IdeaService) DeleteIdeaGroup(ctx context.Context, ideaIDStr string) error {
+	ideaID, err := uuid.Parse(ideaIDStr)
+	if err != nil {
+		return err
+	}
+
+	idea, err := s.queries.GetIdeaByID(ctx, ideaID)
+	if err != nil {
+		return err
+	}
+
+	if idea.GroupID != uuid.Nil {
+		if err := s.queries.DeleteIdeasByGroupID(ctx, idea.GroupID); err != nil {
+			return err
+		}
+	} else {
+		if err := s.queries.DeleteIdea(ctx, ideaID); err != nil {
+			return err
+		}
+	}
+
+	_ = s.queries.DeleteOrphanKeywords(ctx)
+	return nil
 }

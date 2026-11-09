@@ -13,6 +13,9 @@ import (
 type Idea struct {
 	ID                  uuid.UUID
 	UserID              uuid.UUID
+	GroupID             uuid.UUID
+	ChunkIndex          int32
+	ChunkTotal          int32
 	Title               string
 	Content             string
 	RestructuredContent string

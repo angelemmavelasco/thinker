@@ -1,5 +1,5 @@
-<div class="flex flex-col gap-6 max-w-5xl mx-auto">
-    <div class="flex items-center justify-between border-b border-zinc-800 pb-2">
+<div class="flex flex-col gap-5 max-w-5xl mx-auto">
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-2.5">
         <button
             type="button"
             hx-get='{{url "ideas:list"}}'
@@ -11,16 +11,156 @@
             <span>Volver al repositorio</span>
         </button>
 
-        {{if or (eq .detail.Idea.Status "procesada") (eq .detail.Idea.Status "processed")}}
-        <span class="text-[10px] uppercase px-2 py-0.5 rounded-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-            Idea · Procesada
-        </span>
+        <div class="flex flex-wrap items-center gap-2">
+            {{if gt .detail.GroupCount 1}}
+            <span class="text-[10px] uppercase px-2 py-0.5 rounded-xs font-semibold bg-zinc-800 text-zinc-200 border border-zinc-700">
+                Fragmento {{.detail.CurrentPosition}} de {{.detail.GroupCount}}
+            </span>
+            {{else}}
+            <span class="text-[10px] uppercase px-2 py-0.5 rounded-xs font-semibold bg-zinc-800 text-zinc-300 border border-zinc-700">
+                Idea individual
+            </span>
+            {{end}}
+
+            {{if or (eq .detail.Idea.Status "procesada") (eq .detail.Idea.Status "processed")}}
+            <span class="text-[10px] uppercase px-2 py-0.5 rounded-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                Procesada
+            </span>
+            {{else}}
+            <span class="text-[10px] uppercase px-2 py-0.5 rounded-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                Borrador (Analizando...)
+            </span>
+            {{end}}
+
+            <button
+                type="button"
+                hx-get='{{url "ideas:edit" .detail.Idea.ID}}'
+                hx-target="#workspace"
+                hx-swap="innerHTML"
+                hx-push-url="true"
+                class="flex items-center gap-1.5 border border-zinc-800 hover:border-cyan-500 bg-zinc-900 text-zinc-200 hover:text-cyan-400 px-2.5 py-1 rounded-xs cursor-pointer transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-pen"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"/></svg>
+                <span>Editar idea</span>
+            </button>
+
+            <button
+                type="button"
+                hx-post='{{url "ideas:reanalyze" .detail.Idea.ID}}'
+                hx-target="#workspace"
+                hx-swap="innerHTML"
+                class="flex items-center gap-1.5 border border-zinc-800 hover:border-cyan-500 bg-zinc-900 text-zinc-200 hover:text-cyan-400 px-2.5 py-1 rounded-xs cursor-pointer transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-cw"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+                <span>Volver a analizar</span>
+            </button>
+
+            <button
+                type="button"
+                onclick="var el=document.getElementById('idea-delete-panel'); el.classList.toggle('hidden'); el.classList.toggle('flex');"
+                class="flex items-center gap-1.5 border border-zinc-800 hover:border-red-500 bg-zinc-900 text-zinc-200 hover:text-red-400 px-2.5 py-1 rounded-xs cursor-pointer transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-x"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="m14.5 12.5-5 5"/><path d="m9.5 12.5 5 5"/></svg>
+                <span>Eliminar</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="idea-delete-panel" class="hidden flex-col gap-3 border border-red-500/40 bg-red-950/20 p-3.5 rounded-xs">
+        {{if gt .detail.GroupCount 1}}
+        <div class="flex flex-col gap-1">
+            <span class="text-xs font-medium text-red-300">
+                Esta parte es el fragmento {{.detail.CurrentPosition}} de una idea compuesta por {{.detail.GroupCount}} fragmentos. ¿Qué deseas eliminar?
+            </span>
+            <span class="text-[11px] text-zinc-400">
+                Al eliminar se borrarán también todas las conexiones asociadas en la red de pensamiento.
+            </span>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <button
+                type="button"
+                hx-post='{{url "ideas:delete" .detail.Idea.ID}}'
+                hx-target="#workspace"
+                hx-swap="innerHTML"
+                hx-push-url='{{url "ideas:list"}}'
+                class="flex items-center gap-1.5 border border-amber-500/60 hover:border-amber-400 bg-amber-500/10 text-amber-200 px-3 py-1 rounded-xs cursor-pointer transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-x"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="m14.5 12.5-5 5"/><path d="m9.5 12.5 5 5"/></svg>
+                <span>Eliminar solo este fragmento</span>
+            </button>
+
+            <button
+                type="button"
+                hx-post='{{url "ideas:delete_group" .detail.Idea.ID}}'
+                hx-target="#workspace"
+                hx-swap="innerHTML"
+                hx-push-url='{{url "ideas:list"}}'
+                class="flex items-center gap-1.5 border border-red-500/70 hover:border-red-400 bg-red-500/20 text-red-200 px-3 py-1 rounded-xs cursor-pointer transition-all font-medium">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-x"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="m14.5 12.5-5 5"/><path d="m9.5 12.5 5 5"/></svg>
+                <span>Eliminar idea completa ({{.detail.GroupCount}} fragmentos)</span>
+            </button>
+
+            <button
+                type="button"
+                onclick="var el=document.getElementById('idea-delete-panel'); el.classList.add('hidden'); el.classList.remove('flex');"
+                class="text-zinc-400 hover:text-zinc-200 px-2 py-1 cursor-pointer transition-colors">
+                Cancelar
+            </button>
+        </div>
         {{else}}
-        <span class="text-[10px] uppercase px-2 py-0.5 rounded-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-            Idea · Borrador
-        </span>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <span class="text-xs text-red-200">
+                ¿Confirmas que deseas eliminar esta idea y todas sus relaciones en la red?
+            </span>
+            <div class="flex items-center gap-3">
+                <button
+                    type="button"
+                    hx-post='{{url "ideas:delete" .detail.Idea.ID}}'
+                    hx-target="#workspace"
+                    hx-swap="innerHTML"
+                    hx-push-url='{{url "ideas:list"}}'
+                    class="flex items-center gap-1.5 border border-red-500/70 hover:border-red-400 bg-red-500/20 text-red-200 px-3 py-1 rounded-xs cursor-pointer transition-all font-medium">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-x"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="m14.5 12.5-5 5"/><path d="m9.5 12.5 5 5"/></svg>
+                    <span>Confirmar eliminación</span>
+                </button>
+                <button
+                    type="button"
+                    onclick="var el=document.getElementById('idea-delete-panel'); el.classList.add('hidden'); el.classList.remove('flex');"
+                    class="text-zinc-400 hover:text-zinc-200 px-2 py-1 cursor-pointer transition-colors">
+                    Cancelar
+                </button>
+            </div>
+        </div>
         {{end}}
     </div>
+
+    {{if gt .detail.GroupCount 1}}
+    <div class="border border-cyan-500/30 bg-cyan-950/15 px-3.5 py-2 rounded-xs flex flex-wrap items-center justify-between gap-2 text-[11px]">
+        <span class="text-zinc-300">
+            Estás viendo el <strong class="text-cyan-300">fragmento {{.detail.CurrentPosition}} de {{.detail.GroupCount}}</strong> de esta misma idea.
+        </span>
+        <div class="flex items-center gap-3">
+            {{if .detail.PrevFragmentID}}
+            <button
+                type="button"
+                hx-get='{{url "ideas:detail" .detail.PrevFragmentID}}'
+                hx-target="#workspace"
+                hx-swap="innerHTML"
+                hx-push-url="true"
+                class="text-cyan-400 hover:text-cyan-300 cursor-pointer transition-colors">
+                ← Fragmento anterior
+            </button>
+            {{end}}
+            {{if .detail.NextFragmentID}}
+            <button
+                type="button"
+                hx-get='{{url "ideas:detail" .detail.NextFragmentID}}'
+                hx-target="#workspace"
+                hx-swap="innerHTML"
+                hx-push-url="true"
+                class="text-cyan-400 hover:text-cyan-300 cursor-pointer transition-colors">
+                Siguiente fragmento →
+            </button>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
 
     <div class="border border-zinc-800 rounded-xs bg-zinc-900/70 p-4 flex flex-col gap-3">
         <h2 class="text-lg font-medium text-zinc-100">
@@ -48,17 +188,21 @@
             {{if .detail.Idea.RestructuredContent}}
             <div class="border border-zinc-800 rounded-xs bg-zinc-900 p-4 flex flex-col gap-2">
                 <span class="text-[10px] text-cyan-400 uppercase font-semibold tracking-wider">
-                    Nota reestructurada (Síntesis)
+                    Idea reestructurada (Síntesis)
                 </span>
                 <p class="text-zinc-100 leading-relaxed whitespace-pre-line border-l-2 border-cyan-500 pl-3 text-xs">
                     {{.detail.Idea.RestructuredContent}}
                 </p>
             </div>
+            {{else}}
+            <div class="border border-amber-500/30 rounded-xs bg-amber-950/10 p-3 text-amber-300 text-[11px]">
+                Esta idea se encuentra en la cola de análisis. En unos segundos se generará su síntesis, términos y conexiones.
+            </div>
             {{end}}
 
             <div class="border border-zinc-800 rounded-xs bg-zinc-900 p-4 flex flex-col gap-2">
                 <span class="text-[10px] text-zinc-400 uppercase font-semibold tracking-wider">
-                    Nota original
+                    Idea original
                 </span>
                 <p class="text-zinc-300 leading-relaxed whitespace-pre-line border-l-2 border-zinc-700 pl-3 text-xs">
                     {{.detail.Idea.Content}}

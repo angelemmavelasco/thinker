@@ -368,7 +368,7 @@ func ChunkText(text string, maxChars int) []string {
 		unitRunes := len([]rune(unit))
 		currRunes := len([]rune(current.String()))
 
-		if currRunes > 0 && currRunes+1+unitRunes > maxChars {
+		if currRunes > 0 && currRunes+2+unitRunes > maxChars {
 			chunks = append(chunks, strings.TrimSpace(current.String()))
 			current.Reset()
 		}

@@ -24,8 +24,8 @@ WHERE user_id = $1
 ORDER BY created_at DESC;
 
 -- name: CreateIdea :one
-INSERT INTO ideas (id, user_id, title, content, status)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO ideas (id, user_id, group_id, chunk_index, chunk_total, title, content, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: UpdateIdeaAnalysis :one
@@ -112,3 +112,45 @@ FROM idea_links il
 JOIN ideas i ON i.id = il.target_idea_id
 WHERE il.source_idea_id = $1
 ORDER BY il.weight DESC;
+
+-- name: UpdateIdeaContentAndReset :one
+UPDATE ideas
+SET title = $2,
+    content = $3,
+    restructured_content = '',
+    embedding = '',
+    status = 'borrador',
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING *;
+
+-- name: ResetIdeaForReanalysis :one
+UPDATE ideas
+SET restructured_content = '',
+    embedding = '',
+    status = 'borrador',
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteIdeaLinksByIdeaID :exec
+DELETE FROM idea_links
+WHERE source_idea_id = $1 OR target_idea_id = $1;
+
+-- name: DeleteIdeaKeywordsByIdeaID :exec
+DELETE FROM idea_keywords
+WHERE idea_id = $1;
+
+-- name: DeleteOrphanKeywords :exec
+DELETE FROM keywords
+WHERE id NOT IN (SELECT DISTINCT keyword_id FROM idea_keywords);
+
+-- name: DeleteIdeasByGroupID :exec
+DELETE FROM ideas
+WHERE group_id = $1;
+
+-- name: ListIdeasByGroupID :many
+SELECT id, title, chunk_index, chunk_total, status
+FROM ideas
+WHERE group_id = $1
+ORDER BY chunk_index ASC, created_at ASC;

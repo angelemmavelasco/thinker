@@ -168,3 +168,127 @@ func (h *IdeaHandler) IdeaDetail(c *gin.Context) {
 
 	config.Render(c, http.StatusOK, "idea_detail.html", data)
 }
+
+func (h *IdeaHandler) EditIdeaView(c *gin.Context) {
+	ideaID := c.Param("id")
+	detail, err := h.service.GetIdeaDetail(c.Request.Context(), ideaID)
+	if err != nil {
+		c.String(http.StatusNotFound, "No se encontró la idea solicitada: %v", err)
+		return
+	}
+
+	data := gin.H{
+		"title":     "Editar idea",
+		"ideaID":    detail.Idea.ID,
+		"ideaTitle": detail.Idea.Title,
+		"content":   detail.Idea.Content,
+	}
+
+	if c.GetHeader("HX-Request") == "true" {
+		config.Render(c, http.StatusOK, "_idea_edit.html", data)
+		return
+	}
+
+	config.Render(c, http.StatusOK, "idea_edit.html", data)
+}
+
+func (h *IdeaHandler) UpdateIdea(c *gin.Context) {
+	ideaID := c.Param("id")
+	title := strings.TrimSpace(c.PostForm("title"))
+	content := strings.TrimSpace(c.PostForm("content"))
+
+	if title == "" || content == "" {
+		data := gin.H{
+			"title":     "Editar idea",
+			"error":     "El título y el contenido son obligatorios.",
+			"ideaID":    ideaID,
+			"ideaTitle": title,
+			"content":   content,
+		}
+
+		if c.GetHeader("HX-Request") == "true" {
+			config.Render(c, http.StatusBadRequest, "_idea_edit.html", data)
+			return
+		}
+
+		config.Render(c, http.StatusBadRequest, "idea_edit.html", data)
+		return
+	}
+
+	detail, err := h.service.UpdateIdea(c.Request.Context(), ideaID, title, content)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Error al actualizar la idea: %v", err)
+		return
+	}
+
+	data := gin.H{
+		"title":  detail.Idea.Title,
+		"detail": detail,
+	}
+
+	if c.GetHeader("HX-Request") == "true" {
+		config.Render(c, http.StatusOK, "_idea_detail.html", data)
+		return
+	}
+
+	c.Redirect(http.StatusSeeOther, "/web/ideas/"+ideaID)
+}
+
+func (h *IdeaHandler) ReanalyzeIdea(c *gin.Context) {
+	ideaID := c.Param("id")
+	detail, err := h.service.ReanalyzeIdea(c.Request.Context(), ideaID)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Error al volver a analizar la idea: %v", err)
+		return
+	}
+
+	data := gin.H{
+		"title":  detail.Idea.Title,
+		"detail": detail,
+	}
+
+	if c.GetHeader("HX-Request") == "true" {
+		config.Render(c, http.StatusOK, "_idea_detail.html", data)
+		return
+	}
+
+	c.Redirect(http.StatusSeeOther, "/web/ideas/"+ideaID)
+}
+
+func (h *IdeaHandler) DeleteIdeaFragment(c *gin.Context) {
+	ideaID := c.Param("id")
+	if err := h.service.DeleteIdeaFragment(c.Request.Context(), ideaID); err != nil {
+		c.String(http.StatusInternalServerError, "Error al eliminar el fragmento: %v", err)
+		return
+	}
+
+	h.renderIdeasListOrRedirect(c)
+}
+
+func (h *IdeaHandler) DeleteIdeaGroup(c *gin.Context) {
+	ideaID := c.Param("id")
+	if err := h.service.DeleteIdeaGroup(c.Request.Context(), ideaID); err != nil {
+		c.String(http.StatusInternalServerError, "Error al eliminar la idea completa: %v", err)
+		return
+	}
+
+	h.renderIdeasListOrRedirect(c)
+}
+
+func (h *IdeaHandler) renderIdeasListOrRedirect(c *gin.Context) {
+	if c.GetHeader("HX-Request") == "true" {
+		ideas, err := h.service.ListIdeas(c.Request.Context())
+		if err != nil {
+			c.String(http.StatusInternalServerError, "Error al actualizar el repositorio de ideas: %v", err)
+			return
+		}
+
+		config.Render(c, http.StatusOK, "_ideas_list.html", gin.H{
+			"title": "Repositorio de ideas",
+			"ideas": ideas,
+		})
+		return
+	}
+
+	c.Redirect(http.StatusSeeOther, "/web/ideas/list")
+}

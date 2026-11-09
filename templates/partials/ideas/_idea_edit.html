@@ -1,0 +1,53 @@
+<form
+hx-post='{{url "ideas:edit" .ideaID}}'
+hx-target="#workspace"
+hx-swap="innerHTML"
+hx-push-url='{{url "ideas:detail" .ideaID}}'
+class="max-w-2xl mx-auto border border-zinc-800 rounded-xs bg-zinc-900 p-4 flex flex-col gap-4">
+
+    <div class="flex items-center justify-between border-b border-zinc-800 pb-2">
+        <h3 class="text-sm font-medium text-zinc-100">Editar idea</h3>
+        <button
+            type="button"
+            hx-get='{{url "ideas:detail" .ideaID}}'
+            hx-target="#workspace"
+            hx-swap="innerHTML"
+            hx-push-url="true"
+            class="text-zinc-400 hover:text-cyan-400 cursor-pointer transition-colors text-xs">
+            ← Volver al detalle
+        </button>
+    </div>
+
+    {{if .error}}
+    <p class="border border-red-500/50 bg-red-500/10 text-red-300 p-2 rounded-xs">
+        {{.error}}
+    </p>
+    {{end}}
+
+    <div class="flex flex-col gap-1">
+        <label class="text-[10px] uppercase text-zinc-400 font-semibold">Título de la idea</label>
+        <input type="text" name="title" placeholder="Título" value="{{.ideaTitle}}" required
+            class="w-full outline-none border border-zinc-800 hover:border-cyan-500 focus:border-cyan-500 rounded-xs bg-zinc-950 p-1.5 transition-all" />
+    </div>
+
+    <div class="flex flex-col gap-1">
+        <label class="text-[10px] uppercase text-zinc-400 font-semibold">Contenido original de la idea</label>
+        <textarea name="content" rows="8" placeholder="Contenido de la idea" required
+            class="w-full outline-none border border-zinc-800 hover:border-cyan-500 focus:border-cyan-500 rounded-xs bg-zinc-950 p-1.5 transition-all">{{.content}}</textarea>
+    </div>
+
+    <div class="flex gap-3 items-center justify-start pt-1">
+        <button type="submit" class="border border-zinc-50 hover:border-cyan-500 text-zinc-50 hover:text-cyan-500 rounded-xs px-3 py-1 cursor-pointer transition-all">
+            Guardar y volver a analizar
+        </button>
+        <button
+            type="button"
+            hx-get='{{url "ideas:detail" .ideaID}}'
+            hx-target="#workspace"
+            hx-swap="innerHTML"
+            hx-push-url="true"
+            class="text-zinc-400 hover:text-red-400 cursor-pointer transition-all">
+            Cancelar
+        </button>
+    </div>
+</form>
