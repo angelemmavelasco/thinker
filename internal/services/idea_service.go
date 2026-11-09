@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/google/uuid"
 	"thinker/internal/database"
@@ -949,4 +951,192 @@ func (s *IdeaService) TraverseSubGraph(ctx context.Context, seedIDs []uuid.UUID,
 	}
 
 	return result, nil
+}
+
+type SeedCandidate struct {
+	IdeaID       uuid.UUID
+	Title        string
+	Score        float64
+	VectorScore  float64
+	KeywordScore float64
+	MatchedTerms []string
+}
+
+func extractQueryWords(raw string) []string {
+	stopWords := map[string]bool{
+		"el": true, "la": true, "los": true, "las": true,
+		"un": true, "una": true, "unos": true, "unas": true,
+		"de": true, "del": true, "en": true, "para": true,
+		"por": true, "con": true, "que": true, "como": true,
+		"sobre": true, "entre": true, "este": true, "esta": true,
+		"estos": true, "estas": true, "a": true, "al": true,
+		"y": true, "o": true, "u": true, "the": true,
+		"is": true, "are": true, "was": true, "were": true,
+		"in": true, "on": true, "at": true, "to": true,
+		"for": true, "with": true, "about": true, "of": true,
+	}
+
+	cleaned := strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return unicode.ToLower(r)
+		}
+		return ' '
+	}, raw)
+
+	fields := strings.Fields(cleaned)
+	var words []string
+	seen := make(map[string]bool)
+
+	for _, f := range fields {
+		if len([]rune(f)) < 3 || stopWords[f] || seen[f] {
+			continue
+		}
+		seen[f] = true
+		words = append(words, f)
+	}
+
+	if len(words) == 0 && len(fields) > 0 {
+		for _, f := range fields {
+			if !seen[f] {
+				seen[f] = true
+				words = append(words, f)
+			}
+		}
+	}
+
+	return words
+}
+
+func (s *IdeaService) FindSeedIdeas(ctx context.Context, queryText string, topK int) ([]SeedCandidate, error) {
+	cleanedQuery := strings.TrimSpace(queryText)
+	if cleanedQuery == "" {
+		return nil, nil
+	}
+
+	if topK <= 0 {
+		topK = 3
+	}
+
+	var queryVec []float64
+	if s.embedding != nil {
+		if vec, err := s.embedding.GenerateEmbedding(ctx, cleanedQuery); err == nil && len(vec) > 0 {
+			queryVec = vec
+		}
+	}
+
+	queryWords := extractQueryWords(cleanedQuery)
+	lowerQuery := strings.ToLower(cleanedQuery)
+
+	ideas, err := s.queries.ListIdeas(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	candidates := make([]SeedCandidate, 0, len(ideas))
+
+	for _, idea := range ideas {
+		var vecScore float64
+		if len(queryVec) > 0 && idea.Embedding != "" {
+			if ideaVec, err := DeserializeVector(idea.Embedding); err == nil && len(ideaVec) > 0 {
+				vecScore = CosineSimilarity(queryVec, ideaVec)
+				if vecScore < 0 {
+					vecScore = 0
+				}
+			}
+		}
+
+		var matchedTerms []string
+		seenMatched := make(map[string]bool)
+
+		lowerTitle := strings.ToLower(idea.Title)
+		for _, w := range queryWords {
+			if strings.Contains(lowerTitle, w) && !seenMatched[w] {
+				seenMatched[w] = true
+				matchedTerms = append(matchedTerms, w)
+			}
+		}
+
+		if s.keywordService != nil {
+			if kws, err := s.keywordService.ListKeywordsByIdeaID(ctx, idea.ID); err == nil {
+				for _, kw := range kws {
+					kwLower := strings.ToLower(kw.Name)
+					if strings.Contains(lowerQuery, kwLower) && !seenMatched[kwLower] {
+						seenMatched[kwLower] = true
+						matchedTerms = append(matchedTerms, kwLower)
+					} else {
+						for _, w := range queryWords {
+							if strings.Contains(kwLower, w) && !seenMatched[w] {
+								seenMatched[w] = true
+								matchedTerms = append(matchedTerms, w)
+							}
+						}
+					}
+				}
+			}
+		}
+
+		var kwScore float64
+		if len(queryWords) > 0 {
+			kwScore = float64(len(matchedTerms)) / float64(len(queryWords))
+			if kwScore > 1.0 {
+				kwScore = 1.0
+			}
+		}
+
+		var finalScore float64
+		if len(queryVec) > 0 && len(queryWords) > 0 {
+			finalScore = (0.75 * vecScore) + (0.25 * kwScore)
+		} else if len(queryVec) > 0 {
+			finalScore = vecScore
+		} else {
+			finalScore = kwScore
+		}
+
+		if finalScore > 0 {
+			candidates = append(candidates, SeedCandidate{
+				IdeaID:       idea.ID,
+				Title:        idea.Title,
+				Score:        finalScore,
+				VectorScore:  vecScore,
+				KeywordScore: kwScore,
+				MatchedTerms: matchedTerms,
+			})
+		}
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].Score > candidates[j].Score
+	})
+
+	if len(candidates) > topK {
+		candidates = candidates[:topK]
+	}
+
+	return candidates, nil
+}
+
+func (s *IdeaService) SearchAndExpand(ctx context.Context, queryText string, topKSeeds int, opts TraversalOptions) (*TraversalSubGraph, []SeedCandidate, error) {
+	seeds, err := s.FindSeedIdeas(ctx, queryText, topKSeeds)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(seeds) == 0 {
+		return &TraversalSubGraph{
+			SeedIDs: make([]uuid.UUID, 0),
+			Nodes:   make([]TraversalNode, 0),
+			Edges:   make([]TraversalEdge, 0),
+		}, nil, nil
+	}
+
+	seedIDs := make([]uuid.UUID, 0, len(seeds))
+	for _, seed := range seeds {
+		seedIDs = append(seedIDs, seed.IdeaID)
+	}
+
+	subGraph, err := s.TraverseSubGraph(ctx, seedIDs, opts)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return subGraph, seeds, nil
 }

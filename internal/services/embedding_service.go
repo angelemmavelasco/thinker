@@ -27,6 +27,12 @@ func NewEmbeddingService(baseURL, apiKey string) *EmbeddingService {
 	}
 }
 
+func (s *EmbeddingService) SetHTTPClient(client *http.Client) {
+	if client != nil {
+		s.httpClient = client
+	}
+}
+
 type embeddingRequest struct {
 	Input string `json:"input"`
 }
