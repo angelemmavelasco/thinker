@@ -26,6 +26,7 @@ type BaseConfig struct {
 	EmbeddingApiKey           string
 	EmbeddingBaseURL          string
 	EmbeddingModel            string
+	PromptsDir                string
 	DBHost                    string
 	DBPort                    string
 	DBName                    string
@@ -79,11 +80,11 @@ func LoadConfig() (*BaseConfig, error) {
 		llmApiKey = strings.TrimSpace(os.Getenv("LLM_API_KEY"))
 		llmBaseURL = strings.TrimRight(strings.TrimSpace(os.Getenv("LLM_BASE_URL")), "/")
 		if llmBaseURL == "" {
-			llmBaseURL = "https://api.minimax.io/v1"
+			llmBaseURL = "https://api.openai.com/v1"
 		}
 		llmModel = strings.TrimSpace(os.Getenv("LLM_MODEL"))
 		if llmModel == "" {
-			llmModel = "MiniMax-Text-01"
+			llmModel = "gpt-4o-mini"
 		}
 	} else {
 		llmBaseURL = "http://127.0.0.1:8081/v1"
@@ -99,16 +100,21 @@ func LoadConfig() (*BaseConfig, error) {
 		}
 		embeddingBaseURL = strings.TrimRight(strings.TrimSpace(os.Getenv("EMBEDDING_BASE_URL")), "/")
 		if embeddingBaseURL == "" {
-			embeddingBaseURL = "https://api.minimax.io/v1"
+			embeddingBaseURL = "https://api.openai.com/v1"
 		}
 		embeddingModel = strings.TrimSpace(os.Getenv("EMBEDDING_MODEL"))
 		if embeddingModel == "" {
-			embeddingModel = "embo-01"
+			embeddingModel = "text-embedding-3-small"
 		}
 	} else {
 		embeddingBaseURL = "http://127.0.0.1:8082/v1"
 		embeddingModel = "bge-small-en-v1.5"
 		embeddingApiKey = ""
+	}
+
+	promptsDir := strings.TrimSpace(os.Getenv("PROMPTS_DIR"))
+	if promptsDir == "" {
+		promptsDir = "prompts"
 	}
 
 	dbHost := os.Getenv("DB_HOST")
@@ -150,6 +156,7 @@ func LoadConfig() (*BaseConfig, error) {
 		EmbeddingApiKey:           embeddingApiKey,
 		EmbeddingBaseURL:          embeddingBaseURL,
 		EmbeddingModel:            embeddingModel,
+		PromptsDir:                promptsDir,
 		DBHost:                    dbHost,
 		DBPort:                    dbPort,
 		DBName:                    dbName,

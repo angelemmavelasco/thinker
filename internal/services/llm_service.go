@@ -9,14 +9,16 @@ import (
 	"time"
 
 	"github.com/sashabaranov/go-openai"
+	"thinker/prompts"
 )
 
 type LLMService struct {
-	baseURL    string
-	apiKey     string
-	model      string
-	httpClient *http.Client
-	client     *openai.Client
+	baseURL       string
+	apiKey        string
+	model         string
+	httpClient    *http.Client
+	client        *openai.Client
+	promptManager *prompts.Manager
 }
 
 func NewLLMService(baseURL, apiKey string, model ...string) *LLMService {
@@ -43,11 +45,12 @@ func NewLLMService(baseURL, apiKey string, model ...string) *LLMService {
 	client := openai.NewClientWithConfig(cfg)
 
 	return &LLMService{
-		baseURL:    cleanBaseURL,
-		apiKey:     apiKey,
-		model:      m,
-		httpClient: httpClient,
-		client:     client,
+		baseURL:       cleanBaseURL,
+		apiKey:        apiKey,
+		model:         m,
+		httpClient:    httpClient,
+		client:        client,
+		promptManager: prompts.NewManager(),
 	}
 }
 
@@ -59,6 +62,19 @@ func (s *LLMService) SetHTTPClient(client *http.Client) {
 		cfg.HTTPClient = client
 		s.client = openai.NewClientWithConfig(cfg)
 	}
+}
+
+func (s *LLMService) SetPromptManager(pm *prompts.Manager) {
+	if pm != nil {
+		s.promptManager = pm
+	}
+}
+
+func (s *LLMService) getPromptManager() *prompts.Manager {
+	if s.promptManager != nil {
+		return s.promptManager
+	}
+	return prompts.NewManager()
 }
 
 type chatCompletionRequest struct {
@@ -85,17 +101,13 @@ type IdeaAnalysisResult struct {
 }
 
 func (s *LLMService) AnalyzeIdea(ctx context.Context, title, content string) (*IdeaAnalysisResult, error) {
+	systemPrompt := s.getPromptManager().AnalyzeIdea()
 	resp, err := s.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model: s.model,
 		Messages: []openai.ChatCompletionMessage{
 			{
-				Role: openai.ChatMessageRoleSystem,
-				Content: `Analiza la nota y responde únicamente con JSON válido, sin markdown, usando esta estructura:
-{
-  "restructured_note": "Síntesis clara y organizada de la nota en máximo 3 oraciones",
-  "key_entities": ["Concepto clave 1", "Concepto clave 2"]
-}
-Extrae entre 3 y 7 conceptos clave cortos. No inventes información.`,
+				Role:    openai.ChatMessageRoleSystem,
+				Content: systemPrompt,
 			},
 			{
 				Role:    openai.ChatMessageRoleUser,
@@ -178,12 +190,7 @@ func (s *LLMService) ExpandQuery(ctx context.Context, query string) (string, err
 		return "", fmt.Errorf("la consulta está vacía")
 	}
 
-	systemInstruction := "Eres un asistente especializado en normalización y expansión de consultas para recuperación semántica (RAG). " +
-		"Tu objetivo es transformar la consulta del usuario en una formulación formal, técnica y descriptiva para maximizar la precisión de búsqueda semántica y léxica en la base de datos documental.\n\n" +
-		"INSTRUCCIONES:\n" +
-		"1. Traduce modismos, jergas, abreviaturas o lenguaje coloquial a términos formales, regulatorios o institucionales equivalentes.\n" +
-		"2. Identifica la intención principal y desglosa los conceptos y sinónimos relevantes sin alterar el objetivo de la pregunta.\n" +
-		"3. Responde ÚNICAMENTE con la consulta normalizada y términos clave en una o dos oraciones directas, sin explicaciones, prefijos ni introducciones."
+	systemInstruction := s.getPromptManager().ExpandQuery()
 
 	resp, err := s.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model: s.model,
@@ -230,17 +237,7 @@ func (s *LLMService) AskKnowledgeGraph(ctx context.Context, question string, sub
 		return InsufficientContextResponse, nil
 	}
 
-	systemInstruction := "Actúa como un asistente documental preciso, profesional y directo. " +
-		"Tu función es responder a la pregunta del usuario basándote EXCLUSIVAMENTE en la información de la documentación provista.\n\n" +
-		"REGLAS OBLIGATORIAS:\n" +
-		"1. Grounding estricto: Responde única y exclusivamente con base en los hechos explícitos provistos en la documentación. " +
-		"Si la documentación provista no contiene información suficiente para responder a la pregunta con certeza o no trata el tema consultado, debes responder exactamente:\n" +
-		"\"La documentación indexada no contiene información suficiente sobre este punto.\"\n" +
-		"Queda terminantemente prohibido inventar información, suponer, conjeturar o sugerir alternativas externas (como acudir a abogados particulares, cambiar de institución o ciudad, o sugerencias de sentido común no respaldadas por los textos).\n" +
-		"2. Neutralidad de interfaz: No menciones jamás la arquitectura técnica interna del sistema ni cómo se almacena o recupera la información. " +
-		"Está terminantemente prohibido usar frases como \"en el contexto del grafo de conocimiento\", \"en el grafo\", \"según los fragmentos proporcionados\", \"en la base de datos\", \"los nodos\", \"nodos semilla\" o \"en el contexto provisto\". " +
-		"Dirígete al usuario con un lenguaje natural, directo y profesional.\n" +
-		"3. Respaldo documental natural: Puedes citar con naturalidad los títulos de las secciones, políticas o normativas provistas cuando sea pertinente (por ejemplo, \"De acuerdo con [Título]...\"), sin referirte a ellos como nodos del sistema."
+	systemInstruction := s.getPromptManager().AskKnowledgeGraph()
 
 	userContent := fmt.Sprintf("Pregunta:\n%s\n\nDocumentación de referencia:\n%s", cleanedQuestion, contextPrompt)
 

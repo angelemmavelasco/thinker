@@ -10,6 +10,7 @@ import (
 	"thinker/internal/database"
 	"thinker/internal/routes"
 	"thinker/internal/services"
+	"thinker/prompts"
 )
 
 func main() {
@@ -46,7 +47,9 @@ func main() {
 	queries := database.New(conn)
 	log.Printf("[config] LLM: external=%v (url=%s, model=%s)", baseConfig.ExternalLLMProvider, baseConfig.LLMBaseURL, baseConfig.LLMModel)
 	log.Printf("[config] Embeddings: external=%v (url=%s, model=%s)", baseConfig.ExternalEmbeddingProvider, baseConfig.EmbeddingBaseURL, baseConfig.EmbeddingModel)
+	promptManager := prompts.NewManager(baseConfig.PromptsDir)
 	llmService := services.NewLLMService(baseConfig.LLMBaseURL, baseConfig.LLMApiKey, baseConfig.LLMModel)
+	llmService.SetPromptManager(promptManager)
 	embeddingService := services.NewEmbeddingService(baseConfig.EmbeddingBaseURL, baseConfig.EmbeddingApiKey, baseConfig.EmbeddingModel)
 	router := routes.SetUpRouter(queries, llmService, embeddingService, baseConfig)
 

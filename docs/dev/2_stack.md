@@ -7,7 +7,7 @@
 
 - LLM
 > - [Qwen2.5-3B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF)
-> - [MiniMax M3.1 Flash](https://www.minimax.io/blog/minimax-m31f)
+> - OpenAI API Compatible External Providers (OpenAI, DeepSeek, Groq, etc.)
 
 - HTML5
 - CSS
