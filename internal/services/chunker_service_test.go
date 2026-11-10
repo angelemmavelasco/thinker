@@ -125,3 +125,28 @@ func TestChunkText_OverlapContinuity(t *testing.T) {
 		t.Errorf("expected semantic overlap between chunk 1 and chunk 2. Chunk 1: %q, Chunk 2: %q", c1, c2)
 	}
 }
+
+func TestExtractPDFTextPureGo(t *testing.T) {
+	fakePDF := []byte("stream\nBT /F1 12 Tf (Hello Pure Go World) Tj ET\nendstream")
+	text, err := extractPDFTextPureGo(fakePDF)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(text, "Hello Pure Go World") {
+		t.Errorf("expected extracted text to contain 'Hello Pure Go World', got: %q", text)
+	}
+}
+
+func TestExtractPDFTextPureGo_CMapHex(t *testing.T) {
+	cmapStream := "stream\nbegincmap\nbeginbfchar\n<0028> <0041>\n<004A> <0063>\nendbfchar\nendcmap\nendstream"
+	contentStream := "stream\nBT /F1 12 Tf <0028004A> Tj ET\nendstream"
+	fullPDF := []byte(cmapStream + "\n" + contentStream)
+
+	text, err := extractPDFTextPureGo(fullPDF)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(text, "Ac") {
+		t.Errorf("expected 'Ac', got: %q", text)
+	}
+}

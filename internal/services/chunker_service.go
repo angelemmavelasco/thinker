@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"encoding/csv"
+	"encoding/hex"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -13,8 +14,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf16"
 )
 
 const (
@@ -177,15 +180,48 @@ func extractDOCXText(data []byte) (string, error) {
 }
 
 var pdfStreamRegex = regexp.MustCompile(`(?s)stream\r?\n(.*?)\r?\nendstream`)
-var pdfBTETRegex = regexp.MustCompile(`(?s)\bBT\b(.*?)\bET\b`)
-var pdfParenTextRegex = regexp.MustCompile(`\((?:\\.|[^\\()])*\)`)
 
 func extractPDFText(data []byte) (string, error) {
-	if text, err := extractPDFWithQuartz(data); err == nil && strings.TrimSpace(text) != "" {
+	if text, err := extractPDFWithPdftotext(data); err == nil && len(strings.TrimSpace(text)) > 10 {
+		return text, nil
+	}
+
+	if text, err := extractPDFWithQuartz(data); err == nil && len(strings.TrimSpace(text)) > 10 {
 		return text, nil
 	}
 
 	return extractPDFTextPureGo(data)
+}
+
+func extractPDFWithPdftotext(data []byte) (string, error) {
+	if _, err := exec.LookPath("pdftotext"); err != nil {
+		return "", err
+	}
+
+	tmpFile, err := os.CreateTemp("", "thinker_pdf_*.pdf")
+	if err != nil {
+		return "", err
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
+
+	if _, err := tmpFile.Write(data); err != nil {
+		_ = tmpFile.Close()
+		return "", err
+	}
+	_ = tmpFile.Close()
+
+	cmd := exec.Command("pdftotext", "-layout", "-enc", "UTF-8", tmpPath, "-")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+
+	cleaned := cleanPDFExtractedText(string(out))
+	if len(cleaned) < 5 {
+		return "", fmt.Errorf("no se encontró texto legible en el PDF")
+	}
+	return cleaned, nil
 }
 
 func extractPDFWithQuartz(data []byte) (string, error) {
@@ -236,52 +272,219 @@ function run(argv) {
 	return cleaned, nil
 }
 
+type pdfCMap struct {
+	charMap  map[string]string
+	rangeMap []pdfRangeMapping
+}
+
+type pdfRangeMapping struct {
+	start uint32
+	end   uint32
+	dst   uint32
+}
+
+func parsePDFCMaps(streams [][]byte) *pdfCMap {
+	cm := &pdfCMap{
+		charMap: make(map[string]string),
+	}
+
+	bfCharRegex := regexp.MustCompile(`(?s)beginbfchar(.*?)endbfchar`)
+	bfRangeRegex := regexp.MustCompile(`(?s)beginbfrange(.*?)endbfrange`)
+	hexPairRegex := regexp.MustCompile(`<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>`)
+	rangePairRegex := regexp.MustCompile(`<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>`)
+
+	for _, s := range streams {
+		if !bytes.Contains(s, []byte("begincmap")) {
+			continue
+		}
+
+		for _, m := range bfCharRegex.FindAllSubmatch(s, -1) {
+			for _, pair := range hexPairRegex.FindAllSubmatch(m[1], -1) {
+				src := strings.ToUpper(string(pair[1]))
+				dstHex := string(pair[2])
+				dstRunes := decodePDFHexToRunes(dstHex)
+				if len(dstRunes) > 0 {
+					cm.charMap[src] = string(dstRunes)
+				}
+			}
+		}
+
+		for _, m := range bfRangeRegex.FindAllSubmatch(s, -1) {
+			for _, r := range rangePairRegex.FindAllSubmatch(m[1], -1) {
+				startVal, err1 := strconv.ParseUint(string(r[1]), 16, 32)
+				endVal, err2 := strconv.ParseUint(string(r[2]), 16, 32)
+				dstVal, err3 := strconv.ParseUint(string(r[3]), 16, 32)
+				if err1 == nil && err2 == nil && err3 == nil && endVal >= startVal {
+					cm.rangeMap = append(cm.rangeMap, pdfRangeMapping{
+						start: uint32(startVal),
+						end:   uint32(endVal),
+						dst:   uint32(dstVal),
+					})
+				}
+			}
+		}
+	}
+	return cm
+}
+
+func decodePDFHexToRunes(hexStr string) []rune {
+	if len(hexStr)%2 != 0 {
+		hexStr += "0"
+	}
+	raw, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return nil
+	}
+	if len(raw)%2 == 0 {
+		u16 := make([]uint16, len(raw)/2)
+		for i := 0; i < len(raw); i += 2 {
+			u16[i/2] = uint16(raw[i])<<8 | uint16(raw[i+1])
+		}
+		return utf16.Decode(u16)
+	}
+	return []rune(string(raw))
+}
+
+func (cm *pdfCMap) DecodeHex(srcHex string) string {
+	clean := strings.ToUpper(strings.TrimSpace(srcHex))
+	if len(clean) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	chunkSize := 4
+	if len(clean)%4 != 0 && len(clean)%2 == 0 {
+		chunkSize = 2
+	}
+
+	for i := 0; i < len(clean); i += chunkSize {
+		end := i + chunkSize
+		if end > len(clean) {
+			end = len(clean)
+		}
+		part := clean[i:end]
+
+		if mapped, ok := cm.charMap[part]; ok {
+			sb.WriteString(mapped)
+			continue
+		}
+
+		val, err := strconv.ParseUint(part, 16, 32)
+		if err == nil {
+			found := false
+			for _, rm := range cm.rangeMap {
+				if uint32(val) >= rm.start && uint32(val) <= rm.end {
+					offset := uint32(val) - rm.start
+					target := rm.dst + offset
+					sb.WriteRune(rune(target))
+					found = true
+					break
+				}
+			}
+			if found {
+				continue
+			}
+		}
+
+		if val >= 32 && val <= 126 {
+			sb.WriteRune(rune(val))
+		}
+	}
+	return sb.String()
+}
+
 func extractPDFTextPureGo(data []byte) (string, error) {
-	var extracted []string
 	matches := pdfStreamRegex.FindAllSubmatch(data, -1)
 
+	var decodedStreams [][]byte
 	for _, m := range matches {
-		streamData := bytes.TrimSpace(m[1])
-		zr, err := zlib.NewReader(bytes.NewReader(streamData))
-		if err != nil {
-			continue
+		zr, err := zlib.NewReader(bytes.NewReader(bytes.TrimSpace(m[1])))
+		if err == nil {
+			dec, rErr := io.ReadAll(zr)
+			_ = zr.Close()
+			if rErr == nil && len(dec) > 0 {
+				decodedStreams = append(decodedStreams, dec)
+				continue
+			}
 		}
-		decoded, rErr := io.ReadAll(zr)
-		_ = zr.Close()
-		if rErr != nil || len(decoded) == 0 {
-			continue
-		}
+		decodedStreams = append(decodedStreams, m[1])
+	}
 
-		btBlocks := pdfBTETRegex.FindAllSubmatch(decoded, -1)
-		if len(btBlocks) == 0 {
+	cmap := parsePDFCMaps(decodedStreams)
+
+	btRegex := regexp.MustCompile(`(?s)\bBT\b(.*?)\bET\b`)
+	tjHexRegex := regexp.MustCompile(`<([0-9A-Fa-f\s]+)>\s*(?:Tj|'|")`)
+	tjParenRegex := regexp.MustCompile(`\(((?:\\.|[^\\()])*)\)\s*(?:Tj|'|")`)
+	tjArrayRegex := regexp.MustCompile(`\[(.*?)\]\s*TJ`)
+	tokenRegex := regexp.MustCompile(`<([0-9A-Fa-f\s]+)>|\(((?:\\.|[^\\()])*)\)`)
+
+	var extracted []string
+	for _, stream := range decodedStreams {
+		bts := btRegex.FindAllSubmatch(stream, -1)
+		if len(bts) == 0 {
 			continue
 		}
 
 		var pageBuilder strings.Builder
-		for _, block := range btBlocks {
-			tokens := pdfParenTextRegex.FindAll(block[1], -1)
-			for _, tok := range tokens {
-				if len(tok) <= 2 {
-					continue
+		for _, bt := range bts {
+			block := bt[1]
+
+			for _, hexM := range tjHexRegex.FindAllSubmatch(block, -1) {
+				h := strings.ReplaceAll(string(hexM[1]), " ", "")
+				txt := cmap.DecodeHex(h)
+				cleaned := cleanPrintableText(txt)
+				if cleaned != "" {
+					pageBuilder.WriteString(cleaned)
+					pageBuilder.WriteString(" ")
 				}
-				inner := string(tok[1 : len(tok)-1])
+			}
+
+			for _, parenM := range tjParenRegex.FindAllSubmatch(block, -1) {
+				inner := string(parenM[1])
 				inner = strings.ReplaceAll(inner, `\n`, "\n")
 				inner = strings.ReplaceAll(inner, `\r`, " ")
 				inner = strings.ReplaceAll(inner, `\t`, " ")
 				inner = strings.ReplaceAll(inner, `\(`, "(")
 				inner = strings.ReplaceAll(inner, `\)`, ")")
 				inner = strings.ReplaceAll(inner, `\\`, `\`)
-
 				cleaned := cleanPrintableText(inner)
 				if cleaned != "" {
 					pageBuilder.WriteString(cleaned)
 					pageBuilder.WriteString(" ")
 				}
 			}
+
+			for _, arrM := range tjArrayRegex.FindAllSubmatch(block, -1) {
+				inner := arrM[1]
+				allTokens := tokenRegex.FindAllSubmatch(inner, -1)
+				for _, tok := range allTokens {
+					if len(tok[1]) > 0 {
+						h := strings.ReplaceAll(string(tok[1]), " ", "")
+						txt := cmap.DecodeHex(h)
+						cleaned := cleanPrintableText(txt)
+						if cleaned != "" {
+							pageBuilder.WriteString(cleaned)
+						}
+					} else if len(tok[2]) > 0 {
+						s := string(tok[2])
+						s = strings.ReplaceAll(s, `\n`, "\n")
+						s = strings.ReplaceAll(s, `\r`, " ")
+						s = strings.ReplaceAll(s, `\t`, " ")
+						s = strings.ReplaceAll(s, `\(`, "(")
+						s = strings.ReplaceAll(s, `\)`, ")")
+						s = strings.ReplaceAll(s, `\\`, `\`)
+						cleaned := cleanPrintableText(s)
+						if cleaned != "" {
+							pageBuilder.WriteString(cleaned)
+						}
+					}
+				}
+				pageBuilder.WriteString(" ")
+			}
 		}
 
 		segment := strings.TrimSpace(pageBuilder.String())
-		if len(segment) > 2 {
+		if len(segment) > 0 {
 			extracted = append(extracted, segment)
 		}
 	}
@@ -290,18 +493,19 @@ func extractPDFTextPureGo(data []byte) (string, error) {
 		return "", fmt.Errorf("no se pudo extraer texto legible del PDF")
 	}
 
-	return strings.Join(extracted, "\n\n"), nil
+	cleaned := cleanPDFExtractedText(strings.Join(extracted, "\n\n"))
+	if len(cleaned) == 0 {
+		return "", fmt.Errorf("no se pudo extraer texto legible del PDF")
+	}
+
+	return cleaned, nil
 }
 
 func isReadableLatinRune(r rune) bool {
 	if r == '\n' || r == '\t' || r == ' ' {
 		return true
 	}
-	if unicode.In(r, unicode.Latin) || unicode.IsDigit(r) {
-		return true
-	}
-	switch r {
-	case '.', ',', ';', ':', '!', '¡', '?', '¿', '(', ')', '[', ']', '-', '–', '—', '"', '\'', '«', '»', '/', '%', '+', '=', '*':
+	if unicode.In(r, unicode.Latin) || unicode.IsDigit(r) || unicode.IsPunct(r) || unicode.IsSymbol(r) {
 		return true
 	}
 	return false
