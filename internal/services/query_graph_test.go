@@ -77,16 +77,16 @@ func TestBuildSubGraphPrompt(t *testing.T) {
 	if !strings.Contains(prompt, "Contexto primario (Nodos Semilla):") {
 		t.Fatalf("expected header for primary context in prompt")
 	}
-	if !strings.Contains(prompt, "- [Arquitectura Modular]: Notas sobre desacoplamiento e interfaces.") {
+	if !strings.Contains(prompt, "- [Arquitectura Modular]: Contenido crudo A") {
 		t.Errorf("expected seed node in prompt, got:\n%s", prompt)
 	}
 	if !strings.Contains(prompt, "Contexto asociativo conectado (Vecinos directos y secundarios):") {
 		t.Fatalf("expected header for associative context in prompt")
 	}
-	if !strings.Contains(prompt, "- [Seguridad de Tokens] (conectada con Arquitectura Modular por 'semantic'): Gestion de claves asimetricas y JWT.") {
+	if !strings.Contains(prompt, "- [Seguridad de Tokens] (conectada con Arquitectura Modular por 'semantic'): Contenido B") {
 		t.Errorf("expected 1-hop connected node in prompt, got:\n%s", prompt)
 	}
-	if !strings.Contains(prompt, "- [Rotacion de Refresh Tokens] (conectada con Seguridad de Tokens por 'concept_overlap'): Deteccion de robo de tokens.") {
+	if !strings.Contains(prompt, "- [Rotacion de Refresh Tokens] (conectada con Seguridad de Tokens por 'concept_overlap'): Contenido C") {
 		t.Errorf("expected 2-hop connected node in prompt, got:\n%s", prompt)
 	}
 }

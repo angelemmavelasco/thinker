@@ -93,7 +93,7 @@ func (s *EmbeddingService) GenerateEmbedding(ctx context.Context, text string) (
 		cleaned = string(runes[:1200])
 	}
 
-	maxAttempts := 3
+	maxAttempts := 5
 	var lastErr error
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
@@ -109,7 +109,7 @@ func (s *EmbeddingService) GenerateEmbedding(ctx context.Context, text string) (
 			break
 		}
 
-		backoff := time.Duration(attempt*1500) * time.Millisecond
+		backoff := time.Duration(attempt*2000) * time.Millisecond
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()

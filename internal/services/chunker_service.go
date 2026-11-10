@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	DefaultChunkMaxChars     = 450
+	DefaultChunkMaxChars     = 1200
 	DefaultChunkOverlapRatio = 0.12
 )
 

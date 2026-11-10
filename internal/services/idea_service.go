@@ -98,7 +98,7 @@ func (s *IdeaService) startWorker() {
 			}
 			continue
 		}
-		time.Sleep(150 * time.Millisecond)
+		time.Sleep(350 * time.Millisecond)
 	}
 }
 
@@ -218,14 +218,14 @@ func (s *IdeaService) CreateIdeasFromInput(ctx context.Context, userIDStr, title
 			SourceIdeaID: prevID,
 			TargetIdeaID: currID,
 			RelationType: "sequence",
-			Weight:       0.50,
+			Weight:       0.85,
 		})
 		_, _ = s.queries.CreateIdeaLink(ctx, database.CreateIdeaLinkParams{
 			ID:           uuid.New(),
 			SourceIdeaID: currID,
 			TargetIdeaID: prevID,
 			RelationType: "sequence",
-			Weight:       0.50,
+			Weight:       0.85,
 		})
 	}
 
@@ -620,14 +620,14 @@ func (s *IdeaService) relinkGroupSequence(ctx context.Context, groupID uuid.UUID
 			SourceIdeaID: prevID,
 			TargetIdeaID: currID,
 			RelationType: "sequence",
-			Weight:       0.50,
+			Weight:       0.85,
 		})
 		_, _ = s.queries.CreateIdeaLink(ctx, database.CreateIdeaLinkParams{
 			ID:           uuid.New(),
 			SourceIdeaID: currID,
 			TargetIdeaID: prevID,
 			RelationType: "sequence",
-			Weight:       0.50,
+			Weight:       0.85,
 		})
 	}
 }
@@ -841,7 +841,7 @@ func (s *IdeaService) TraverseSubGraph(ctx context.Context, seedIDs []uuid.UUID,
 
 		addedForSeed := 0
 		for _, neighbor := range neighbors {
-			if neighbor.Weight < opts.MinWeight {
+			if neighbor.RelationType != "sequence" && neighbor.Weight < opts.MinWeight {
 				continue
 			}
 
@@ -907,7 +907,7 @@ func (s *IdeaService) TraverseSubGraph(ctx context.Context, seedIDs []uuid.UUID,
 
 		addedForHop1 := 0
 		for _, neighbor := range neighbors {
-			if neighbor.Weight < opts.MinWeight {
+			if neighbor.RelationType != "sequence" && neighbor.Weight < opts.MinWeight {
 				continue
 			}
 
@@ -1045,8 +1045,9 @@ func (s *IdeaService) FindSeedIdeas(ctx context.Context, queryText string, topK 
 		}
 	}
 
+	rawWords := extractQueryWords(cleanedQuery)
 	queryWords := extractQueryWords(searchQuery)
-	for _, w := range extractQueryWords(cleanedQuery) {
+	for _, w := range rawWords {
 		found := false
 		for _, qw := range queryWords {
 			if qw == w {
@@ -1109,12 +1110,37 @@ func (s *IdeaService) FindSeedIdeas(ctx context.Context, queryText string, topK 
 			}
 		}
 
-		var kwScore float64
-		if len(queryWords) > 0 {
-			kwScore = float64(len(matchedTerms)) / float64(len(queryWords))
-			if kwScore > 1.0 {
-				kwScore = 1.0
+		lowerContent := strings.ToLower(idea.Content)
+		for _, w := range queryWords {
+			if strings.Contains(lowerContent, w) && !seenMatched[w] {
+				seenMatched[w] = true
+				matchedTerms = append(matchedTerms, w)
 			}
+		}
+
+		var kwScore float64
+		if len(rawWords) > 0 {
+			rawMatches := 0
+			for _, rw := range rawWords {
+				if seenMatched[rw] {
+					rawMatches++
+				}
+			}
+			rawRatio := float64(rawMatches) / float64(len(rawWords))
+			var expRatio float64
+			if len(queryWords) > 0 {
+				expRatio = float64(len(matchedTerms)) / float64(len(queryWords))
+			}
+			if rawRatio > expRatio {
+				kwScore = rawRatio
+			} else {
+				kwScore = expRatio
+			}
+		} else if len(queryWords) > 0 {
+			kwScore = float64(len(matchedTerms)) / float64(len(queryWords))
+		}
+		if kwScore > 1.0 {
+			kwScore = 1.0
 		}
 
 		var finalScore float64
@@ -1122,9 +1148,16 @@ func (s *IdeaService) FindSeedIdeas(ctx context.Context, queryText string, topK 
 			if vecScore < DefaultMinVectorScore && kwScore < DefaultMinKeywordScore {
 				continue
 			}
-			finalScore = (0.75 * vecScore) + (0.25 * kwScore)
-			if finalScore < DefaultMinSeedScore {
+			if kwScore >= 0.35 {
+				finalScore = (0.50 * vecScore) + (0.50 * kwScore)
+			} else {
+				finalScore = (0.75 * vecScore) + (0.25 * kwScore)
+			}
+			if finalScore < DefaultMinSeedScore && kwScore < 0.40 {
 				continue
+			}
+			if finalScore < DefaultMinSeedScore {
+				finalScore = DefaultMinSeedScore
 			}
 		} else if len(queryVec) > 0 {
 			if vecScore < DefaultMinSeedScore {
@@ -1202,9 +1235,9 @@ func BuildSubGraphPrompt(subGraph *TraversalSubGraph) string {
 	for _, node := range subGraph.Nodes {
 		if node.HopDistance == 0 {
 			hasSeeds = true
-			content := node.RestructuredContent
+			content := node.Content
 			if strings.TrimSpace(content) == "" {
-				content = node.Content
+				content = node.RestructuredContent
 			}
 			sb.WriteString(fmt.Sprintf("- [%s]: %s\n", node.Title, strings.TrimSpace(content)))
 		}
@@ -1218,9 +1251,9 @@ func BuildSubGraphPrompt(subGraph *TraversalSubGraph) string {
 	for _, node := range subGraph.Nodes {
 		if node.HopDistance > 0 {
 			hasNeighbors = true
-			content := node.RestructuredContent
+			content := node.Content
 			if strings.TrimSpace(content) == "" {
-				content = node.Content
+				content = node.RestructuredContent
 			}
 			parentTitle := titleByID[node.LinkedFromID]
 			if parentTitle == "" {
