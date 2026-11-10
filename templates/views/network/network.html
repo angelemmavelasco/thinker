@@ -1,6 +1,16 @@
 {{define "content"}}
 
 <script src="https://unpkg.com/force-graph"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+.markdown-body strong { font-weight: 600; color: #f4f4f5; }
+.markdown-body ul { list-style-type: disc; padding-left: 1.25rem; margin-top: 0.25rem; margin-bottom: 0.25rem; }
+.markdown-body ol { list-style-type: decimal; padding-left: 1.25rem; margin-top: 0.25rem; margin-bottom: 0.25rem; }
+.markdown-body li { margin-top: 0.15rem; margin-bottom: 0.15rem; }
+.markdown-body p { margin-top: 0.25rem; margin-bottom: 0.25rem; line-height: 1.5; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { font-weight: 600; color: #f4f4f5; margin-top: 0.5rem; margin-bottom: 0.25rem; }
+.markdown-body code { background: #18181b; border: 1px solid #27272a; padding: 0.1rem 0.25rem; border-radius: 0.125rem; font-family: monospace; color: #67e8f9; }
+</style>
 
 <div class="flex flex-col gap-4">
     <div class="flex flex-wrap items-center justify-between border-b border-cyan-500 py-1 gap-4">
@@ -539,13 +549,114 @@
         if (el) el.remove();
     }
 
-    function appendAssistantMessage(data) {
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function renderMarkdown(raw) {
+        if (!raw) return "";
+        if (typeof window.marked !== "undefined" && typeof window.marked.parse === "function") {
+            try {
+                return window.marked.parse(raw);
+            } catch (_) {}
+        }
+        let html = escapeHtml(raw);
+        html = html.replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-zinc-100">$1</strong>');
+        html = html.replace(/\*(.+?)\*/g, '<em class="italic text-zinc-200">$1</em>');
+        html = html.replace(/^### (.+)$/gm, '<h4 class="font-semibold text-zinc-100 mt-2 mb-1 text-xs">$1</h4>');
+        html = html.replace(/^## (.+)$/gm, '<h3 class="font-semibold text-zinc-100 mt-2 mb-1 text-xs">$1</h3>');
+        html = html.replace(/^# (.+)$/gm, '<h2 class="font-bold text-zinc-100 mt-2 mb-1 text-xs">$1</h2>');
+        html = html.replace(/^\s*[-*]\s+(.+)$/gm, '<li class="ml-4 list-disc text-zinc-200">$1</li>');
+        html = html.replace(/^\s*(\d+)\.\s+(.+)$/gm, '<li class="ml-4 list-decimal text-zinc-200">$2</li>');
+        html = html.replace(/\n\n+/g, '</p><p class="mt-2 text-zinc-200">');
+        html = html.replace(/\n/g, '<br/>');
+        return '<p class="text-zinc-200">' + html + '</p>';
+    }
+
+    function copyToClipboard(text, btn) {
+        if (!text) return;
+        const prevHTML = btn.innerHTML;
+        const checkIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+        function onCopied() {
+            btn.innerHTML = checkIcon;
+            setTimeout(() => {
+                btn.innerHTML = prevHTML;
+            }, 1500);
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(onCopied).catch(() => {
+                fallbackCopy(text);
+                onCopied();
+            });
+        } else {
+            fallbackCopy(text);
+            onCopied();
+        }
+    }
+
+    function fallbackCopy(text) {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try {
+            document.execCommand("copy");
+        } catch (_) {}
+        document.body.removeChild(ta);
+    }
+
+    function appendAssistantMessage(data, userQuestion) {
         const wrap = document.createElement("div");
         wrap.className = "flex flex-col gap-2 p-2.5 rounded-xs bg-zinc-950 border border-zinc-800/90 text-zinc-200 leading-relaxed";
 
+        const topBar = document.createElement("div");
+        topBar.className = "flex items-center justify-between border-b border-zinc-800/70 pb-1 text-[11px]";
+
+        const senderLabel = document.createElement("div");
+        senderLabel.className = "flex items-center gap-1.5 text-cyan-400 font-medium";
+        senderLabel.innerHTML = '<span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400"></span><span>Thinker</span>';
+        topBar.appendChild(senderLabel);
+
+        const actionsBox = document.createElement("div");
+        actionsBox.className = "flex items-center gap-1";
+
+        const copyQuestionBtn = document.createElement("button");
+        copyQuestionBtn.type = "button";
+        copyQuestionBtn.className = "p-1 text-zinc-400 hover:text-cyan-300 hover:bg-zinc-900 rounded-xs cursor-pointer transition-all";
+        copyQuestionBtn.title = "Copiar pregunta y respuesta";
+        copyQuestionBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy preview-icon"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/><path d="M13.5 12.2a1.5 1.5 0 0 1 2.8.6c0 .8-.7 1.2-1.2 1.6-.3.3-.6.6-.6 1.1"/><path d="M14.5 17.5h.01"/></svg>';
+
+        copyQuestionBtn.addEventListener("click", () => {
+            const qaText = userQuestion ? `Pregunta: ${userQuestion}\n\nRespuesta:\n${data.answer || ""}` : (data.answer || "");
+            copyToClipboard(qaText, copyQuestionBtn);
+        });
+        actionsBox.appendChild(copyQuestionBtn);
+
+        const copyAnswerBtn = document.createElement("button");
+        copyAnswerBtn.type = "button";
+        copyAnswerBtn.className = "p-1 text-zinc-400 hover:text-cyan-300 hover:bg-zinc-900 rounded-xs cursor-pointer transition-all";
+        copyAnswerBtn.title = "Copiar respuesta";
+        copyAnswerBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy preview-icon"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+
+        copyAnswerBtn.addEventListener("click", () => {
+            copyToClipboard(data.answer || "", copyAnswerBtn);
+        });
+        actionsBox.appendChild(copyAnswerBtn);
+
+        topBar.appendChild(actionsBox);
+        wrap.appendChild(topBar);
+
         const textEl = document.createElement("div");
-        textEl.className = "whitespace-pre-line text-zinc-200";
-        textEl.textContent = data.answer || "No se pudo obtener una respuesta.";
+        textEl.className = "markdown-body text-zinc-200 text-xs leading-relaxed flex flex-col gap-1.5";
+        textEl.innerHTML = renderMarkdown(data.answer || "No se pudo obtener una respuesta.");
         wrap.appendChild(textEl);
 
         if (data.sources && data.sources.length > 0) {
@@ -627,7 +738,7 @@
             .then(res => res.json())
             .then(data => {
                 removeMessage(loadingId);
-                appendAssistantMessage(data);
+                appendAssistantMessage(data, question);
                 scrollChatToBottom();
             })
             .catch(() => {
