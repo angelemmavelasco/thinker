@@ -3,7 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
-	_ "embed"
+	"embed"
 	"fmt"
 	"log"
 	"os"
@@ -18,6 +18,9 @@ import (
 
 //go:embed schema.sql
 var schemaSQL string
+
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
 
 const migrationsDir = "internal/database/migrations"
 const developmentUserID = "00000000-0000-0000-0000-000000000001"
@@ -59,7 +62,7 @@ var chunkTitleSuffixRegex = regexp.MustCompile(`^(.*)\s+\((\d+)/(\d+)\)$`)
 func backfillIdeaGroups(ctx context.Context, conn *sql.DB) error {
 	rows, err := conn.QueryContext(
 		ctx,
-		"SELECT id, title FROM ideas WHERE group_id = '00000000-0000-0000-0000-000000000000' OR group_id = ''",
+		"SELECT id, title FROM ideas WHERE group_id IS NULL OR group_id = '00000000-0000-0000-0000-000000000000' OR CAST(group_id AS TEXT) = ''",
 	)
 	if err != nil {
 		return err
@@ -141,65 +144,75 @@ func EnsureDevelopmentUser(ctx context.Context, conn *sql.DB) error {
 }
 
 func runVersionedMigrations(ctx context.Context, conn *sql.DB) error {
-	entries, err := os.ReadDir(migrationsDir)
-	if err != nil {
-		return nil
+	type migEntry struct {
+		name    string
+		content []byte
 	}
+	var migrations []migEntry
 
-	var files []string
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
-			files = append(files, entry.Name())
+	if entries, err := migrationsFS.ReadDir("migrations"); err == nil && len(entries) > 0 {
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
+				if content, err := migrationsFS.ReadFile("migrations/" + entry.Name()); err == nil {
+					migrations = append(migrations, migEntry{name: entry.Name(), content: content})
+				}
+			}
+		}
+	} else if entries, err := os.ReadDir(migrationsDir); err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
+				if content, err := os.ReadFile(filepath.Join(migrationsDir, entry.Name())); err == nil {
+					migrations = append(migrations, migEntry{name: entry.Name(), content: content})
+				}
+			}
 		}
 	}
-	sort.Strings(files)
 
-	for _, fileName := range files {
+	sort.Slice(migrations, func(i, j int) bool {
+		return migrations[i].name < migrations[j].name
+	})
+
+	for _, mig := range migrations {
 		var count int
 		err := conn.QueryRowContext(
 			ctx,
 			"SELECT COUNT(1) FROM schema_migrations WHERE version = $1",
-			fileName,
+			mig.name,
 		).Scan(&count)
 		if err != nil {
-			return fmt.Errorf("failed checking migration %s: %w", fileName, err)
+			return fmt.Errorf("failed checking migration %s: %w", mig.name, err)
 		}
 
 		if count > 0 {
 			continue
 		}
 
-		content, err := os.ReadFile(filepath.Join(migrationsDir, fileName))
-		if err != nil {
-			return fmt.Errorf("failed reading migration file %s: %w", fileName, err)
-		}
-
 		tx, err := conn.BeginTx(ctx, nil)
 		if err != nil {
-			return fmt.Errorf("failed starting transaction for %s: %w", fileName, err)
+			return fmt.Errorf("failed starting transaction for %s: %w", mig.name, err)
 		}
 
-		if strings.TrimSpace(string(content)) != "" {
-			if _, err := tx.ExecContext(ctx, string(content)); err != nil {
+		if strings.TrimSpace(string(mig.content)) != "" {
+			if _, err := tx.ExecContext(ctx, string(mig.content)); err != nil {
 				_ = tx.Rollback()
-				return fmt.Errorf("migration %s failed: %w", fileName, err)
+				return fmt.Errorf("migration %s failed: %w", mig.name, err)
 			}
 		}
 
 		if _, err := tx.ExecContext(
 			ctx,
 			"INSERT INTO schema_migrations (version) VALUES ($1)",
-			fileName,
+			mig.name,
 		); err != nil {
 			_ = tx.Rollback()
-			return fmt.Errorf("failed recording migration %s: %w", fileName, err)
+			return fmt.Errorf("failed recording migration %s: %w", mig.name, err)
 		}
 
 		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("failed committing migration %s: %w", fileName, err)
+			return fmt.Errorf("failed committing migration %s: %w", mig.name, err)
 		}
 
-		log.Printf("[migrations] Applied migration: %s", fileName)
+		log.Printf("[migrations] Applied migration: %s", mig.name)
 	}
 
 	return nil
