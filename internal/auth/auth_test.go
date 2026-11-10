@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestArgon2idHashAndVerify(t *testing.T) {
@@ -43,6 +44,38 @@ func TestArgon2idHashAndVerify(t *testing.T) {
 	VerifyDummyPassword("any-password")
 	if time.Since(start) <= 0 {
 		t.Fatalf("expected VerifyDummyPassword to execute Argon2id computation")
+	}
+}
+
+func TestBcryptPasswordVerificationAndRehash(t *testing.T) {
+	password := "LegacyBcryptPassword!2025"
+
+	bcryptHashBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("bcrypt.GenerateFromPassword failed: %v", err)
+	}
+	bcryptHash := string(bcryptHashBytes)
+
+	if !NeedsPasswordRehash(bcryptHash) {
+		t.Fatalf("expected NeedsPasswordRehash to be true for bcrypt hash")
+	}
+
+	ok, err := VerifyPassword(password, bcryptHash)
+	if err != nil || !ok {
+		t.Fatalf("expected bcrypt hash to verify successfully: ok=%v err=%v", ok, err)
+	}
+
+	okWrong, err := VerifyPassword("WrongPassword!2026", bcryptHash)
+	if err != nil || okWrong {
+		t.Fatalf("expected wrong password to fail bcrypt verification")
+	}
+
+	argonHash, err := HashPassword(password)
+	if err != nil {
+		t.Fatalf("HashPassword failed: %v", err)
+	}
+	if NeedsPasswordRehash(argonHash) {
+		t.Fatalf("expected NeedsPasswordRehash to be false for argon2id hash")
 	}
 }
 

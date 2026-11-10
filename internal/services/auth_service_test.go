@@ -5,10 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
+	"golang.org/x/crypto/bcrypt"
 
 	"thinker/internal/auth"
 	"thinker/internal/config"
@@ -145,5 +148,57 @@ func TestAuthLifecycle_Verification_Rotation_Lockout_And_Reset(t *testing.T) {
 	}
 	if _, err := authSvc.ValidateUserTokenVersion(ctx, session3.User.ID, claims3.TokenVersion); !errors.Is(err, ErrSessionInvalidated) {
 		t.Fatalf("expected JWT with old token_version to be rejected after LogoutAllSessions, got: %v", err)
+	}
+}
+
+func TestBcryptPasswordUpgradeOnLogin(t *testing.T) {
+	authSvc, queries, cleanup := setupTestAuthService(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	rawPassword := "OldBcryptSecret123!"
+	bcryptHashBytes, err := bcrypt.GenerateFromPassword([]byte(rawPassword), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("bcrypt.GenerateFromPassword failed: %v", err)
+	}
+	bcryptHash := string(bcryptHashBytes)
+
+	userID := uuid.New()
+	email := "grace.hopper@example.com"
+	_, err = queries.CreateUser(ctx, database.CreateUserParams{
+		ID:            userID,
+		Email:         email,
+		PasswordHash:  bcryptHash,
+		Role:          "member",
+		AuthProvider:  "local",
+		GoogleID:      "",
+		EmailVerified: 1,
+	})
+	if err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+
+	session, err := authSvc.Login(ctx, email, rawPassword, "127.0.0.1", "GoTest")
+	if err != nil {
+		t.Fatalf("Login with bcrypt hash failed: %v", err)
+	}
+	if session == nil || session.AccessToken == "" {
+		t.Fatalf("expected valid session after logging in with bcrypt hash")
+	}
+
+	updatedUser, err := queries.GetUserByID(ctx, userID)
+	if err != nil {
+		t.Fatalf("GetUserByID failed: %v", err)
+	}
+	if !strings.HasPrefix(updatedUser.PasswordHash, "$argon2id$") {
+		t.Fatalf("expected password hash to be upgraded to Argon2id, got: %s", updatedUser.PasswordHash)
+	}
+
+	session2, err := authSvc.Login(ctx, email, rawPassword, "127.0.0.1", "GoTest")
+	if err != nil {
+		t.Fatalf("Second login using newly upgraded Argon2id hash failed: %v", err)
+	}
+	if session2 == nil || session2.AccessToken == "" {
+		t.Fatalf("expected valid session on second login")
 	}
 }

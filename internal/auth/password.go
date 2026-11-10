@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/crypto/argon2"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Argon2Params struct {
@@ -77,8 +78,36 @@ func HashPasswordWithParams(password string, p *Argon2Params) (string, error) {
 	return encoded, nil
 }
 
+func isBcryptHash(hash string) bool {
+	return strings.HasPrefix(hash, "$2a$") ||
+		strings.HasPrefix(hash, "$2b$") ||
+		strings.HasPrefix(hash, "$2x$") ||
+		strings.HasPrefix(hash, "$2y$")
+}
+
+// NeedsPasswordRehash returns true if the hash is not formatted with Argon2id.
+func NeedsPasswordRehash(encodedHash string) bool {
+	return !strings.HasPrefix(encodedHash, "$argon2id$")
+}
+
 func VerifyPassword(password, encodedHash string) (bool, error) {
-	if encodedHash == "" || !strings.HasPrefix(encodedHash, "$argon2id$") {
+	if encodedHash == "" {
+		VerifyDummyPassword(password)
+		return false, ErrInvalidHashFormat
+	}
+
+	if isBcryptHash(encodedHash) {
+		err := bcrypt.CompareHashAndPassword([]byte(encodedHash), []byte(password))
+		if err == nil {
+			return true, nil
+		}
+		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	if !strings.HasPrefix(encodedHash, "$argon2id$") {
 		VerifyDummyPassword(password)
 		return false, ErrInvalidHashFormat
 	}

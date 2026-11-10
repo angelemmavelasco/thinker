@@ -211,6 +211,17 @@ func (s *AuthService) Login(ctx context.Context, rawEmail, password, ipAddress, 
 		return nil, ErrEmailNotVerified
 	}
 
+	if auth.NeedsPasswordRehash(user.PasswordHash) {
+		if newHash, hashErr := auth.HashPassword(password); hashErr == nil {
+			if updatedUser, updateErr := s.queries.UpdateUserPasswordAndBumpTokenVersion(ctx, database.UpdateUserPasswordAndBumpTokenVersionParams{
+				ID:           user.ID,
+				PasswordHash: newHash,
+			}); updateErr == nil {
+				user = updatedUser
+			}
+		}
+	}
+
 	return s.createInitialSession(ctx, user, ipAddress, userAgent)
 }
 
