@@ -1,12 +1,11 @@
 <form
-hx-post="/web/ideas/new"
-hx-encoding="multipart/form-data"
+id="idea-form"
+action="/web/ideas/new"
+method="POST"
 enctype="multipart/form-data"
-hx-target="#workspace"
-hx-swap="innerHTML"
-hx-push-url="/web/ideas/list"
+onsubmit="return handleIdeaFormSubmit(event)"
 class="
-max-w-xl mx-auto
+relative max-w-xl mx-auto
 border border-zinc-800 rounded-xs
 bg-zinc-900 p-2 flex flex-col gap-4
 ">
@@ -44,6 +43,149 @@ bg-zinc-900 p-2 flex flex-col gap-4
             <button type="button" onclick="clearIdeaFile()" class="shrink-0 text-zinc-400 hover:text-red-400 cursor-pointer transition-colors">
                 Quitar
             </button>
+        </div>
+    </div>
+
+    <div class="flex gap-3 items-center justify-start">
+        <button type="submit" class="border border-zinc-50 hover:border-cyan-500 text-zinc-50 hover:text-cyan-500 rounded p-1 cursor-pointer transition-all">
+            Confirmar
+        </button>
+        <button
+        type="button"
+        hx-get="/web/ideas/list"
+        hx-target="#workspace"
+        hx-swap="innerHTML"
+        class="text-zinc-50 hover:text-red-500 cursor-pointer transition-all">
+            Cancelar
+        </button>
+    </div>
+
+    <style>
+        #idea-loading-screen {
+            display: none;
+        }
+        #idea-loading-screen.active {
+            display: flex;
+        }
+    </style>
+
+    <div id="idea-loading-screen" class="fixed inset-0 z-[110] bg-zinc-950/90 backdrop-blur-md flex-col items-center justify-center p-6 text-center select-none">
+        <div class="flex flex-col items-center gap-4 max-w-sm w-full">
+            
+            <div class="flex items-center justify-center text-blue-500">
+                <svg xmlns="http://www.w3.org/2000/svg" width="140" height="34" viewBox="0 0 130 32" fill="none" class="text-blue-500">
+                    <style>
+                        /* Tanda 1 (0% a 50%): Entran en orden C, A, D, B y se reorganizan a A, B, C, D */
+                        @keyframes pureSortA {
+                            0% { transform: translate(50px, -12px); opacity: 0; }
+                            10% { transform: translate(50px, 0); opacity: 1; }
+                            24% { transform: translate(50px, 0); opacity: 1; }
+                            38%, 44% { transform: translate(20px, 0); opacity: 1; }
+                            49%, 100% { transform: translate(20px, 14px); opacity: 0; }
+                        }
+                        @keyframes pureSortB {
+                            0% { transform: translate(110px, -12px); opacity: 0; }
+                            10% { transform: translate(110px, 0); opacity: 1; }
+                            24% { transform: translate(110px, 0); opacity: 1; }
+                            38%, 44% { transform: translate(50px, 0); opacity: 1; }
+                            49%, 100% { transform: translate(50px, 14px); opacity: 0; }
+                        }
+                        @keyframes pureSortC {
+                            0% { transform: translate(20px, -12px); opacity: 0; }
+                            10% { transform: translate(20px, 0); opacity: 1; }
+                            24% { transform: translate(20px, 0); opacity: 1; }
+                            38%, 44% { transform: translate(80px, 0); opacity: 1; }
+                            49%, 100% { transform: translate(80px, 14px); opacity: 0; }
+                        }
+                        @keyframes pureSortD {
+                            0% { transform: translate(80px, -12px); opacity: 0; }
+                            10% { transform: translate(80px, 0); opacity: 1; }
+                            24% { transform: translate(80px, 0); opacity: 1; }
+                            38%, 44% { transform: translate(110px, 0); opacity: 1; }
+                            49%, 100% { transform: translate(110px, 14px); opacity: 0; }
+                        }
+
+                        /* Tanda 2 (50% a 100%): Entran en orden F, H, E, G y se reorganizan a E, F, G, H */
+                        @keyframes pureSortE {
+                            0%, 50% { transform: translate(80px, -12px); opacity: 0; }
+                            60% { transform: translate(80px, 0); opacity: 1; }
+                            74% { transform: translate(80px, 0); opacity: 1; }
+                            88%, 94% { transform: translate(20px, 0); opacity: 1; }
+                            99%, 100% { transform: translate(20px, 14px); opacity: 0; }
+                        }
+                        @keyframes pureSortF {
+                            0%, 50% { transform: translate(20px, -12px); opacity: 0; }
+                            60% { transform: translate(20px, 0); opacity: 1; }
+                            74% { transform: translate(20px, 0); opacity: 1; }
+                            88%, 94% { transform: translate(50px, 0); opacity: 1; }
+                            99%, 100% { transform: translate(50px, 14px); opacity: 0; }
+                        }
+                        @keyframes pureSortG {
+                            0%, 50% { transform: translate(110px, -12px); opacity: 0; }
+                            60% { transform: translate(110px, 0); opacity: 1; }
+                            74% { transform: translate(110px, 0); opacity: 1; }
+                            88%, 94% { transform: translate(80px, 0); opacity: 1; }
+                            99%, 100% { transform: translate(80px, 14px); opacity: 0; }
+                        }
+                        @keyframes pureSortH {
+                            0%, 50% { transform: translate(50px, -12px); opacity: 0; }
+                            60% { transform: translate(50px, 0); opacity: 1; }
+                            74% { transform: translate(50px, 0); opacity: 1; }
+                            88%, 94% { transform: translate(110px, 0); opacity: 1; }
+                            99%, 100% { transform: translate(110px, 14px); opacity: 0; }
+                        }
+
+                        .floating-letter {
+                            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+                            font-weight: 400;
+                            font-size: 16px;
+                            fill: currentColor;
+                            dominant-baseline: central;
+                            text-anchor: middle;
+                        }
+
+                        .let-a { animation: pureSortA 5.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite; }
+                        .let-b { animation: pureSortB 5.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite; }
+                        .let-c { animation: pureSortC 5.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite; }
+                        .let-d { animation: pureSortD 5.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite; }
+
+                        .let-e { animation: pureSortE 5.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite; }
+                        .let-f { animation: pureSortF 5.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite; }
+                        .let-g { animation: pureSortG 5.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite; }
+                        .let-h { animation: pureSortH 5.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite; }
+                    </style>
+
+                    <!-- Literalmente solo las letras al aire -->
+                    <text class="floating-letter let-a" y="16">A</text>
+                    <text class="floating-letter let-b" y="16">B</text>
+                    <text class="floating-letter let-c" y="16">C</text>
+                    <text class="floating-letter let-d" y="16">D</text>
+
+                    <text class="floating-letter let-e" y="16">E</text>
+                    <text class="floating-letter let-f" y="16">F</text>
+                    <text class="floating-letter let-g" y="16">G</text>
+                    <text class="floating-letter let-h" y="16">H</text>
+                </svg>
+            </div>
+
+            <div class="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-[11px] font-mono border border-blue-500/20 bg-blue-950/20 text-blue-400">
+                <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                <span>Organizando</span>
+            </div>
+
+            <div class="min-h-[2rem] flex items-center justify-center px-2">
+                <h4 id="idea-loading-phrase" class="text-sm font-normal text-zinc-100 tracking-wide transition-opacity duration-300">
+                    Revisando la información...
+                </h4>
+            </div>
+
+            <p class="text-xs text-zinc-400 max-w-xs leading-relaxed">
+                Estamos ordenando tu información para que puedas consultarla y encontrarla fácilmente.
+            </p>
+
+            <div class="w-40 bg-zinc-900 rounded-full h-1 overflow-hidden mt-1">
+                <div class="h-full bg-blue-500 w-full animate-[pulse_1.8s_infinite]"></div>
+            </div>
         </div>
     </div>
 
@@ -87,19 +229,140 @@ bg-zinc-900 p-2 flex flex-col gap-4
             preview.classList.remove('flex');
             btn.textContent = 'Subir archivo (.txt, .md, .pdf, .docx, .csv)';
         };
-    </script>
 
-    <div class="flex gap-3 items-center justify-start">
-        <button type="submit" class="border border-zinc-50 hover:border-cyan-500 text-zinc-50 hover:text-cyan-500 rounded p-1 cursor-pointer transition-all">
-            Confirmar
-        </button>
-        <button
-        type="button"
-        hx-get="/web/ideas/list"
-        hx-target="#workspace"
-        hx-swap="innerHTML"
-        class="text-zinc-50 hover:text-red-500 cursor-pointer transition-all">
-            Cancelar
-        </button>
-    </div>
+        (function() {
+            var minCycleMs = 5200;
+            var phraseInterval = null;
+            var currentIdx = 0;
+
+            var phrases = [
+                "Revisando la información...",
+                "Separando las ideas principales...",
+                "Identificando los puntos clave...",
+                "Organizando el contenido...",
+                "Conectando temas relacionados...",
+                "Guardando todo en tu espacio..."
+            ];
+
+            function startPhraseRotation() {
+                var phraseEl = document.getElementById("idea-loading-phrase");
+                var fileInput = document.getElementById("idea-doc-input");
+                if (fileInput && fileInput.files && fileInput.files.length > 0) {
+                    phrases[0] = "Revisando archivo: " + fileInput.files[0].name;
+                } else {
+                    phrases[0] = "Revisando tu idea...";
+                }
+                currentIdx = 0;
+                if (phraseEl) {
+                    phraseEl.textContent = phrases[0];
+                    phraseEl.style.opacity = '1';
+                }
+
+                if (phraseInterval) clearInterval(phraseInterval);
+                phraseInterval = setInterval(function() {
+                    var el = document.getElementById("idea-loading-phrase");
+                    if (!el) return;
+                    el.style.opacity = '0';
+                    setTimeout(function() {
+                        currentIdx = (currentIdx + 1) % phrases.length;
+                        el.textContent = phrases[currentIdx];
+                        el.style.opacity = '1';
+                    }, 200);
+                }, 2200);
+            }
+
+            function stopPhraseRotation() {
+                if (phraseInterval) {
+                    clearInterval(phraseInterval);
+                    phraseInterval = null;
+                }
+            }
+
+            window.handleIdeaFormSubmit = async function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                var form = document.getElementById("idea-form");
+                var titleInput = form.querySelector('input[name="title"]');
+                var contentInput = form.querySelector('textarea[name="content"]');
+                var fileInput = document.getElementById("idea-doc-input");
+
+                var hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+                var hasTitle = titleInput && titleInput.value.trim().length > 0;
+                var hasContent = contentInput && contentInput.value.trim().length > 0;
+
+                if (!hasFile && (!hasTitle || !hasContent)) {
+                    var errorBox = document.getElementById("idea-validation-error");
+                    if (!errorBox) {
+                        errorBox = document.createElement("p");
+                        errorBox.id = "idea-validation-error";
+                        errorBox.className = "border border-red-500/50 bg-red-500/10 text-red-300 p-2 rounded-xs";
+                        form.insertBefore(errorBox, form.children[1]);
+                    }
+                    errorBox.textContent = "El título y el contenido son obligatorios (o sube un archivo .txt, .md, .pdf, .docx, .csv).";
+                    return false;
+                }
+
+                var screen = document.getElementById("idea-loading-screen");
+                if (screen) {
+                    screen.classList.add("active");
+                    screen.style.display = "flex";
+                }
+
+                
+                startPhraseRotation();
+
+                
+                var minCyclePromise = new Promise(function(resolve) {
+                    setTimeout(resolve, minCycleMs);
+                });
+
+                
+                var formData = new FormData(form);
+                var csrfInput = form.querySelector('input[name="csrf_token"]');
+                var csrfToken = csrfInput ? csrfInput.value : "";
+
+                var fetchPromise = fetch("/web/ideas/new", {
+                    method: "POST",
+                    body: formData,
+                    headers: {
+                        "HX-Request": "true",
+                        "X-CSRF-Token": csrfToken
+                    }
+                }).catch(function(err) {
+                    return {
+                        ok: false,
+                        status: 500,
+                        text: function() { return Promise.resolve("Error al conectar con el servidor: " + err.message); }
+                    };
+                });
+
+                
+                try {
+                    var results = await Promise.all([minCyclePromise, fetchPromise]);
+                    var response = results[1];
+                    var responseHtml = await response.text();
+
+                    var workspace = document.getElementById("workspace") || document.body;
+                    workspace.innerHTML = responseHtml;
+
+                    if (window.htmx) {
+                        window.htmx.process(workspace);
+                    }
+
+                    if (response.ok) {
+                        window.history.pushState({}, "", "/web/ideas/list");
+                    }
+                } finally {
+                    stopPhraseRotation();
+                    if (screen) {
+                        screen.classList.remove("active");
+                        screen.style.display = "none";
+                    }
+                }
+
+                return false;
+            };
+        })();
+    </script>
 </form>
