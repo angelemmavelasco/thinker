@@ -18,6 +18,7 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf16"
+	"unicode/utf8"
 )
 
 const (
@@ -386,11 +387,43 @@ func (cm *pdfCMap) DecodeHex(srcHex string) string {
 			}
 		}
 
-		if val >= 32 && val <= 126 {
+		if val >= 32 && val <= 255 {
 			sb.WriteRune(rune(val))
 		}
 	}
 	return sb.String()
+}
+
+func decodePDFParenString(raw string) string {
+	raw = strings.ReplaceAll(raw, `\n`, "\n")
+	raw = strings.ReplaceAll(raw, `\r`, " ")
+	raw = strings.ReplaceAll(raw, `\t`, " ")
+	raw = strings.ReplaceAll(raw, `\(`, "(")
+	raw = strings.ReplaceAll(raw, `\)`, ")")
+	raw = strings.ReplaceAll(raw, `\\`, `\`)
+
+	octalRegex := regexp.MustCompile(`\\([0-7]{1,3})`)
+	raw = octalRegex.ReplaceAllStringFunc(raw, func(m string) string {
+		val, err := strconv.ParseInt(m[1:], 8, 32)
+		if err == nil {
+			return string(rune(val))
+		}
+		return m
+	})
+
+	if !utf8.ValidString(raw) {
+		var b strings.Builder
+		for i := 0; i < len(raw); i++ {
+			by := raw[i]
+			if by < 0x80 {
+				b.WriteByte(by)
+			} else {
+				b.WriteRune(rune(by))
+			}
+		}
+		return b.String()
+	}
+	return raw
 }
 
 func extractPDFTextPureGo(data []byte) (string, error) {
@@ -413,10 +446,8 @@ func extractPDFTextPureGo(data []byte) (string, error) {
 	cmap := parsePDFCMaps(decodedStreams)
 
 	btRegex := regexp.MustCompile(`(?s)\bBT\b(.*?)\bET\b`)
-	tjHexRegex := regexp.MustCompile(`<([0-9A-Fa-f\s]+)>\s*(?:Tj|'|")`)
-	tjParenRegex := regexp.MustCompile(`\(((?:\\.|[^\\()])*)\)\s*(?:Tj|'|")`)
-	tjArrayRegex := regexp.MustCompile(`\[(.*?)\]\s*TJ`)
-	tokenRegex := regexp.MustCompile(`<([0-9A-Fa-f\s]+)>|\(((?:\\.|[^\\()])*)\)`)
+	opRegex := regexp.MustCompile(`(?:<([0-9A-Fa-f\s]+)>|\(((?:\\.|[^\\()])*)\))\s*(?:Tj|'|")|\[(.*?)\]\s*TJ|(-?[\d.]+)\s+(-?[\d.]+)\s+(?:Td|TD)|T\*`)
+	tjTokenRegex := regexp.MustCompile(`<([0-9A-Fa-f\s]+)>|\(((?:\\.|[^\\()])*)\)|(-?[\d.]+)`)
 
 	var extracted []string
 	for _, stream := range decodedStreams {
@@ -428,59 +459,53 @@ func extractPDFTextPureGo(data []byte) (string, error) {
 		var pageBuilder strings.Builder
 		for _, bt := range bts {
 			block := bt[1]
-
-			for _, hexM := range tjHexRegex.FindAllSubmatch(block, -1) {
-				h := strings.ReplaceAll(string(hexM[1]), " ", "")
-				txt := cmap.DecodeHex(h)
-				cleaned := cleanPrintableText(txt)
-				if cleaned != "" {
-					pageBuilder.WriteString(cleaned)
-					pageBuilder.WriteString(" ")
-				}
-			}
-
-			for _, parenM := range tjParenRegex.FindAllSubmatch(block, -1) {
-				inner := string(parenM[1])
-				inner = strings.ReplaceAll(inner, `\n`, "\n")
-				inner = strings.ReplaceAll(inner, `\r`, " ")
-				inner = strings.ReplaceAll(inner, `\t`, " ")
-				inner = strings.ReplaceAll(inner, `\(`, "(")
-				inner = strings.ReplaceAll(inner, `\)`, ")")
-				inner = strings.ReplaceAll(inner, `\\`, `\`)
-				cleaned := cleanPrintableText(inner)
-				if cleaned != "" {
-					pageBuilder.WriteString(cleaned)
-					pageBuilder.WriteString(" ")
-				}
-			}
-
-			for _, arrM := range tjArrayRegex.FindAllSubmatch(block, -1) {
-				inner := arrM[1]
-				allTokens := tokenRegex.FindAllSubmatch(inner, -1)
-				for _, tok := range allTokens {
-					if len(tok[1]) > 0 {
-						h := strings.ReplaceAll(string(tok[1]), " ", "")
-						txt := cmap.DecodeHex(h)
-						cleaned := cleanPrintableText(txt)
-						if cleaned != "" {
-							pageBuilder.WriteString(cleaned)
-						}
-					} else if len(tok[2]) > 0 {
-						s := string(tok[2])
-						s = strings.ReplaceAll(s, `\n`, "\n")
-						s = strings.ReplaceAll(s, `\r`, " ")
-						s = strings.ReplaceAll(s, `\t`, " ")
-						s = strings.ReplaceAll(s, `\(`, "(")
-						s = strings.ReplaceAll(s, `\)`, ")")
-						s = strings.ReplaceAll(s, `\\`, `\`)
-						cleaned := cleanPrintableText(s)
-						if cleaned != "" {
-							pageBuilder.WriteString(cleaned)
+			ops := opRegex.FindAllSubmatch(block, -1)
+			for _, op := range ops {
+				if len(op[1]) > 0 {
+					h := strings.ReplaceAll(string(op[1]), " ", "")
+					txt := cmap.DecodeHex(h)
+					cleaned := cleanPrintableText(txt)
+					if cleaned != "" {
+						pageBuilder.WriteString(cleaned)
+					}
+				} else if len(op[2]) > 0 {
+					decoded := decodePDFParenString(string(op[2]))
+					cleaned := cleanPrintableText(decoded)
+					if cleaned != "" {
+						pageBuilder.WriteString(cleaned)
+					}
+				} else if len(op[3]) > 0 {
+					inner := op[3]
+					tokens := tjTokenRegex.FindAllSubmatch(inner, -1)
+					for _, tok := range tokens {
+						if len(tok[1]) > 0 {
+							h := strings.ReplaceAll(string(tok[1]), " ", "")
+							txt := cmap.DecodeHex(h)
+							cleaned := cleanPrintableText(txt)
+							if cleaned != "" {
+								pageBuilder.WriteString(cleaned)
+							}
+						} else if len(tok[2]) > 0 {
+							decoded := decodePDFParenString(string(tok[2]))
+							cleaned := cleanPrintableText(decoded)
+							if cleaned != "" {
+								pageBuilder.WriteString(cleaned)
+							}
+						} else if len(tok[3]) > 0 {
+							num, err := strconv.ParseFloat(string(tok[3]), 64)
+							if err == nil && num < -140 {
+								pageBuilder.WriteString(" ")
+							}
 						}
 					}
+				} else if len(op[4]) > 0 && len(op[5]) > 0 {
+					ty, _ := strconv.ParseFloat(string(op[5]), 64)
+					if ty != 0 {
+						pageBuilder.WriteString("\n")
+					}
 				}
-				pageBuilder.WriteString(" ")
 			}
+			pageBuilder.WriteString("\n")
 		}
 
 		segment := strings.TrimSpace(pageBuilder.String())
@@ -511,8 +536,75 @@ func isReadableLatinRune(r rune) bool {
 	return false
 }
 
+func collapseSpacedArtifacts(s string) string {
+	lines := strings.Split(s, "\n")
+	var resultLines []string
+
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 6 {
+			resultLines = append(resultLines, line)
+			continue
+		}
+
+		singleCount := 0
+		for _, f := range fields {
+			runes := []rune(f)
+			if len(runes) == 1 && (unicode.IsLetter(runes[0]) || unicode.IsDigit(runes[0]) || runes[0] == '.') {
+				singleCount++
+			}
+		}
+
+		if float64(singleCount)/float64(len(fields)) < 0.65 {
+			resultLines = append(resultLines, line)
+			continue
+		}
+
+		var sb strings.Builder
+		for i, f := range fields {
+			r := []rune(f)[0]
+			if i == 0 {
+				sb.WriteString(f)
+				continue
+			}
+
+			prevRunes := []rune(fields[i-1])
+			prevR := prevRunes[len(prevRunes)-1]
+
+			if prevR == '.' || prevR == ',' || prevR == ';' || prevR == ':' || prevR == '!' || prevR == '?' || prevR == ')' || prevR == '"' || prevR == '“' || prevR == '”' {
+				sb.WriteString(" ")
+				sb.WriteString(f)
+				continue
+			}
+
+			if r == '(' || r == '"' || r == '“' {
+				sb.WriteString(" ")
+				sb.WriteString(f)
+				continue
+			}
+
+			if unicode.IsLower(prevR) && (unicode.IsUpper(r) || unicode.IsDigit(r)) {
+				sb.WriteString(" ")
+				sb.WriteString(f)
+				continue
+			}
+
+			if unicode.IsDigit(prevR) && unicode.IsLetter(r) {
+				sb.WriteString(" ")
+				sb.WriteString(f)
+				continue
+			}
+
+			sb.WriteString(f)
+		}
+		resultLines = append(resultLines, sb.String())
+	}
+	return strings.Join(resultLines, "\n")
+}
+
 func cleanPDFExtractedText(s string) string {
 	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = collapseSpacedArtifacts(s)
 	lines := strings.Split(s, "\n")
 	var cleanedLines []string
 

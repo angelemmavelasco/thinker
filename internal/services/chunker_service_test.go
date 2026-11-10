@@ -150,3 +150,17 @@ func TestExtractPDFTextPureGo_CMapHex(t *testing.T) {
 		t.Errorf("expected 'Ac', got: %q", text)
 	}
 }
+
+func TestCollapseSpacedArtifacts(t *testing.T) {
+	spaced := "L i n e a m i e n t o 1 7 . A u t o r i d a d R e s p o n s a b l e . L a C G A I"
+	collapsed := collapseSpacedArtifacts(spaced)
+	expected := "Lineamiento 17. Autoridad Responsable. La CGAI"
+	if collapsed != expected {
+		t.Errorf("expected %q, got %q", expected, collapsed)
+	}
+
+	normal := "Este es un parrafo completamente normal que no debe alterarse."
+	if collapseSpacedArtifacts(normal) != normal {
+		t.Errorf("expected normal text to remain unchanged")
+	}
+}
