@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 
 	"github.com/google/uuid"
@@ -91,8 +92,13 @@ func (s *IdeaService) startWorker() {
 		s.inFlight.Delete(idKey)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			log.Printf("[llm] Error procesando idea [%s]: %v", job.idea.ID, err)
+			errStr := err.Error()
+			if strings.Contains(errStr, "429") || strings.Contains(errStr, "1002") || strings.Contains(errStr, "rate limit") {
+				time.Sleep(3 * time.Second)
+			}
 			continue
 		}
+		time.Sleep(150 * time.Millisecond)
 	}
 }
 

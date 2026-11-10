@@ -44,8 +44,10 @@ func main() {
 	}
 
 	queries := database.New(conn)
-	llmService := services.NewLLMService(baseConfig.LLMBaseURL, baseConfig.LLMApiKey)
-	embeddingService := services.NewEmbeddingService(baseConfig.EmbeddingBaseURL, baseConfig.LLMApiKey)
+	log.Printf("[config] LLM: external=%v (url=%s, model=%s)", baseConfig.ExternalLLMProvider, baseConfig.LLMBaseURL, baseConfig.LLMModel)
+	log.Printf("[config] Embeddings: external=%v (url=%s, model=%s)", baseConfig.ExternalEmbeddingProvider, baseConfig.EmbeddingBaseURL, baseConfig.EmbeddingModel)
+	llmService := services.NewLLMService(baseConfig.LLMBaseURL, baseConfig.LLMApiKey, baseConfig.LLMModel)
+	embeddingService := services.NewEmbeddingService(baseConfig.EmbeddingBaseURL, baseConfig.EmbeddingApiKey, baseConfig.EmbeddingModel)
 	router := routes.SetUpRouter(queries, llmService, embeddingService, baseConfig)
 
 	if err := router.Run("127.0.0.1:8080"); err != nil {

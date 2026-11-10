@@ -14,27 +14,42 @@ import (
 )
 
 type BaseConfig struct {
-	Debug              bool
-	AppBaseURL         string
-	JWTSecret          []byte
-	SecureCookies      bool
-	LLMApiKey          string
-	LLMBaseURL         string
-	EmbeddingBaseURL   string
-	DBHost             string
-	DBPort             string
-	DBName             string
-	DBUsername         string
-	DBPassword         string
-	ConnString         string
-	GoogleClientID     string
-	GoogleClientSecret string
-	GoogleRedirectURL  string
-	SMTPHost           string
-	SMTPPort           string
-	SMTPUsername       string
-	SMTPPassword       string
-	SMTPFrom           string
+	Debug                     bool
+	AppBaseURL                string
+	JWTSecret                 []byte
+	SecureCookies             bool
+	ExternalLLMProvider       bool
+	ExternalEmbeddingProvider bool
+	LLMApiKey                 string
+	LLMBaseURL                string
+	LLMModel                  string
+	EmbeddingApiKey           string
+	EmbeddingBaseURL          string
+	EmbeddingModel            string
+	DBHost                    string
+	DBPort                    string
+	DBName                    string
+	DBUsername                string
+	DBPassword                string
+	ConnString                string
+	GoogleClientID            string
+	GoogleClientSecret        string
+	GoogleRedirectURL         string
+	SMTPHost                  string
+	SMTPPort                  string
+	SMTPUsername              string
+	SMTPPassword              string
+	SMTPFrom                  string
+}
+
+func parseBoolEnv(key string) bool {
+	v := strings.TrimSpace(os.Getenv(key))
+	switch strings.ToLower(v) {
+	case "true", "1", "yes", "y", "t":
+		return true
+	default:
+		return false
+	}
 }
 
 func LoadConfig() (*BaseConfig, error) {
@@ -42,14 +57,7 @@ func LoadConfig() (*BaseConfig, error) {
 		log.Println("[config] No se encontró archivo .env local, usando variables de entorno del sistema")
 	}
 
-	debugVar := strings.TrimSpace(os.Getenv("DEBUG"))
-	var debug bool
-	switch debugVar {
-	case "true", "1", "True", "yes", "Yes", "Y", "y", "T", "t":
-		debug = true
-	default:
-		debug = false
-	}
+	debug := parseBoolEnv("DEBUG")
 
 	appBaseURL := strings.TrimRight(strings.TrimSpace(os.Getenv("APP_BASE_URL")), "/")
 	if appBaseURL == "" {
@@ -63,14 +71,44 @@ func LoadConfig() (*BaseConfig, error) {
 
 	secureCookies := !debug || strings.HasPrefix(strings.ToLower(appBaseURL), "https://")
 
-	llmApiKey := os.Getenv("LLM_API_KEY")
-	llmBaseURL := os.Getenv("LLM_BASE_URL")
-	if llmBaseURL == "" {
-		llmBaseURL = "http://127.0.0.1:8081"
+	externalLLMProvider := parseBoolEnv("EXTERNAL_LLM_PROVIDER")
+	externalEmbeddingProvider := parseBoolEnv("EXTERNAL_EMBEDDING_PROVIDER")
+
+	var llmApiKey, llmBaseURL, llmModel string
+	if externalLLMProvider {
+		llmApiKey = strings.TrimSpace(os.Getenv("LLM_API_KEY"))
+		llmBaseURL = strings.TrimRight(strings.TrimSpace(os.Getenv("LLM_BASE_URL")), "/")
+		if llmBaseURL == "" {
+			llmBaseURL = "https://api.minimax.io/v1"
+		}
+		llmModel = strings.TrimSpace(os.Getenv("LLM_MODEL"))
+		if llmModel == "" {
+			llmModel = "MiniMax-Text-01"
+		}
+	} else {
+		llmBaseURL = "http://127.0.0.1:8081/v1"
+		llmModel = "qwen2.5-3b-instruct"
+		llmApiKey = ""
 	}
-	embeddingBaseURL := os.Getenv("EMBEDDING_BASE_URL")
-	if embeddingBaseURL == "" {
-		embeddingBaseURL = "http://127.0.0.1:8082"
+
+	var embeddingApiKey, embeddingBaseURL, embeddingModel string
+	if externalEmbeddingProvider {
+		embeddingApiKey = strings.TrimSpace(os.Getenv("EMBEDDING_API_KEY"))
+		if embeddingApiKey == "" {
+			embeddingApiKey = llmApiKey
+		}
+		embeddingBaseURL = strings.TrimRight(strings.TrimSpace(os.Getenv("EMBEDDING_BASE_URL")), "/")
+		if embeddingBaseURL == "" {
+			embeddingBaseURL = "https://api.minimax.io/v1"
+		}
+		embeddingModel = strings.TrimSpace(os.Getenv("EMBEDDING_MODEL"))
+		if embeddingModel == "" {
+			embeddingModel = "embo-01"
+		}
+	} else {
+		embeddingBaseURL = "http://127.0.0.1:8082/v1"
+		embeddingModel = "bge-small-en-v1.5"
+		embeddingApiKey = ""
 	}
 
 	dbHost := os.Getenv("DB_HOST")
@@ -100,27 +138,32 @@ func LoadConfig() (*BaseConfig, error) {
 	}
 
 	cfg := BaseConfig{
-		Debug:              debug,
-		AppBaseURL:         appBaseURL,
-		JWTSecret:          jwtSecret,
-		SecureCookies:      secureCookies,
-		LLMApiKey:          llmApiKey,
-		LLMBaseURL:         llmBaseURL,
-		EmbeddingBaseURL:   embeddingBaseURL,
-		DBHost:             dbHost,
-		DBPort:             dbPort,
-		DBName:             dbName,
-		DBUsername:         dbUsername,
-		DBPassword:         dbPassword,
-		ConnString:         connString,
-		GoogleClientID:     googleClientID,
-		GoogleClientSecret: googleClientSecret,
-		GoogleRedirectURL:  googleRedirectURL,
-		SMTPHost:           smtpHost,
-		SMTPPort:           smtpPort,
-		SMTPUsername:       smtpUsername,
-		SMTPPassword:       smtpPassword,
-		SMTPFrom:           smtpFrom,
+		Debug:                     debug,
+		AppBaseURL:                appBaseURL,
+		JWTSecret:                 jwtSecret,
+		SecureCookies:             secureCookies,
+		ExternalLLMProvider:       externalLLMProvider,
+		ExternalEmbeddingProvider: externalEmbeddingProvider,
+		LLMApiKey:                 llmApiKey,
+		LLMBaseURL:                llmBaseURL,
+		LLMModel:                  llmModel,
+		EmbeddingApiKey:           embeddingApiKey,
+		EmbeddingBaseURL:          embeddingBaseURL,
+		EmbeddingModel:            embeddingModel,
+		DBHost:                    dbHost,
+		DBPort:                    dbPort,
+		DBName:                    dbName,
+		DBUsername:                dbUsername,
+		DBPassword:                dbPassword,
+		ConnString:                connString,
+		GoogleClientID:            googleClientID,
+		GoogleClientSecret:        googleClientSecret,
+		GoogleRedirectURL:         googleRedirectURL,
+		SMTPHost:                  smtpHost,
+		SMTPPort:                  smtpPort,
+		SMTPUsername:              smtpUsername,
+		SMTPPassword:              smtpPassword,
+		SMTPFrom:                  smtpFrom,
 	}
 	fmt.Println("Base config loaded successfully:")
 	return &cfg, nil

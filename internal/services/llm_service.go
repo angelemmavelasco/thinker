@@ -1,40 +1,70 @@
 package services
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/sashabaranov/go-openai"
 )
 
 type LLMService struct {
 	baseURL    string
 	apiKey     string
+	model      string
 	httpClient *http.Client
+	client     *openai.Client
 }
 
-func NewLLMService(baseURL, apiKey string) *LLMService {
+func NewLLMService(baseURL, apiKey string, model ...string) *LLMService {
+	cleanBaseURL := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if cleanBaseURL == "" {
+		cleanBaseURL = "http://127.0.0.1:8081/v1"
+	}
+	if !strings.HasSuffix(cleanBaseURL, "/v1") {
+		cleanBaseURL += "/v1"
+	}
+
+	m := "qwen2.5-3b-instruct"
+	if len(model) > 0 && strings.TrimSpace(model[0]) != "" {
+		m = strings.TrimSpace(model[0])
+	}
+
+	httpClient := &http.Client{
+		Timeout: 2 * time.Minute,
+	}
+
+	cfg := openai.DefaultConfig(apiKey)
+	cfg.BaseURL = cleanBaseURL
+	cfg.HTTPClient = httpClient
+	client := openai.NewClientWithConfig(cfg)
+
 	return &LLMService{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		apiKey:  apiKey,
-		httpClient: &http.Client{
-			Timeout: 2 * time.Minute,
-		},
+		baseURL:    cleanBaseURL,
+		apiKey:     apiKey,
+		model:      m,
+		httpClient: httpClient,
+		client:     client,
 	}
 }
 
 func (s *LLMService) SetHTTPClient(client *http.Client) {
 	if client != nil {
 		s.httpClient = client
+		cfg := openai.DefaultConfig(s.apiKey)
+		cfg.BaseURL = s.baseURL
+		cfg.HTTPClient = client
+		s.client = openai.NewClientWithConfig(cfg)
 	}
 }
 
 type chatCompletionRequest struct {
+	Model       string        `json:"model,omitempty"`
 	Messages    []chatMessage `json:"messages"`
-	Temperature float64       `json:"temperature"`
+	Temperature float32       `json:"temperature"`
 	MaxTokens   int           `json:"max_tokens"`
 }
 
@@ -55,10 +85,11 @@ type IdeaAnalysisResult struct {
 }
 
 func (s *LLMService) AnalyzeIdea(ctx context.Context, title, content string) (*IdeaAnalysisResult, error) {
-	requestBody := chatCompletionRequest{
-		Messages: []chatMessage{
+	resp, err := s.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model: s.model,
+		Messages: []openai.ChatCompletionMessage{
 			{
-				Role: "system",
+				Role: openai.ChatMessageRoleSystem,
 				Content: `Analiza la nota y responde únicamente con JSON válido, sin markdown, usando esta estructura:
 {
   "restructured_note": "Síntesis clara y organizada de la nota en máximo 3 oraciones",
@@ -67,52 +98,21 @@ func (s *LLMService) AnalyzeIdea(ctx context.Context, title, content string) (*I
 Extrae entre 3 y 7 conceptos clave cortos. No inventes información.`,
 			},
 			{
-				Role:    "user",
+				Role:    openai.ChatMessageRoleUser,
 				Content: fmt.Sprintf("Título: %s\n\nContenido:\n%s", title, content),
 			},
 		},
 		Temperature: 0.2,
 		MaxTokens:   500,
-	}
-
-	body, err := json.Marshal(requestBody)
-	if err != nil {
-		return nil, fmt.Errorf("error serializando solicitud al LLM: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodPost,
-		s.baseURL+"/v1/chat/completions",
-		bytes.NewReader(body),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("error creando solicitud al LLM: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if s.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+s.apiKey)
-	}
-
-	resp, err := s.httpClient.Do(req)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("error conectando con el LLM: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("el LLM respondió con HTTP %d", resp.StatusCode)
-	}
-
-	var completion chatCompletionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&completion); err != nil {
-		return nil, fmt.Errorf("error leyendo respuesta del LLM: %w", err)
-	}
-	if len(completion.Choices) == 0 {
+	if len(resp.Choices) == 0 {
 		return nil, fmt.Errorf("el LLM respondió sin resultados")
 	}
 
-	rawContent := cleanLLMJSON(completion.Choices[0].Message.Content)
+	rawContent := cleanLLMJSON(resp.Choices[0].Message.Content)
 
 	var result IdeaAnalysisResult
 	if err := json.Unmarshal([]byte(rawContent), &result); err != nil {
@@ -185,59 +185,29 @@ func (s *LLMService) ExpandQuery(ctx context.Context, query string) (string, err
 		"2. Identifica la intención principal y desglosa los conceptos y sinónimos relevantes sin alterar el objetivo de la pregunta.\n" +
 		"3. Responde ÚNICAMENTE con la consulta normalizada y términos clave en una o dos oraciones directas, sin explicaciones, prefijos ni introducciones."
 
-	requestBody := chatCompletionRequest{
-		Messages: []chatMessage{
+	resp, err := s.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model: s.model,
+		Messages: []openai.ChatCompletionMessage{
 			{
-				Role:    "system",
+				Role:    openai.ChatMessageRoleSystem,
 				Content: systemInstruction,
 			},
 			{
-				Role:    "user",
+				Role:    openai.ChatMessageRoleUser,
 				Content: fmt.Sprintf("Consulta:\n%s", cleaned),
 			},
 		},
 		Temperature: 0.1,
 		MaxTokens:   150,
-	}
-
-	body, err := json.Marshal(requestBody)
-	if err != nil {
-		return "", fmt.Errorf("error serializando solicitud de expansión: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodPost,
-		s.baseURL+"/v1/chat/completions",
-		bytes.NewReader(body),
-	)
-	if err != nil {
-		return "", fmt.Errorf("error creando solicitud de expansión: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if s.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+s.apiKey)
-	}
-
-	resp, err := s.httpClient.Do(req)
+	})
 	if err != nil {
 		return "", fmt.Errorf("error conectando con el LLM para expansión: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return "", fmt.Errorf("el LLM de expansión respondió con HTTP %d", resp.StatusCode)
-	}
-
-	var completion chatCompletionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&completion); err != nil {
-		return "", fmt.Errorf("error leyendo respuesta de expansión: %w", err)
-	}
-	if len(completion.Choices) == 0 {
+	if len(resp.Choices) == 0 {
 		return "", fmt.Errorf("el LLM de expansión respondió sin resultados")
 	}
 
-	expanded := strings.TrimSpace(completion.Choices[0].Message.Content)
+	expanded := strings.TrimSpace(resp.Choices[0].Message.Content)
 	if expanded == "" {
 		return cleaned, nil
 	}
@@ -274,57 +244,27 @@ func (s *LLMService) AskKnowledgeGraph(ctx context.Context, question string, sub
 
 	userContent := fmt.Sprintf("Pregunta:\n%s\n\nDocumentación de referencia:\n%s", cleanedQuestion, contextPrompt)
 
-	requestBody := chatCompletionRequest{
-		Messages: []chatMessage{
+	resp, err := s.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model: s.model,
+		Messages: []openai.ChatCompletionMessage{
 			{
-				Role:    "system",
+				Role:    openai.ChatMessageRoleSystem,
 				Content: systemInstruction,
 			},
 			{
-				Role:    "user",
+				Role:    openai.ChatMessageRoleUser,
 				Content: userContent,
 			},
 		},
 		Temperature: 0.1,
 		MaxTokens:   800,
-	}
-
-	body, err := json.Marshal(requestBody)
-	if err != nil {
-		return "", fmt.Errorf("error serializando solicitud al LLM: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodPost,
-		s.baseURL+"/v1/chat/completions",
-		bytes.NewReader(body),
-	)
-	if err != nil {
-		return "", fmt.Errorf("error creando solicitud al LLM: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if s.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+s.apiKey)
-	}
-
-	resp, err := s.httpClient.Do(req)
+	})
 	if err != nil {
 		return "", fmt.Errorf("error conectando con el LLM: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return "", fmt.Errorf("el LLM respondió con HTTP %d", resp.StatusCode)
-	}
-
-	var completion chatCompletionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&completion); err != nil {
-		return "", fmt.Errorf("error leyendo respuesta del LLM: %w", err)
-	}
-	if len(completion.Choices) == 0 {
+	if len(resp.Choices) == 0 {
 		return "", fmt.Errorf("el LLM respondió sin resultados")
 	}
 
-	return strings.TrimSpace(completion.Choices[0].Message.Content), nil
+	return strings.TrimSpace(resp.Choices[0].Message.Content), nil
 }

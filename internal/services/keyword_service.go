@@ -24,6 +24,7 @@ func NewKeywordService(queries *database.Queries, embedding *EmbeddingService) *
 func (s *KeywordService) SaveKeywordsForIdea(ctx context.Context, ideaID uuid.UUID, rawEntities []string) ([]database.Keyword, error) {
 	seen := make(map[string]struct{})
 	var saved []database.Keyword
+	rateLimited := false
 
 	for _, raw := range rawEntities {
 		cleaned := strings.TrimSpace(raw)
@@ -45,10 +46,14 @@ func (s *KeywordService) SaveKeywordsForIdea(ctx context.Context, ideaID uuid.UU
 			return nil, err
 		}
 
-		if s.embedding != nil && strings.TrimSpace(kw.Embedding) == "" {
+		if !rateLimited && s.embedding != nil && strings.TrimSpace(kw.Embedding) == "" {
 			vec, embErr := s.embedding.GenerateEmbedding(ctx, kw.Name)
 			if embErr != nil {
 				log.Printf("[embedding] Error generando embedding para keyword %q: %v", kw.Name, embErr)
+				errStr := embErr.Error()
+				if strings.Contains(errStr, "1002") || strings.Contains(errStr, "rate limit") || strings.Contains(errStr, "429") {
+					rateLimited = true
+				}
 			} else if serialized, serErr := SerializeVector(vec); serErr == nil && serialized != "" {
 				if updatedKw, upErr := s.queries.UpdateKeywordEmbedding(ctx, database.UpdateKeywordEmbeddingParams{
 					ID:        kw.ID,
