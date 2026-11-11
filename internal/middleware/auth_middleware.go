@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"thinker/internal/auth"
 	"thinker/internal/services"
 )
 
@@ -46,6 +47,9 @@ func RequireAuthMiddleware(authService *services.AuthService, secureCookies bool
 						c.Set("user", user.ID.String())
 						c.Set("user_email", user.Email)
 						c.Set("user_role", user.Role)
+						displayName, initial := auth.UserDisplayName("", "", user.Email)
+						c.Set("user_name", displayName)
+						c.Set("user_initial", initial)
 						c.Next()
 						return
 					}
@@ -66,6 +70,9 @@ func RequireAuthMiddleware(authService *services.AuthService, secureCookies bool
 				c.Set("user", newTokens.User.ID.String())
 				c.Set("user_email", newTokens.User.Email)
 				c.Set("user_role", newTokens.User.Role)
+				displayName, initial := auth.UserDisplayName("", "", newTokens.User.Email)
+				c.Set("user_name", displayName)
+				c.Set("user_initial", initial)
 				c.Next()
 				return
 			}

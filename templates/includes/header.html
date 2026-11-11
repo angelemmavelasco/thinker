@@ -1,0 +1,211 @@
+<header class="fixed top-0 left-0 right-0 w-full z-50 px-4 py-3 sm:px-6 flex items-center justify-between backdrop-blur-xl bg-zinc-950/80 border-b border-zinc-900/80">
+    
+    <div class="flex items-center">
+        <a href="/" class="text-cyan-500 hover:text-zinc-400 transition-all font-mono font-bold text-sm tracking-wide select-none">
+            Thinker
+        </a>
+    </div>
+
+    
+    <nav class="hidden sm:flex items-center gap-4 md:gap-5 text-xs text-zinc-300">
+        <a href='{{url "network:view"}}' class="hover:text-cyan-400 transition-colors cursor-pointer py-1">
+            Red
+        </a>
+        <a href='{{url "ideas:list"}}' class="hover:text-cyan-400 transition-colors cursor-pointer py-1">
+            Mis ideas
+        </a>
+        <span class="hover:text-cyan-400 transition-colors cursor-pointer py-1 text-zinc-400">
+            Relaciones
+        </span>
+        <span class="hover:text-cyan-400 transition-colors cursor-pointer py-1 text-zinc-400">
+            Opciones
+        </span>
+        <a href='{{url "users:list"}}' class="hover:text-cyan-400 transition-colors cursor-pointer py-1">
+            Usuarios
+        </a>
+        <span class="hover:text-cyan-400 transition-colors cursor-pointer py-1 text-zinc-400">
+            Configuración
+        </span>
+        <span class="hover:text-cyan-400 transition-colors cursor-pointer py-1 text-zinc-400">
+            Soporte
+        </span>
+    </nav>
+
+    
+    <p class="hidden xl:block text-zinc-500 font-medium text-xs ml-auto pr-4">
+        Genera ideas, Thinker hace lo demás.
+    </p>
+
+    
+    <div class="hidden sm:flex items-center gap-4 ml-auto xl:ml-0 text-xs text-zinc-300">
+        
+        <div class="flex items-center gap-2 cursor-default select-none">
+            <div class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white font-mono text-[10px] select-none">
+                {{if .user_initial}}{{.user_initial}}{{else}}U{{end}}
+            </div>
+            <span class="text-zinc-200">
+                {{if .user_name}}{{.user_name}}{{else}}Usuario{{end}}
+            </span>
+        </div>
+
+        <form method="POST" action='{{ url "auth:logout" }}' class="inline">
+            <input type="hidden" name="csrf_token" value="{{.csrf_token}}" />
+            <button type="submit" class="hover:text-red-400 text-zinc-400 transition-colors cursor-pointer">
+                Salir
+            </button>
+        </form>
+
+        <form method="POST" action='{{ url "auth:logout_all" }}' class="inline">
+            <input type="hidden" name="csrf_token" value="{{.csrf_token}}" />
+            <button type="submit" title="Cerrar todas las sesiones activas" class="text-zinc-500 hover:text-red-400 transition-colors cursor-pointer flex items-center p-0.5">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-power"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg>
+            </button>
+        </form>
+    </div>
+
+    
+    <div class="flex sm:hidden items-center ml-auto">
+        <button id="mobile-nav-toggle-btn" type="button" aria-label="Abrir menú"
+            class="text-zinc-300 hover:text-cyan-400 p-1 -m-1 focus:outline-none cursor-pointer flex items-center select-none active:scale-95 transition-transform">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-ellipsis-vertical preview-icon"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+        </button>
+    </div>
+</header>
+
+
+<div
+    id="app-mobile-backdrop"
+    class="fixed inset-0 bg-zinc-950/90 backdrop-blur-md transition-opacity duration-300 sm:hidden"
+    style="z-index: 90; display: none; opacity: 0;"
+></div>
+
+
+<nav
+    id="app-mobile-menu"
+    class="fixed top-20 left-6 right-6 flex flex-col gap-4 text-base font-medium transition-all duration-300 sm:hidden"
+    style="z-index: 100; display: none; opacity: 0; transform: translateY(-8px);"
+>
+    
+    <div class="flex items-center gap-2.5 py-2 border-b border-zinc-900/80 text-zinc-300 text-sm font-normal">
+        <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white font-mono text-xs select-none">
+            {{if .user_initial}}{{.user_initial}}{{else}}U{{end}}
+        </span>
+        <span class="text-zinc-200">
+            {{if .user_name}}{{.user_name}}{{else}}Usuario{{end}}
+        </span>
+    </div>
+
+    
+    <a href='{{url "network:view"}}' class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80 block">
+        Red
+    </a>
+    <a href='{{url "ideas:list"}}' class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80 block">
+        Mis ideas
+    </a>
+    <a href='{{url "users:list"}}' class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80 block">
+        Usuarios
+    </a>
+    <div class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80">
+        Relaciones
+    </div>
+    <div class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80">
+        Opciones
+    </div>
+    <div class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80">
+        Configuración
+    </div>
+    <div class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80">
+        Soporte
+    </div>
+
+    
+    <form method="POST" action='{{ url "auth:logout" }}' class="w-full">
+        <input type="hidden" name="csrf_token" value="{{.csrf_token}}" />
+        <button type="submit" class="w-full text-left cursor-pointer hover:text-red-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80">
+            Cerrar sesión
+        </button>
+    </form>
+
+    <form method="POST" action='{{ url "auth:logout_all" }}' class="w-full">
+        <input type="hidden" name="csrf_token" value="{{.csrf_token}}" />
+        <button type="submit" title="Cerrar todas las sesiones activas" class="w-full text-left cursor-pointer hover:text-red-400 text-zinc-500 transition-colors py-2 text-sm">
+            Cerrar todas las sesiones activas
+        </button>
+    </form>
+</nav>
+
+<script>
+(function () {
+    const toggleBtn = document.getElementById('mobile-nav-toggle-btn');
+    const backdrop = document.getElementById('app-mobile-backdrop');
+    const menu = document.getElementById('app-mobile-menu');
+
+    if (!toggleBtn || !backdrop || !menu) return;
+
+    let isOpen = false;
+
+    function isMobile() {
+        return window.innerWidth < 640;
+    }
+
+    function openMenu() {
+        isOpen = true;
+        backdrop.style.display = 'block';
+        menu.style.display = 'flex';
+        requestAnimationFrame(() => {
+            backdrop.style.opacity = '1';
+            backdrop.style.pointerEvents = 'auto';
+            menu.style.opacity = '1';
+            menu.style.pointerEvents = 'auto';
+            menu.style.transform = 'translateY(0)';
+        });
+    }
+
+    function closeMenu() {
+        if (!isOpen) return;
+        isOpen = false;
+        backdrop.style.opacity = '0';
+        backdrop.style.pointerEvents = 'none';
+        menu.style.opacity = '0';
+        menu.style.pointerEvents = 'none';
+        menu.style.transform = 'translateY(-8px)';
+        setTimeout(() => {
+            if (!isOpen) {
+                backdrop.style.display = 'none';
+                menu.style.display = 'none';
+            }
+        }, 300);
+    }
+
+    toggleBtn.addEventListener('click', function (e) {
+        if (!isMobile()) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (isOpen) {
+            closeMenu();
+        } else {
+            openMenu();
+        }
+    });
+
+    backdrop.addEventListener('click', closeMenu);
+
+    menu.querySelectorAll('a, button, div.cursor-pointer').forEach(function (item) {
+        item.addEventListener('click', function () {
+            closeMenu();
+        });
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && isOpen) {
+            closeMenu();
+        }
+    });
+
+    window.addEventListener('resize', function () {
+        if (!isMobile() && isOpen) {
+            closeMenu();
+        }
+    });
+})();
+</script>

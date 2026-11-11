@@ -13,10 +13,10 @@
 </style>
 
 <div class="flex flex-col gap-4">
-    <div class="flex flex-wrap items-center justify-between border-b border-cyan-500 py-1 gap-4">
-        <div class="flex items-center gap-6">
+    <div class="flex flex-wrap items-center justify-between border-b border-cyan-500 py-1.5 gap-3">
+        <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
             <span class="font-medium text-zinc-100">Red de pensamiento</span>
-            <div class="flex items-center gap-4 text-[11px] text-zinc-400">
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-400">
                 <span class="flex items-center gap-1.5">
                     <span class="inline-block w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
                     Idea
@@ -36,36 +36,38 @@
             </div>
         </div>
 
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-2">
             <button id="toggle-keywords-btn" type="button"
-                class="border border-zinc-800 hover:border-cyan-500 bg-zinc-900 px-2 py-0.5 rounded-xs cursor-pointer transition-all text-zinc-200">
+                class="border border-zinc-800 hover:border-cyan-500 bg-zinc-900 px-2.5 py-1 rounded-xs cursor-pointer transition-all text-zinc-200 text-xs">
                 Ocultar temas
             </button>
             <button id="fit-graph-btn" type="button"
-                class="border border-zinc-800 hover:border-cyan-500 bg-zinc-900 px-2 py-0.5 rounded-xs cursor-pointer transition-all text-zinc-200">
+                class="border border-zinc-800 hover:border-cyan-500 bg-zinc-900 px-2.5 py-1 rounded-xs cursor-pointer transition-all text-zinc-200 text-xs">
                 Centrar red
             </button>
             <button id="open-chat-btn" type="button"
-                class="border border-cyan-500/60 bg-gradient-to-r from-cyan-950/90 to-zinc-900 hover:border-cyan-400 text-cyan-300 hover:text-cyan-200 font-medium px-2.5 py-0.5 rounded-xs cursor-pointer transition-all flex items-center gap-1.5 shadow-sm shadow-cyan-500/20">
+                class="border border-cyan-500/60 bg-gradient-to-r from-cyan-950/90 to-zinc-900 hover:border-cyan-400 text-cyan-300 hover:text-cyan-200 font-medium px-2.5 py-1 rounded-xs cursor-pointer transition-all flex items-center gap-1.5 shadow-sm shadow-cyan-500/20 text-xs">
                 <span class="inline-block w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
                 Pregunta a Thinker
             </button>
         </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <div id="graph-wrapper" class="lg:col-span-3 relative border border-zinc-800 rounded-xs bg-zinc-950 h-[72vh] overflow-hidden">
-            <div id="network-graph" class="w-full h-full"></div>
-            <div id="graph-stats" class="absolute bottom-2 left-2 bg-zinc-900/80 border border-zinc-800 px-2 py-1 rounded-xs text-[10px] text-zinc-400 pointer-events-none">
-                Cargando red...
-            </div>
-        </div>
-
-        <aside id="node-inspector" class="border border-zinc-800 rounded-xs bg-zinc-900 p-3 flex flex-col gap-3 h-[72vh] overflow-hidden">
-            <div id="panel-inspector" class="flex flex-col gap-3 h-full overflow-y-auto">
-                <h3 class="text-sm font-medium text-zinc-100 border-b border-zinc-800 pb-1">
-                    Detalle de selección
-                </h3>
+    <!-- Layout contenedor: en móvil flex-col (Chat arriba order-1, Grafo abajo order-2), en desktop grid 4 cols (Grafo col-span-3, Chat col-span-1) -->
+    <div class="flex flex-col lg:grid lg:grid-cols-4 gap-4">
+        <!-- Panel lateral (Chat / Detalle): Order-1 en móvil, lg:order-2 en desktop -->
+        <aside id="node-inspector" class="order-1 lg:order-2 lg:col-span-1 border border-zinc-800 rounded-xs bg-zinc-900 p-3 flex flex-col gap-3 h-[420px] lg:h-[72vh] overflow-hidden">
+            <div id="panel-inspector" class="hidden flex-col gap-3 h-full overflow-y-auto">
+                <div class="flex items-center justify-between border-b border-zinc-800 pb-1.5 shrink-0">
+                    <h3 class="text-xs font-semibold text-zinc-100">
+                        Detalle de selección
+                    </h3>
+                    <button id="switch-to-chat-btn" type="button"
+                        class="border border-cyan-500/50 hover:border-cyan-400 bg-cyan-950/40 px-2 py-0.5 rounded-xs cursor-pointer text-cyan-300 hover:text-cyan-200 text-[10px] transition-all flex items-center gap-1">
+                        <span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                        <span>Abrir chat</span>
+                    </button>
+                </div>
                 <div id="inspector-empty" class="text-zinc-500 my-auto text-center py-8">
                     Selecciona una idea o tema en la red para ver su contenido y conexiones.
                 </div>
@@ -94,7 +96,8 @@
                 </div>
             </div>
 
-            <div id="panel-chat" class="hidden flex-col gap-2.5 h-full">
+            <!-- Panel de Chat: Visible por defecto al ingresar -->
+            <div id="panel-chat" class="flex flex-col gap-2.5 h-full">
                 <div class="flex items-center justify-between border-b border-zinc-800 pb-1.5 shrink-0">
                     <div class="flex items-center gap-1.5 text-xs font-semibold text-cyan-300">
                         <span class="inline-block w-2 h-2 rounded-full bg-cyan-400"></span>
@@ -129,6 +132,14 @@
                 </form>
             </div>
         </aside>
+
+        <!-- Grafo interactivo: Order-2 en móvil, lg:order-1 en desktop -->
+        <div id="graph-wrapper" class="order-2 lg:order-1 lg:col-span-3 relative border border-zinc-800 rounded-xs bg-zinc-950 h-[380px] sm:h-[480px] lg:h-[72vh] overflow-hidden">
+            <div id="network-graph" class="w-full h-full"></div>
+            <div id="graph-stats" class="absolute bottom-2 left-2 bg-zinc-900/80 border border-zinc-800 px-2 py-1 rounded-xs text-[10px] text-zinc-400 pointer-events-none">
+                Cargando red...
+            </div>
+        </div>
     </div>
 </div>
 
@@ -208,9 +219,16 @@
         selectedNode = node;
         computeHighlightSet(node);
         renderInspector(node);
+        showInspectorPanel();
         if (typeof node.x === "number" && typeof node.y === "number") {
             Graph.centerAt(node.x, node.y, 500);
             Graph.zoom(1.8, 500);
+        }
+        if (window.innerWidth < 1024) {
+            const inspectorEl = document.getElementById("node-inspector");
+            if (inspectorEl) {
+                inspectorEl.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
         }
     }
 
@@ -472,6 +490,7 @@
 
     const openChatBtn = document.getElementById("open-chat-btn");
     const closeChatBtn = document.getElementById("close-chat-btn");
+    const switchToChatBtn = document.getElementById("switch-to-chat-btn");
     const panelInspector = document.getElementById("panel-inspector");
     const panelChat = document.getElementById("panel-chat");
     const chatForm = document.getElementById("chat-form");
@@ -499,6 +518,9 @@
     }
     if (closeChatBtn) {
         closeChatBtn.addEventListener("click", showInspectorPanel);
+    }
+    if (switchToChatBtn) {
+        switchToChatBtn.addEventListener("click", showChatPanel);
     }
 
     if (chatInput && chatForm) {

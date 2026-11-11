@@ -1,4 +1,4 @@
-<ul class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+<ul class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
     {{range $idea := .ideas}}
     <li
         hx-get='{{url "ideas:detail" $idea.ID}}'

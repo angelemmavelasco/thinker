@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/render"
 
+	"thinker/internal/auth"
 	"thinker/internal/urls"
 )
 
@@ -182,6 +183,14 @@ func Render(c *gin.Context, status int, templateName string, data gin.H) {
 	data["user"] = c.GetString("user")
 	data["user_email"] = c.GetString("user_email")
 	data["user_role"] = c.GetString("user_role")
+
+	userName := c.GetString("user_name")
+	userInitial := c.GetString("user_initial")
+	if userName == "" && data["user_email"] != "" {
+		userName, userInitial = auth.UserDisplayName("", "", c.GetString("user_email"))
+	}
+	data["user_name"] = userName
+	data["user_initial"] = userInitial
 	data["csrf_token"] = c.GetString("csrf_token")
 
 	c.HTML(status, templateName, data)
