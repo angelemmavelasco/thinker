@@ -1,9 +1,12 @@
 package config
 
 import (
+	"fmt"
 	"html/template"
+	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-gonic/gin"
@@ -11,6 +14,18 @@ import (
 
 	"thinker/internal/urls"
 )
+
+var appStartTime = time.Now().Unix()
+
+func faviconVersion() string {
+	if envVer := os.Getenv("APP_VERSION"); envVer != "" {
+		return envVer
+	}
+	if fi, err := os.Stat("./media/tk.ico"); err == nil {
+		return fmt.Sprintf("2.%d.%d", fi.ModTime().Unix(), appStartTime)
+	}
+	return fmt.Sprintf("2.%d", appStartTime)
+}
 
 var TemplateFuncs = template.FuncMap{
 	"url": urls.URLFor,
@@ -21,6 +36,8 @@ var TemplateFuncs = template.FuncMap{
 		}
 		return string(runes[:max]) + "..."
 	},
+	"faviconVersion": faviconVersion,
+	"assetVersion":   faviconVersion,
 }
 
 type reloadableHTMLRender struct {
