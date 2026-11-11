@@ -56,6 +56,8 @@ func SetUpRouter(
 	router.Use(middleware.SecurityHeadersMiddleware())
 	router.Use(middleware.CSRFMiddleware(cfg.SecureCookies))
 	router.Static("/static", "./static")
+	router.Static("/media", "./media")
+	router.StaticFile("/favicon.ico", "./media/tk.ico")
 	router.HTMLRender = config.LoadTemplates("./templates/")
 
 	authHandler := handlers.NewAuthHandler(authService, cfg.SecureCookies)
