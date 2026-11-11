@@ -259,3 +259,144 @@ SELECT id, title, chunk_index, chunk_total, status
 FROM ideas
 WHERE group_id = $1
 ORDER BY chunk_index ASC, created_at ASC;
+
+-- name: CreateKnowledgeMOC :one
+INSERT INTO knowledge_mocs (id, code, title, description, embedding, display_order, is_locked)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING *;
+
+-- name: GetKnowledgeMOCByID :one
+SELECT * FROM knowledge_mocs
+WHERE id = $1 LIMIT 1;
+
+-- name: GetKnowledgeMOCByCode :one
+SELECT * FROM knowledge_mocs
+WHERE UPPER(code) = UPPER($1) LIMIT 1;
+
+-- name: ListKnowledgeMOCs :many
+SELECT * FROM knowledge_mocs
+ORDER BY display_order ASC, created_at ASC;
+
+-- name: UpdateKnowledgeMOC :one
+UPDATE knowledge_mocs
+SET title = $2,
+    description = $3,
+    embedding = $4,
+    display_order = $5,
+    is_locked = $6,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateKnowledgeMOCLock :one
+UPDATE knowledge_mocs
+SET is_locked = $2,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteKnowledgeMOC :exec
+DELETE FROM knowledge_mocs
+WHERE id = $1;
+
+-- name: CountKnowledgeMOCs :one
+SELECT COUNT(*) FROM knowledge_mocs;
+
+-- name: CreateKnowledgeHub :one
+INSERT INTO knowledge_hubs (id, moc_id, title, summary, search_aliases, embedding, display_order, is_locked)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING *;
+
+-- name: GetKnowledgeHubByID :one
+SELECT * FROM knowledge_hubs
+WHERE id = $1 LIMIT 1;
+
+-- name: ListKnowledgeHubsByMOCID :many
+SELECT * FROM knowledge_hubs
+WHERE moc_id = $1
+ORDER BY display_order ASC, created_at ASC;
+
+-- name: ListAllKnowledgeHubs :many
+SELECT * FROM knowledge_hubs
+ORDER BY display_order ASC, created_at ASC;
+
+-- name: UpdateKnowledgeHub :one
+UPDATE knowledge_hubs
+SET moc_id = $2,
+    title = $3,
+    summary = $4,
+    search_aliases = $5,
+    embedding = $6,
+    display_order = $7,
+    is_locked = $8,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateKnowledgeHubLock :one
+UPDATE knowledge_hubs
+SET is_locked = $2,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteKnowledgeHub :exec
+DELETE FROM knowledge_hubs
+WHERE id = $1;
+
+-- name: CountKnowledgeHubsByMOCID :one
+SELECT COUNT(*) FROM knowledge_hubs
+WHERE moc_id = $1;
+
+-- name: CreateHubIdeaEdge :one
+INSERT INTO hub_idea_edges (hub_id, idea_id, relationship_type, weight, is_manual_override)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (hub_id, idea_id)
+DO UPDATE SET relationship_type = EXCLUDED.relationship_type,
+              weight = EXCLUDED.weight,
+              is_manual_override = EXCLUDED.is_manual_override
+RETURNING *;
+
+-- name: ListIdeasByHubID :many
+SELECT i.*, hie.relationship_type, hie.weight, hie.is_manual_override
+FROM ideas i
+JOIN hub_idea_edges hie ON hie.idea_id = i.id
+WHERE hie.hub_id = $1
+ORDER BY hie.weight DESC;
+
+-- name: ListHubsByIdeaID :many
+SELECT kh.*, hie.relationship_type, hie.weight, hie.is_manual_override
+FROM knowledge_hubs kh
+JOIN hub_idea_edges hie ON hie.hub_id = kh.id
+WHERE hie.idea_id = $1
+ORDER BY hie.weight DESC;
+
+-- name: DeleteHubIdeaEdge :exec
+DELETE FROM hub_idea_edges
+WHERE hub_id = $1 AND idea_id = $2;
+
+-- name: DeleteHubIdeaEdgesByIdeaID :exec
+DELETE FROM hub_idea_edges
+WHERE idea_id = $1;
+
+-- name: DeleteHubIdeaEdgesByHubID :exec
+DELETE FROM hub_idea_edges
+WHERE hub_id = $1;
+
+-- name: ListAllHubIdeaEdges :many
+SELECT * FROM hub_idea_edges
+ORDER BY weight DESC;
+
+-- name: GetKnowledgeSetting :one
+SELECT * FROM knowledge_settings
+WHERE key = $1 LIMIT 1;
+
+-- name: UpsertKnowledgeSetting :one
+INSERT INTO knowledge_settings (key, value)
+VALUES ($1, $2)
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP
+RETURNING *;
+
+-- name: ListKnowledgeSettings :many
+SELECT * FROM knowledge_settings
+ORDER BY key ASC;

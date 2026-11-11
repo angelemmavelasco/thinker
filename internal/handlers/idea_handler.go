@@ -25,6 +25,10 @@ func NewIdeaHandler(queries *database.Queries, llm *services.LLMService, embeddi
 	}
 }
 
+func (h *IdeaHandler) Service() *services.IdeaService {
+	return h.service
+}
+
 func (h *IdeaHandler) ListIdeas(c *gin.Context) {
 	ideas, err := h.service.ListIdeas(c.Request.Context())
 	if err != nil {

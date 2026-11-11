@@ -1,0 +1,395 @@
+{{define "title"}}{{.title}}{{end}}
+
+{{define "content"}}
+<div class="w-full flex-1 flex flex-col gap-6 max-w-7xl mx-auto px-4 sm:px-6 py-6">
+
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-zinc-850">
+        <div>
+            <div class="flex items-center gap-2">
+                <span class="inline-block w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+                <h1 class="text-lg sm:text-xl font-mono font-bold text-zinc-100">Temas y categorías</h1>
+            </div>
+            <p class="text-xs text-zinc-400 mt-1">
+                Thinker organiza tus notas y documentos en grandes temas y categorías para que encuentres todo al instante.
+            </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+            <div class="flex items-center gap-2 bg-zinc-900/80 border border-zinc-800 px-3 py-1.5 rounded-xs text-[11px] text-zinc-300">
+                <span class="text-zinc-400">Organización automática:</span>
+                <form method="POST" action='{{url "topics:setting_toggle_auto"}}' class="inline">
+                    <input type="hidden" name="csrf_token" value="{{.csrf_token}}">
+                    <button type="submit" title="{{if .allow_auto_mocs}}Haz clic para pausar y usar solo los temas actuales{{else}}Haz clic para permitir que Thinker cree nuevos temas automáticamente{{end}}" class="px-2 py-0.5 rounded-xs text-[10px] font-mono cursor-pointer transition-all {{if .allow_auto_mocs}}bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30{{else}}bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-zinc-200{{end}}">
+                        {{if .allow_auto_mocs}}Activada{{end}}
+                    </button>
+                </form>
+            </div>
+
+            <button type="button" onclick="document.getElementById('modal-new-moc').classList.remove('hidden')"
+                class="bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-medium px-3 py-1.5 rounded-xs text-xs cursor-pointer transition-all flex items-center gap-1.5 shadow-sm active:scale-95">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                <span>Nuevo tema principal</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="bg-zinc-900/40 border border-zinc-850 p-3 rounded-xs flex items-center justify-between">
+            <span class="text-xs text-zinc-400">Temas principales</span>
+            <span class="font-mono text-sm font-semibold text-cyan-400">{{.total_mocs}}</span>
+        </div>
+        <div class="bg-zinc-900/40 border border-zinc-850 p-3 rounded-xs flex items-center justify-between">
+            <span class="text-xs text-zinc-400">Subtemas o categorías</span>
+            <span class="font-mono text-sm font-semibold text-zinc-200">{{.total_hubs}}</span>
+        </div>
+        <div class="bg-zinc-900/40 border border-zinc-850 p-3 rounded-xs flex items-center justify-between">
+            <span class="text-xs text-zinc-400">Notas e ideas ordenadas</span>
+            <span class="font-mono text-sm font-semibold text-emerald-400">{{.total_ideas_linked}}</span>
+        </div>
+    </div>
+
+    {{if not .mocs}}
+    <div class="border border-zinc-800/80 rounded-xs bg-zinc-900/20 p-12 text-center flex flex-col items-center justify-center gap-3">
+        <div class="w-12 h-12 rounded-full bg-zinc-800/60 border border-zinc-750 flex items-center justify-center text-zinc-400">
+            <svg class="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+        </div>
+        <h3 class="text-sm font-medium text-zinc-200">Aún no hay temas creados</h3>
+        <p class="text-xs text-zinc-400 max-w-md leading-relaxed">
+            Conforme vayas guardando notas o subiendo documentos, Thinker los ordenará automáticamente aquí por ti. También puedes crear un tema principal tú mismo cuando quieras.
+        </p>
+        <button type="button" onclick="document.getElementById('modal-new-moc').classList.remove('hidden')"
+            class="mt-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-medium px-4 py-1.5 rounded-xs text-xs cursor-pointer transition-all">
+            Crear mi primer tema
+        </button>
+    </div>
+    {{else}}
+
+    <div class="flex flex-col gap-4">
+        {{range .mocs}}
+        <div class="border border-zinc-800 rounded-xs bg-zinc-950/70 overflow-hidden shadow-sm transition-all hover:border-zinc-700/80">
+            <div class="p-3.5 sm:p-4 bg-zinc-900/50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <button type="button" onclick="toggleSection('moc-body-{{.ID}}', 'chevron-moc-{{.ID}}')"
+                    class="flex items-start gap-2.5 text-left flex-1 cursor-pointer group focus:outline-none select-none">
+                    <svg id="chevron-moc-{{.ID}}" class="w-4 h-4 text-zinc-400 group-hover:text-cyan-400 transition-transform duration-200 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                    <div class="flex flex-col gap-1">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <h2 class="text-sm font-semibold text-zinc-100 group-hover:text-cyan-300 transition-colors">{{.Title}}</h2>
+                            <span class="text-[10px] font-mono px-2 py-0.5 rounded-xs bg-zinc-850 text-zinc-400 border border-zinc-750">
+                                {{len .Hubs}} {{if eq (len .Hubs) 1}}subtema{{else}}subtemas{{end}}
+                            </span>
+                            {{if .IsLocked}}
+                            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded-xs bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1" title="Tema fijado por ti: Thinker respetará su nombre y no lo cambiará automáticamente">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                                Fijado por ti
+                            </span>
+                            {{else}}
+                            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded-xs bg-zinc-800 text-zinc-400 border border-zinc-700" title="Organizado automáticamente por Thinker">
+                                Automático
+                            </span>
+                            {{end}}
+                        </div>
+                        {{if .Description}}
+                        <p class="text-xs text-zinc-400 leading-relaxed max-w-3xl">{{.Description}}</p>
+                        {{end}}
+                    </div>
+                </button>
+
+                <div class="flex items-center gap-2 shrink-0 self-end md:self-center pl-6 md:pl-0">
+                    <form method="POST" action='{{url "topics:toggle_moc_lock" .ID}}' class="inline">
+                        <input type="hidden" name="csrf_token" value="{{$.csrf_token}}">
+                        <button type="submit" title="{{if .IsLocked}}Permitir que Thinker actualice este tema si agregas información nueva{{else}}Fijar este tema para que no cambie de nombre ni se mueva solo{{end}}"
+                            class="border border-zinc-800 hover:border-zinc-700 bg-zinc-950 px-2 py-1 rounded-xs text-[11px] text-zinc-400 hover:text-zinc-200 cursor-pointer transition-all flex items-center gap-1">
+                            {{if .IsLocked}}Liberar{{else}}Fijar{{end}}
+                        </button>
+                    </form>
+
+                    <button type="button" onclick="openNewHubModal('{{.ID}}', '{{.Title}}')"
+                        class="border border-zinc-800 hover:border-cyan-600/60 bg-zinc-900/80 hover:bg-cyan-950/20 text-cyan-400 px-2 py-1 rounded-xs text-[11px] cursor-pointer transition-all flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                        <span>Subtema</span>
+                    </button>
+
+                    <form method="POST" action='{{url "topics:delete_moc" .ID}}' class="inline" onsubmit="return confirm('¿Seguro que deseas eliminar este tema? Las notas que contiene se mantendrán seguras.');">
+                        <input type="hidden" name="csrf_token" value="{{$.csrf_token}}">
+                        <button type="submit" title="Eliminar este tema"
+                            class="border border-zinc-800 hover:border-red-800/80 bg-zinc-950 hover:bg-red-950/20 px-2 py-1 rounded-xs text-[11px] text-zinc-500 hover:text-red-400 cursor-pointer transition-all">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div id="moc-body-{{.ID}}" class="hidden border-t border-zinc-850 p-4 bg-zinc-950/40 flex-col gap-3">
+                {{if not .Hubs}}
+                <div class="py-4 text-center text-xs text-zinc-500 italic">
+                    Aún no hay subtemas en este tema. Puedes agregar uno con el botón de arriba.
+                </div>
+                {{else}}
+                <div class="flex flex-col gap-3">
+                    {{range .Hubs}}
+                    <div class="border border-zinc-850 rounded-xs bg-zinc-900/40 p-3.5 flex flex-col gap-2.5 hover:border-zinc-750 transition-all">
+                        <div class="flex items-start justify-between gap-3">
+                            <button type="button" onclick="toggleSection('hub-body-{{.ID}}', 'chevron-hub-{{.ID}}')"
+                                class="flex items-start gap-2.5 text-left flex-1 cursor-pointer group focus:outline-none select-none">
+                                <svg id="chevron-hub-{{.ID}}" class="w-3.5 h-3.5 text-zinc-500 group-hover:text-cyan-400 transition-transform duration-200 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                </svg>
+                                <div class="flex flex-col gap-1">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <h3 class="text-xs font-semibold text-zinc-200 group-hover:text-cyan-300 transition-colors flex items-center gap-1.5">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                                            {{.Title}}
+                                        </h3>
+                                        <span class="text-[10px] font-mono px-1.5 py-0.2 rounded-xs bg-zinc-800 text-zinc-400 border border-zinc-700">
+                                            {{len .Ideas}} {{if eq (len .Ideas) 1}}nota{{else}}notas{{end}}
+                                        </span>
+                                        {{if .SearchAliases}}
+                                        <span class="text-[10px] font-mono px-1.5 py-0.2 rounded-xs bg-cyan-950/60 text-cyan-300 border border-cyan-800/40">
+                                            {{len .SearchAliases}} palabras clave
+                                        </span>
+                                        {{end}}
+                                    </div>
+                                    {{if .Summary}}
+                                    <p class="text-[11px] text-zinc-400 leading-relaxed">{{.Summary}}</p>
+                                    {{end}}
+                                </div>
+                            </button>
+
+                            <form method="POST" action='{{url "topics:delete_hub" .ID}}' class="inline shrink-0" onsubmit="return confirm('¿Seguro que deseas eliminar este subtema?');">
+                                <input type="hidden" name="csrf_token" value="{{$.csrf_token}}">
+                                <button type="submit" title="Eliminar subtema" class="text-zinc-600 hover:text-red-400 cursor-pointer p-1">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                </button>
+                            </form>
+                        </div>
+
+                        <div id="hub-body-{{.ID}}" class="hidden flex-col gap-3 pt-2.5 border-t border-zinc-850/80">
+                            
+                            <div class="flex flex-col gap-1.5">
+                                <button type="button" onclick="toggleSection('hub-kw-{{.ID}}', 'chevron-kw-{{.ID}}')"
+                                    class="flex items-center gap-1.5 text-[11px] font-mono text-zinc-400 hover:text-zinc-200 cursor-pointer select-none">
+                                    <svg id="chevron-kw-{{.ID}}" class="w-3 h-3 text-zinc-500 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                    </svg>
+                                    <span>Palabras clave asociadas ({{len .SearchAliases}})</span>
+                                </button>
+
+                                <div id="hub-kw-{{.ID}}" class="hidden flex-wrap items-center gap-1.5 pl-4 py-1">
+                                    {{if not .SearchAliases}}
+                                    <span class="text-[10px] text-zinc-500 italic">No hay palabras clave adicionales registradas.</span>
+                                    {{else}}
+                                    {{range .SearchAliases}}
+                                    <span class="text-[10px] font-mono px-2 py-0.5 rounded-xs bg-cyan-950/80 text-cyan-300 border border-cyan-800/60">
+                                        {{.}}
+                                    </span>
+                                    {{end}}
+                                    {{end}}
+                                </div>
+                            </div>
+
+                            <div class="flex flex-col gap-1.5">
+                                <button type="button" onclick="toggleSection('hub-ideas-{{.ID}}', 'chevron-ideas-{{.ID}}')"
+                                    class="flex items-center gap-1.5 text-[11px] font-mono text-zinc-400 hover:text-zinc-200 cursor-pointer select-none">
+                                    <svg id="chevron-ideas-{{.ID}}" class="w-3 h-3 text-zinc-500 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                    </svg>
+                                    <span>Notas asociadas ({{len .Ideas}})</span>
+                                </button>
+
+                                <div id="hub-ideas-{{.ID}}" class="hidden flex-col gap-1 pl-4 py-1">
+                                    {{if not .Ideas}}
+                                    <p class="text-[10px] text-zinc-500 italic">Aún no hay notas asignadas a este subtema.</p>
+                                    {{else}}
+                                    {{range .Ideas}}
+                                    <div class="flex items-center justify-between gap-2 py-1 px-2 rounded-xs bg-zinc-950/70 border border-zinc-850 text-[11px]">
+                                        <a href='{{url "ideas:detail" .ID}}' class="text-zinc-300 hover:text-cyan-400 truncate flex-1 font-mono text-[10px]" title="Ver detalle de la nota">
+                                            {{.Title}}
+                                        </a>
+                                        {{if .IsManualOverride}}
+                                        <span class="text-[9px] font-mono text-amber-400 border border-amber-500/40 bg-amber-500/10 px-1 py-0.2 rounded-xs shrink-0" title="Movida manualmente por ti">
+                                            Manual
+                                        </span>
+                                        {{end}}
+                                        <button type="button" onclick="openMoveModal('{{.ID}}', '{{.Title}}')"
+                                            class="text-[10px] text-zinc-500 hover:text-cyan-400 cursor-pointer shrink-0 ml-1" title="Mover esta nota a otro subtema">
+                                            Mover
+                                        </button>
+                                    </div>
+                                    {{end}}
+                                    {{end}}
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+                {{end}}
+            </div>
+        </div>
+        {{end}}
+    </div>
+    {{end}}
+
+</div>
+
+<div id="modal-new-moc" class="hidden fixed inset-0 z-50 bg-zinc-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-xs w-full max-w-md p-5 flex flex-col gap-4 shadow-xl">
+        <div class="flex items-center justify-between pb-2 border-b border-zinc-800">
+            <h3 class="text-sm font-semibold text-zinc-100 font-mono">Nuevo tema principal</h3>
+            <button type="button" onclick="document.getElementById('modal-new-moc').classList.add('hidden')" class="text-zinc-500 hover:text-zinc-300 cursor-pointer">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+
+        <form method="POST" action='{{url "topics:create_moc"}}' class="flex flex-col gap-3">
+            <input type="hidden" name="csrf_token" value="{{.csrf_token}}">
+
+            <div class="flex flex-col gap-1">
+                <label class="text-[11px] font-medium text-zinc-400">Nombre del tema</label>
+                <input type="text" name="title" required placeholder="Ej: Facturación y pagos, Reglas de venta, Garantías"
+                    class="bg-zinc-950 border border-zinc-800 focus:border-cyan-500 rounded-xs px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 outline-none">
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <label class="text-[11px] font-medium text-zinc-400">¿De qué trata este tema?</label>
+                <textarea name="description" rows="3" placeholder="Explica de forma sencilla qué tipo de información va aquí para que Thinker sepa cómo clasificar tus notas..."
+                    class="bg-zinc-950 border border-zinc-800 focus:border-cyan-500 rounded-xs px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 outline-none resize-none"></textarea>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+                <button type="button" onclick="document.getElementById('modal-new-moc').classList.add('hidden')"
+                    class="px-3 py-1.5 rounded-xs text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer">
+                    Cancelar
+                </button>
+                <button type="submit"
+                    class="bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-medium px-4 py-1.5 rounded-xs text-xs cursor-pointer transition-all">
+                    Guardar tema
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="modal-new-hub" class="hidden fixed inset-0 z-50 bg-zinc-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-xs w-full max-w-md p-5 flex flex-col gap-4 shadow-xl">
+        <div class="flex items-center justify-between pb-2 border-b border-zinc-800">
+            <h3 class="text-sm font-semibold text-zinc-100 font-mono" id="modal-hub-title">Nuevo subtema</h3>
+            <button type="button" onclick="document.getElementById('modal-new-hub').classList.add('hidden')" class="text-zinc-500 hover:text-zinc-300 cursor-pointer">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+
+        <form method="POST" action='{{url "topics:create_hub"}}' class="flex flex-col gap-3">
+            <input type="hidden" name="csrf_token" value="{{.csrf_token}}">
+            <input type="hidden" id="modal-hub-moc-id" name="moc_id" value="">
+
+            <div class="flex flex-col gap-1">
+                <label class="text-[11px] font-medium text-zinc-400">Nombre del subtema o categoría</label>
+                <input type="text" name="title" required placeholder="Ej: Reglas de refrigeración, Descuentos por volumen"
+                    class="bg-zinc-950 border border-zinc-800 focus:border-cyan-500 rounded-xs px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 outline-none">
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <label class="text-[11px] font-medium text-zinc-400">Resumen breve</label>
+                <textarea name="summary" rows="2" placeholder="Resumen corto de lo que incluye este subtema..."
+                    class="bg-zinc-950 border border-zinc-800 focus:border-cyan-500 rounded-xs px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 outline-none resize-none"></textarea>
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <label class="text-[11px] font-medium text-zinc-400">Palabras con las que sueles buscar esto (separadas por coma)</label>
+                <input type="text" name="search_aliases" placeholder="refrigerador, hielo, frío, congelador"
+                    class="bg-zinc-950 border border-zinc-800 focus:border-cyan-500 rounded-xs px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-600 outline-none">
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+                <button type="button" onclick="document.getElementById('modal-new-hub').classList.add('hidden')"
+                    class="px-3 py-1.5 rounded-xs text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer">
+                    Cancelar
+                </button>
+                <button type="submit"
+                    class="bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-medium px-4 py-1.5 rounded-xs text-xs cursor-pointer transition-all">
+                    Guardar subtema
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="modal-move-idea" class="hidden fixed inset-0 z-50 bg-zinc-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-xs w-full max-w-md p-5 flex flex-col gap-4 shadow-xl">
+        <div class="flex items-center justify-between pb-2 border-b border-zinc-800">
+            <h3 class="text-sm font-semibold text-zinc-100 font-mono">Mover nota a otro subtema</h3>
+            <button type="button" onclick="document.getElementById('modal-move-idea').classList.add('hidden')" class="text-zinc-500 hover:text-zinc-300 cursor-pointer">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+
+        <form method="POST" action='{{url "topics:move_idea"}}' class="flex flex-col gap-3">
+            <input type="hidden" name="csrf_token" value="{{.csrf_token}}">
+            <input type="hidden" id="modal-move-idea-id" name="idea_id" value="">
+
+            <div>
+                <span class="text-[10px] text-zinc-500 font-mono block">Nota seleccionada:</span>
+                <p class="text-xs text-cyan-300 font-medium truncate mt-0.5" id="modal-move-idea-title"></p>
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <label class="text-[11px] font-medium text-zinc-400">¿A qué subtema o categoría quieres moverla?</label>
+                <select name="target_hub_id" required class="bg-zinc-950 border border-zinc-800 focus:border-cyan-500 rounded-xs px-2.5 py-1.5 text-xs text-zinc-100 outline-none">
+                    {{range .hub_options}}
+                    <option value="{{.ID}}">[{{.MocTitle}}] {{.Title}}</option>
+                    {{end}}
+                </select>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+                <button type="button" onclick="document.getElementById('modal-move-idea').classList.add('hidden')"
+                    class="px-3 py-1.5 rounded-xs text-xs text-zinc-400 hover:text-zinc-200 cursor-pointer">
+                    Cancelar
+                </button>
+                <button type="submit"
+                    class="bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-medium px-4 py-1.5 rounded-xs text-xs cursor-pointer transition-all">
+                    Mover nota
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function toggleSection(bodyId, chevronId) {
+    const body = document.getElementById(bodyId);
+    const chevron = document.getElementById(chevronId);
+    if (!body) return;
+
+    if (body.classList.contains('hidden')) {
+        body.classList.remove('hidden');
+        body.classList.add('flex');
+        if (chevron) {
+            chevron.classList.add('rotate-90');
+        }
+    } else {
+        body.classList.add('hidden');
+        body.classList.remove('flex');
+        if (chevron) {
+            chevron.classList.remove('rotate-90');
+        }
+    }
+}
+
+function openNewHubModal(mocId, mocTitle) {
+    document.getElementById('modal-hub-moc-id').value = mocId;
+    document.getElementById('modal-hub-title').textContent = 'Nuevo subtema en ' + mocTitle;
+    document.getElementById('modal-new-hub').classList.remove('hidden');
+}
+
+function openMoveModal(ideaId, ideaTitle) {
+    document.getElementById('modal-move-idea-id').value = ideaId;
+    document.getElementById('modal-move-idea-title').textContent = ideaTitle;
+    document.getElementById('modal-move-idea').classList.remove('hidden');
+}
+</script>
+{{end}}

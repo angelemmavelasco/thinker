@@ -65,6 +65,7 @@ type IdeaService struct {
 	llm            *LLMService
 	embedding      *EmbeddingService
 	keywordService *KeywordService
+	topicService   *TopicService
 	jobQueue       chan ideaJob
 	inFlight       sync.Map
 }
@@ -75,10 +76,15 @@ func NewIdeaService(queries *database.Queries, llm *LLMService, embedding *Embed
 		llm:            llm,
 		embedding:      embedding,
 		keywordService: NewKeywordService(queries, embedding),
+		topicService:   NewTopicService(queries, embedding, llm),
 		jobQueue:       make(chan ideaJob, 100),
 	}
 	go svc.startWorker()
 	return svc
+}
+
+func (s *IdeaService) TopicService() *TopicService {
+	return s.topicService
 }
 
 func (s *IdeaService) startWorker() {
@@ -385,6 +391,12 @@ func (s *IdeaService) ProcessIdeaAnalysis(ctx context.Context, ideaID uuid.UUID,
 		return result, keywords, overlapLinks, err
 	}
 
+	if s.topicService != nil {
+		if _, _, err := s.topicService.ResolveAndLinkIdea(ctx, ideaID, result); err != nil {
+			log.Printf("[topics] Advertencia enlazando idea a temas [%s]: %v", ideaID, err)
+		}
+	}
+
 	allLinks := append(overlapLinks, semanticLinks...)
 	return result, keywords, allLinks, nil
 }
@@ -462,6 +474,50 @@ func (s *IdeaService) GetNetworkGraph(ctx context.Context) (*GraphData, error) {
 
 	for _, kwNode := range keywordNodes {
 		nodes = append(nodes, kwNode)
+	}
+
+	if s.topicService != nil {
+		if mocs, err := s.topicService.ListMOCs(ctx); err == nil {
+			for _, m := range mocs {
+				nodes = append(nodes, GraphNode{
+					ID:              "moc:" + m.ID.String(),
+					Label:           m.Title,
+					Type:            "moc",
+					Content:         m.Description,
+					OriginalContent: m.Code,
+					Status:          "moc",
+				})
+			}
+		}
+		if hubs, err := s.topicService.ListAllHubs(ctx); err == nil {
+			for _, h := range hubs {
+				hubID := "hub:" + h.ID.String()
+				nodes = append(nodes, GraphNode{
+					ID:              hubID,
+					Label:           h.Title,
+					Type:            "hub",
+					Content:         h.Summary,
+					OriginalContent: h.SearchAliases,
+					Status:          "hub",
+				})
+				links = append(links, GraphLink{
+					Source: "moc:" + h.MocID.String(),
+					Target: hubID,
+					Type:   "contains_concept",
+					Weight: 1.4,
+				})
+			}
+		}
+		if edges, err := s.queries.ListAllHubIdeaEdges(ctx); err == nil {
+			for _, e := range edges {
+				links = append(links, GraphLink{
+					Source: "hub:" + e.HubID.String(),
+					Target: e.IdeaID.String(),
+					Type:   e.RelationshipType,
+					Weight: e.Weight,
+				})
+			}
+		}
 	}
 
 	seenPairs := make(map[string]struct{})
@@ -1192,11 +1248,195 @@ func (s *IdeaService) FindSeedIdeas(ctx context.Context, queryText string, topK 
 	return candidates, nil
 }
 
-func (s *IdeaService) SearchAndExpand(ctx context.Context, queryText string, topKSeeds int, opts TraversalOptions) (*TraversalSubGraph, []SeedCandidate, error) {
-	seeds, err := s.FindSeedIdeas(ctx, queryText, topKSeeds)
-	if err != nil {
-		return nil, nil, err
+func (s *IdeaService) FindHierarchicalSeeds(ctx context.Context, queryText string, topK int) ([]SeedCandidate, error) {
+	if s.topicService == nil || s.llm == nil {
+		return nil, nil
 	}
+
+	cleanedQuery := strings.TrimSpace(queryText)
+	if cleanedQuery == "" {
+		return nil, nil
+	}
+
+	mocs, err := s.topicService.ListMOCs(ctx)
+	if err != nil || len(mocs) == 0 {
+		return nil, nil
+	}
+
+	descriptors := make([]MOCDescriptor, 0, len(mocs))
+	mocByCode := make(map[string]database.KnowledgeMoc, len(mocs))
+	for _, m := range mocs {
+		descriptors = append(descriptors, MOCDescriptor{
+			Code:        m.Code,
+			Title:       m.Title,
+			Description: m.Description,
+		})
+		mocByCode[strings.ToUpper(strings.TrimSpace(m.Code))] = m
+	}
+
+	targetCodes, err := s.llm.TriageQueryMOC(ctx, cleanedQuery, descriptors)
+	if err != nil || len(targetCodes) == 0 {
+		return nil, nil
+	}
+
+	var queryVec []float64
+	if s.embedding != nil {
+		if vec, err := s.embedding.GenerateEmbedding(ctx, cleanedQuery); err == nil && len(vec) > 0 {
+			queryVec = vec
+		}
+	}
+
+	queryWords := extractQueryWords(cleanedQuery)
+	lowerQuery := strings.ToLower(cleanedQuery)
+
+	type scoredHub struct {
+		hub   database.KnowledgeHub
+		score float64
+	}
+	var candidateHubs []scoredHub
+
+	for _, code := range targetCodes {
+		moc, exists := mocByCode[strings.ToUpper(code)]
+		if !exists {
+			continue
+		}
+
+		hubs, err := s.topicService.ListHubsByMOC(ctx, moc.ID)
+		if err != nil || len(hubs) == 0 {
+			continue
+		}
+
+		for _, h := range hubs {
+			var vecScore float64
+			if len(queryVec) > 0 && h.Embedding != "" {
+				if hubVec, err := DeserializeVector(h.Embedding); err == nil && len(hubVec) > 0 {
+					vecScore = CosineSimilarity(queryVec, hubVec)
+					if vecScore < 0 {
+						vecScore = 0
+					}
+				}
+			}
+
+			aliasScore := 0.0
+			lowerTitle := strings.ToLower(h.Title)
+			if strings.Contains(lowerQuery, lowerTitle) {
+				aliasScore += 0.5
+			}
+			for _, w := range queryWords {
+				if strings.Contains(lowerTitle, w) {
+					aliasScore += 0.25
+				}
+			}
+
+			aliases := parseAliases(h.SearchAliases)
+			for _, a := range aliases {
+				lowerA := strings.ToLower(a)
+				if strings.Contains(lowerQuery, lowerA) {
+					aliasScore += 0.5
+					break
+				}
+				for _, w := range queryWords {
+					if strings.Contains(lowerA, w) {
+						aliasScore += 0.25
+						break
+					}
+				}
+			}
+			if aliasScore > 1.0 {
+				aliasScore = 1.0
+			}
+
+			hubScore := (0.60 * vecScore) + (0.40 * aliasScore)
+			if hubScore > 0.30 || aliasScore >= 0.40 {
+				candidateHubs = append(candidateHubs, scoredHub{
+					hub:   h,
+					score: hubScore,
+				})
+			}
+		}
+	}
+
+	if len(candidateHubs) == 0 {
+		return nil, nil
+	}
+
+	sort.Slice(candidateHubs, func(i, j int) bool {
+		return candidateHubs[i].score > candidateHubs[j].score
+	})
+
+	if len(candidateHubs) > 3 {
+		candidateHubs = candidateHubs[:3]
+	}
+
+	seenIdeaIDs := make(map[uuid.UUID]bool)
+	var candidates []SeedCandidate
+
+	for _, ch := range candidateHubs {
+		linkedIdeas, err := s.topicService.ListIdeasByHub(ctx, ch.hub.ID)
+		if err != nil || len(linkedIdeas) == 0 {
+			continue
+		}
+
+		for _, row := range linkedIdeas {
+			if seenIdeaIDs[row.ID] {
+				continue
+			}
+			seenIdeaIDs[row.ID] = true
+
+			finalScore := ch.score * row.Weight
+			if finalScore < 0.25 {
+				finalScore = 0.25
+			}
+			if finalScore > 1.0 {
+				finalScore = 1.0
+			}
+
+			candidates = append(candidates, SeedCandidate{
+				IdeaID:       row.ID,
+				Title:        row.Title,
+				Score:        finalScore,
+				VectorScore:  ch.score,
+				KeywordScore: row.Weight,
+				MatchedTerms: []string{ch.hub.Title},
+			})
+		}
+	}
+
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].Score > candidates[j].Score
+	})
+
+	if topK <= 0 {
+		topK = 3
+	}
+	if len(candidates) > topK {
+		candidates = candidates[:topK]
+	}
+
+	return candidates, nil
+}
+
+func (s *IdeaService) SearchAndExpand(ctx context.Context, queryText string, topKSeeds int, opts TraversalOptions) (*TraversalSubGraph, []SeedCandidate, error) {
+	var seeds []SeedCandidate
+	if s.topicService != nil && s.llm != nil {
+		hSeeds, hErr := s.FindHierarchicalSeeds(ctx, queryText, topKSeeds)
+		if hErr == nil && len(hSeeds) > 0 {
+			seeds = hSeeds
+		}
+	}
+
+	if len(seeds) == 0 {
+		var err error
+		seeds, err = s.FindSeedIdeas(ctx, queryText, topKSeeds)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
 	if len(seeds) == 0 {
 		return &TraversalSubGraph{
 			SeedIDs: make([]uuid.UUID, 0),

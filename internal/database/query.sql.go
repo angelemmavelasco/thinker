@@ -40,6 +40,29 @@ func (q *Queries) ConsumeActionToken(ctx context.Context, arg ConsumeActionToken
 	return i, err
 }
 
+const countKnowledgeHubsByMOCID = `-- name: CountKnowledgeHubsByMOCID :one
+SELECT COUNT(*) FROM knowledge_hubs
+WHERE moc_id = $1
+`
+
+func (q *Queries) CountKnowledgeHubsByMOCID(ctx context.Context, mocID uuid.UUID) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countKnowledgeHubsByMOCID, mocID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countKnowledgeMOCs = `-- name: CountKnowledgeMOCs :one
+SELECT COUNT(*) FROM knowledge_mocs
+`
+
+func (q *Queries) CountKnowledgeMOCs(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countKnowledgeMOCs)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createActionToken = `-- name: CreateActionToken :one
 INSERT INTO action_tokens (
     id, user_id, token_hash, token_type, expires_at
@@ -72,6 +95,44 @@ func (q *Queries) CreateActionToken(ctx context.Context, arg CreateActionTokenPa
 		&i.TokenType,
 		&i.ExpiresAt,
 		&i.ConsumedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createHubIdeaEdge = `-- name: CreateHubIdeaEdge :one
+INSERT INTO hub_idea_edges (hub_id, idea_id, relationship_type, weight, is_manual_override)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (hub_id, idea_id)
+DO UPDATE SET relationship_type = EXCLUDED.relationship_type,
+              weight = EXCLUDED.weight,
+              is_manual_override = EXCLUDED.is_manual_override
+RETURNING hub_id, idea_id, relationship_type, weight, is_manual_override, created_at
+`
+
+type CreateHubIdeaEdgeParams struct {
+	HubID            uuid.UUID
+	IdeaID           uuid.UUID
+	RelationshipType string
+	Weight           float64
+	IsManualOverride int32
+}
+
+func (q *Queries) CreateHubIdeaEdge(ctx context.Context, arg CreateHubIdeaEdgeParams) (HubIdeaEdge, error) {
+	row := q.db.QueryRowContext(ctx, createHubIdeaEdge,
+		arg.HubID,
+		arg.IdeaID,
+		arg.RelationshipType,
+		arg.Weight,
+		arg.IsManualOverride,
+	)
+	var i HubIdeaEdge
+	err := row.Scan(
+		&i.HubID,
+		&i.IdeaID,
+		&i.RelationshipType,
+		&i.Weight,
+		&i.IsManualOverride,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -193,6 +254,91 @@ func (q *Queries) CreateIdeaLink(ctx context.Context, arg CreateIdeaLinkParams) 
 	return i, err
 }
 
+const createKnowledgeHub = `-- name: CreateKnowledgeHub :one
+INSERT INTO knowledge_hubs (id, moc_id, title, summary, search_aliases, embedding, display_order, is_locked)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, moc_id, title, summary, search_aliases, embedding, display_order, is_locked, created_at, updated_at
+`
+
+type CreateKnowledgeHubParams struct {
+	ID            uuid.UUID
+	MocID         uuid.UUID
+	Title         string
+	Summary       string
+	SearchAliases string
+	Embedding     string
+	DisplayOrder  int32
+	IsLocked      int32
+}
+
+func (q *Queries) CreateKnowledgeHub(ctx context.Context, arg CreateKnowledgeHubParams) (KnowledgeHub, error) {
+	row := q.db.QueryRowContext(ctx, createKnowledgeHub,
+		arg.ID,
+		arg.MocID,
+		arg.Title,
+		arg.Summary,
+		arg.SearchAliases,
+		arg.Embedding,
+		arg.DisplayOrder,
+		arg.IsLocked,
+	)
+	var i KnowledgeHub
+	err := row.Scan(
+		&i.ID,
+		&i.MocID,
+		&i.Title,
+		&i.Summary,
+		&i.SearchAliases,
+		&i.Embedding,
+		&i.DisplayOrder,
+		&i.IsLocked,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createKnowledgeMOC = `-- name: CreateKnowledgeMOC :one
+INSERT INTO knowledge_mocs (id, code, title, description, embedding, display_order, is_locked)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, code, title, description, embedding, display_order, is_locked, created_at, updated_at
+`
+
+type CreateKnowledgeMOCParams struct {
+	ID           uuid.UUID
+	Code         string
+	Title        string
+	Description  string
+	Embedding    string
+	DisplayOrder int32
+	IsLocked     int32
+}
+
+func (q *Queries) CreateKnowledgeMOC(ctx context.Context, arg CreateKnowledgeMOCParams) (KnowledgeMoc, error) {
+	row := q.db.QueryRowContext(ctx, createKnowledgeMOC,
+		arg.ID,
+		arg.Code,
+		arg.Title,
+		arg.Description,
+		arg.Embedding,
+		arg.DisplayOrder,
+		arg.IsLocked,
+	)
+	var i KnowledgeMoc
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Title,
+		&i.Description,
+		&i.Embedding,
+		&i.DisplayOrder,
+		&i.IsLocked,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createRefreshToken = `-- name: CreateRefreshToken :one
 INSERT INTO refresh_tokens (
     id, user_id, token_hash, family_id, revoked, user_agent, ip_address, expires_at
@@ -291,6 +437,41 @@ func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context, expiresAt time
 	return err
 }
 
+const deleteHubIdeaEdge = `-- name: DeleteHubIdeaEdge :exec
+DELETE FROM hub_idea_edges
+WHERE hub_id = $1 AND idea_id = $2
+`
+
+type DeleteHubIdeaEdgeParams struct {
+	HubID  uuid.UUID
+	IdeaID uuid.UUID
+}
+
+func (q *Queries) DeleteHubIdeaEdge(ctx context.Context, arg DeleteHubIdeaEdgeParams) error {
+	_, err := q.db.ExecContext(ctx, deleteHubIdeaEdge, arg.HubID, arg.IdeaID)
+	return err
+}
+
+const deleteHubIdeaEdgesByHubID = `-- name: DeleteHubIdeaEdgesByHubID :exec
+DELETE FROM hub_idea_edges
+WHERE hub_id = $1
+`
+
+func (q *Queries) DeleteHubIdeaEdgesByHubID(ctx context.Context, hubID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteHubIdeaEdgesByHubID, hubID)
+	return err
+}
+
+const deleteHubIdeaEdgesByIdeaID = `-- name: DeleteHubIdeaEdgesByIdeaID :exec
+DELETE FROM hub_idea_edges
+WHERE idea_id = $1
+`
+
+func (q *Queries) DeleteHubIdeaEdgesByIdeaID(ctx context.Context, ideaID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteHubIdeaEdgesByIdeaID, ideaID)
+	return err
+}
+
 const deleteIdea = `-- name: DeleteIdea :exec
 DELETE FROM ideas WHERE id = $1
 `
@@ -327,6 +508,26 @@ WHERE group_id = $1
 
 func (q *Queries) DeleteIdeasByGroupID(ctx context.Context, groupID uuid.UUID) error {
 	_, err := q.db.ExecContext(ctx, deleteIdeasByGroupID, groupID)
+	return err
+}
+
+const deleteKnowledgeHub = `-- name: DeleteKnowledgeHub :exec
+DELETE FROM knowledge_hubs
+WHERE id = $1
+`
+
+func (q *Queries) DeleteKnowledgeHub(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteKnowledgeHub, id)
+	return err
+}
+
+const deleteKnowledgeMOC = `-- name: DeleteKnowledgeMOC :exec
+DELETE FROM knowledge_mocs
+WHERE id = $1
+`
+
+func (q *Queries) DeleteKnowledgeMOC(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteKnowledgeMOC, id)
 	return err
 }
 
@@ -425,6 +626,85 @@ func (q *Queries) GetIdeaByID(ctx context.Context, id uuid.UUID) (Idea, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const getKnowledgeHubByID = `-- name: GetKnowledgeHubByID :one
+SELECT id, moc_id, title, summary, search_aliases, embedding, display_order, is_locked, created_at, updated_at FROM knowledge_hubs
+WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetKnowledgeHubByID(ctx context.Context, id uuid.UUID) (KnowledgeHub, error) {
+	row := q.db.QueryRowContext(ctx, getKnowledgeHubByID, id)
+	var i KnowledgeHub
+	err := row.Scan(
+		&i.ID,
+		&i.MocID,
+		&i.Title,
+		&i.Summary,
+		&i.SearchAliases,
+		&i.Embedding,
+		&i.DisplayOrder,
+		&i.IsLocked,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getKnowledgeMOCByCode = `-- name: GetKnowledgeMOCByCode :one
+SELECT id, code, title, description, embedding, display_order, is_locked, created_at, updated_at FROM knowledge_mocs
+WHERE UPPER(code) = UPPER($1) LIMIT 1
+`
+
+func (q *Queries) GetKnowledgeMOCByCode(ctx context.Context, upper interface{}) (KnowledgeMoc, error) {
+	row := q.db.QueryRowContext(ctx, getKnowledgeMOCByCode, upper)
+	var i KnowledgeMoc
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Title,
+		&i.Description,
+		&i.Embedding,
+		&i.DisplayOrder,
+		&i.IsLocked,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getKnowledgeMOCByID = `-- name: GetKnowledgeMOCByID :one
+SELECT id, code, title, description, embedding, display_order, is_locked, created_at, updated_at FROM knowledge_mocs
+WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetKnowledgeMOCByID(ctx context.Context, id uuid.UUID) (KnowledgeMoc, error) {
+	row := q.db.QueryRowContext(ctx, getKnowledgeMOCByID, id)
+	var i KnowledgeMoc
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Title,
+		&i.Description,
+		&i.Embedding,
+		&i.DisplayOrder,
+		&i.IsLocked,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getKnowledgeSetting = `-- name: GetKnowledgeSetting :one
+SELECT key, value, updated_at FROM knowledge_settings
+WHERE key = $1 LIMIT 1
+`
+
+func (q *Queries) GetKnowledgeSetting(ctx context.Context, key string) (KnowledgeSetting, error) {
+	row := q.db.QueryRowContext(ctx, getKnowledgeSetting, key)
+	var i KnowledgeSetting
+	err := row.Scan(&i.Key, &i.Value, &i.UpdatedAt)
 	return i, err
 }
 
@@ -603,6 +883,41 @@ func (q *Queries) LinkIdeaKeyword(ctx context.Context, arg LinkIdeaKeywordParams
 	return err
 }
 
+const listAllHubIdeaEdges = `-- name: ListAllHubIdeaEdges :many
+SELECT hub_id, idea_id, relationship_type, weight, is_manual_override, created_at FROM hub_idea_edges
+ORDER BY weight DESC
+`
+
+func (q *Queries) ListAllHubIdeaEdges(ctx context.Context) ([]HubIdeaEdge, error) {
+	rows, err := q.db.QueryContext(ctx, listAllHubIdeaEdges)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []HubIdeaEdge
+	for rows.Next() {
+		var i HubIdeaEdge
+		if err := rows.Scan(
+			&i.HubID,
+			&i.IdeaID,
+			&i.RelationshipType,
+			&i.Weight,
+			&i.IsManualOverride,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAllIdeaLinks = `-- name: ListAllIdeaLinks :many
 SELECT id, source_idea_id, target_idea_id, relation_type, weight, created_at
 FROM idea_links
@@ -625,6 +940,45 @@ func (q *Queries) ListAllIdeaLinks(ctx context.Context) ([]IdeaLink, error) {
 			&i.RelationType,
 			&i.Weight,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllKnowledgeHubs = `-- name: ListAllKnowledgeHubs :many
+SELECT id, moc_id, title, summary, search_aliases, embedding, display_order, is_locked, created_at, updated_at FROM knowledge_hubs
+ORDER BY display_order ASC, created_at ASC
+`
+
+func (q *Queries) ListAllKnowledgeHubs(ctx context.Context) ([]KnowledgeHub, error) {
+	rows, err := q.db.QueryContext(ctx, listAllKnowledgeHubs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []KnowledgeHub
+	for rows.Next() {
+		var i KnowledgeHub
+		if err := rows.Scan(
+			&i.ID,
+			&i.MocID,
+			&i.Title,
+			&i.Summary,
+			&i.SearchAliases,
+			&i.Embedding,
+			&i.DisplayOrder,
+			&i.IsLocked,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -681,6 +1035,67 @@ func (q *Queries) ListDirectConnectedIdeas(ctx context.Context, sourceIdeaID uui
 			&i.Status,
 			&i.RelationType,
 			&i.Weight,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listHubsByIdeaID = `-- name: ListHubsByIdeaID :many
+SELECT kh.id, kh.moc_id, kh.title, kh.summary, kh.search_aliases, kh.embedding, kh.display_order, kh.is_locked, kh.created_at, kh.updated_at, hie.relationship_type, hie.weight, hie.is_manual_override
+FROM knowledge_hubs kh
+JOIN hub_idea_edges hie ON hie.hub_id = kh.id
+WHERE hie.idea_id = $1
+ORDER BY hie.weight DESC
+`
+
+type ListHubsByIdeaIDRow struct {
+	ID               uuid.UUID
+	MocID            uuid.UUID
+	Title            string
+	Summary          string
+	SearchAliases    string
+	Embedding        string
+	DisplayOrder     int32
+	IsLocked         int32
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	RelationshipType string
+	Weight           float64
+	IsManualOverride int32
+}
+
+func (q *Queries) ListHubsByIdeaID(ctx context.Context, ideaID uuid.UUID) ([]ListHubsByIdeaIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, listHubsByIdeaID, ideaID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListHubsByIdeaIDRow
+	for rows.Next() {
+		var i ListHubsByIdeaIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.MocID,
+			&i.Title,
+			&i.Summary,
+			&i.SearchAliases,
+			&i.Embedding,
+			&i.DisplayOrder,
+			&i.IsLocked,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RelationshipType,
+			&i.Weight,
+			&i.IsManualOverride,
 		); err != nil {
 			return nil, err
 		}
@@ -767,6 +1182,71 @@ func (q *Queries) ListIdeasByGroupID(ctx context.Context, groupID uuid.UUID) ([]
 			&i.ChunkIndex,
 			&i.ChunkTotal,
 			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIdeasByHubID = `-- name: ListIdeasByHubID :many
+SELECT i.id, i.user_id, i.group_id, i.chunk_index, i.chunk_total, i.title, i.content, i.restructured_content, i.status, i.embedding, i.created_at, i.updated_at, hie.relationship_type, hie.weight, hie.is_manual_override
+FROM ideas i
+JOIN hub_idea_edges hie ON hie.idea_id = i.id
+WHERE hie.hub_id = $1
+ORDER BY hie.weight DESC
+`
+
+type ListIdeasByHubIDRow struct {
+	ID                  uuid.UUID
+	UserID              uuid.UUID
+	GroupID             uuid.UUID
+	ChunkIndex          int32
+	ChunkTotal          int32
+	Title               string
+	Content             string
+	RestructuredContent string
+	Status              string
+	Embedding           string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	RelationshipType    string
+	Weight              float64
+	IsManualOverride    int32
+}
+
+func (q *Queries) ListIdeasByHubID(ctx context.Context, hubID uuid.UUID) ([]ListIdeasByHubIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, listIdeasByHubID, hubID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIdeasByHubIDRow
+	for rows.Next() {
+		var i ListIdeasByHubIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.GroupID,
+			&i.ChunkIndex,
+			&i.ChunkTotal,
+			&i.Title,
+			&i.Content,
+			&i.RestructuredContent,
+			&i.Status,
+			&i.Embedding,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RelationshipType,
+			&i.Weight,
+			&i.IsManualOverride,
 		); err != nil {
 			return nil, err
 		}
@@ -882,6 +1362,112 @@ func (q *Queries) ListKeywordsByIdeaID(ctx context.Context, ideaID uuid.UUID) ([
 			&i.Embedding,
 			&i.CreatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKnowledgeHubsByMOCID = `-- name: ListKnowledgeHubsByMOCID :many
+SELECT id, moc_id, title, summary, search_aliases, embedding, display_order, is_locked, created_at, updated_at FROM knowledge_hubs
+WHERE moc_id = $1
+ORDER BY display_order ASC, created_at ASC
+`
+
+func (q *Queries) ListKnowledgeHubsByMOCID(ctx context.Context, mocID uuid.UUID) ([]KnowledgeHub, error) {
+	rows, err := q.db.QueryContext(ctx, listKnowledgeHubsByMOCID, mocID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []KnowledgeHub
+	for rows.Next() {
+		var i KnowledgeHub
+		if err := rows.Scan(
+			&i.ID,
+			&i.MocID,
+			&i.Title,
+			&i.Summary,
+			&i.SearchAliases,
+			&i.Embedding,
+			&i.DisplayOrder,
+			&i.IsLocked,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKnowledgeMOCs = `-- name: ListKnowledgeMOCs :many
+SELECT id, code, title, description, embedding, display_order, is_locked, created_at, updated_at FROM knowledge_mocs
+ORDER BY display_order ASC, created_at ASC
+`
+
+func (q *Queries) ListKnowledgeMOCs(ctx context.Context) ([]KnowledgeMoc, error) {
+	rows, err := q.db.QueryContext(ctx, listKnowledgeMOCs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []KnowledgeMoc
+	for rows.Next() {
+		var i KnowledgeMoc
+		if err := rows.Scan(
+			&i.ID,
+			&i.Code,
+			&i.Title,
+			&i.Description,
+			&i.Embedding,
+			&i.DisplayOrder,
+			&i.IsLocked,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKnowledgeSettings = `-- name: ListKnowledgeSettings :many
+SELECT key, value, updated_at FROM knowledge_settings
+ORDER BY key ASC
+`
+
+func (q *Queries) ListKnowledgeSettings(ctx context.Context) ([]KnowledgeSetting, error) {
+	rows, err := q.db.QueryContext(ctx, listKnowledgeSettings)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []KnowledgeSetting
+	for rows.Next() {
+		var i KnowledgeSetting
+		if err := rows.Scan(&i.Key, &i.Value, &i.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1198,6 +1784,164 @@ func (q *Queries) UpdateKeywordEmbedding(ctx context.Context, arg UpdateKeywordE
 	return i, err
 }
 
+const updateKnowledgeHub = `-- name: UpdateKnowledgeHub :one
+UPDATE knowledge_hubs
+SET moc_id = $2,
+    title = $3,
+    summary = $4,
+    search_aliases = $5,
+    embedding = $6,
+    display_order = $7,
+    is_locked = $8,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING id, moc_id, title, summary, search_aliases, embedding, display_order, is_locked, created_at, updated_at
+`
+
+type UpdateKnowledgeHubParams struct {
+	ID            uuid.UUID
+	MocID         uuid.UUID
+	Title         string
+	Summary       string
+	SearchAliases string
+	Embedding     string
+	DisplayOrder  int32
+	IsLocked      int32
+}
+
+func (q *Queries) UpdateKnowledgeHub(ctx context.Context, arg UpdateKnowledgeHubParams) (KnowledgeHub, error) {
+	row := q.db.QueryRowContext(ctx, updateKnowledgeHub,
+		arg.ID,
+		arg.MocID,
+		arg.Title,
+		arg.Summary,
+		arg.SearchAliases,
+		arg.Embedding,
+		arg.DisplayOrder,
+		arg.IsLocked,
+	)
+	var i KnowledgeHub
+	err := row.Scan(
+		&i.ID,
+		&i.MocID,
+		&i.Title,
+		&i.Summary,
+		&i.SearchAliases,
+		&i.Embedding,
+		&i.DisplayOrder,
+		&i.IsLocked,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateKnowledgeHubLock = `-- name: UpdateKnowledgeHubLock :one
+UPDATE knowledge_hubs
+SET is_locked = $2,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING id, moc_id, title, summary, search_aliases, embedding, display_order, is_locked, created_at, updated_at
+`
+
+type UpdateKnowledgeHubLockParams struct {
+	ID       uuid.UUID
+	IsLocked int32
+}
+
+func (q *Queries) UpdateKnowledgeHubLock(ctx context.Context, arg UpdateKnowledgeHubLockParams) (KnowledgeHub, error) {
+	row := q.db.QueryRowContext(ctx, updateKnowledgeHubLock, arg.ID, arg.IsLocked)
+	var i KnowledgeHub
+	err := row.Scan(
+		&i.ID,
+		&i.MocID,
+		&i.Title,
+		&i.Summary,
+		&i.SearchAliases,
+		&i.Embedding,
+		&i.DisplayOrder,
+		&i.IsLocked,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateKnowledgeMOC = `-- name: UpdateKnowledgeMOC :one
+UPDATE knowledge_mocs
+SET title = $2,
+    description = $3,
+    embedding = $4,
+    display_order = $5,
+    is_locked = $6,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING id, code, title, description, embedding, display_order, is_locked, created_at, updated_at
+`
+
+type UpdateKnowledgeMOCParams struct {
+	ID           uuid.UUID
+	Title        string
+	Description  string
+	Embedding    string
+	DisplayOrder int32
+	IsLocked     int32
+}
+
+func (q *Queries) UpdateKnowledgeMOC(ctx context.Context, arg UpdateKnowledgeMOCParams) (KnowledgeMoc, error) {
+	row := q.db.QueryRowContext(ctx, updateKnowledgeMOC,
+		arg.ID,
+		arg.Title,
+		arg.Description,
+		arg.Embedding,
+		arg.DisplayOrder,
+		arg.IsLocked,
+	)
+	var i KnowledgeMoc
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Title,
+		&i.Description,
+		&i.Embedding,
+		&i.DisplayOrder,
+		&i.IsLocked,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateKnowledgeMOCLock = `-- name: UpdateKnowledgeMOCLock :one
+UPDATE knowledge_mocs
+SET is_locked = $2,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING id, code, title, description, embedding, display_order, is_locked, created_at, updated_at
+`
+
+type UpdateKnowledgeMOCLockParams struct {
+	ID       uuid.UUID
+	IsLocked int32
+}
+
+func (q *Queries) UpdateKnowledgeMOCLock(ctx context.Context, arg UpdateKnowledgeMOCLockParams) (KnowledgeMoc, error) {
+	row := q.db.QueryRowContext(ctx, updateKnowledgeMOCLock, arg.ID, arg.IsLocked)
+	var i KnowledgeMoc
+	err := row.Scan(
+		&i.ID,
+		&i.Code,
+		&i.Title,
+		&i.Description,
+		&i.Embedding,
+		&i.DisplayOrder,
+		&i.IsLocked,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateUserPasswordAndBumpTokenVersion = `-- name: UpdateUserPasswordAndBumpTokenVersion :one
 UPDATE users
 SET password_hash = $2,
@@ -1253,5 +1997,24 @@ func (q *Queries) UpsertKeyword(ctx context.Context, arg UpsertKeywordParams) (K
 		&i.Embedding,
 		&i.CreatedAt,
 	)
+	return i, err
+}
+
+const upsertKnowledgeSetting = `-- name: UpsertKnowledgeSetting :one
+INSERT INTO knowledge_settings (key, value)
+VALUES ($1, $2)
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP
+RETURNING key, value, updated_at
+`
+
+type UpsertKnowledgeSettingParams struct {
+	Key   string
+	Value string
+}
+
+func (q *Queries) UpsertKnowledgeSetting(ctx context.Context, arg UpsertKnowledgeSettingParams) (KnowledgeSetting, error) {
+	row := q.db.QueryRowContext(ctx, upsertKnowledgeSetting, arg.Key, arg.Value)
+	var i KnowledgeSetting
+	err := row.Scan(&i.Key, &i.Value, &i.UpdatedAt)
 	return i, err
 }

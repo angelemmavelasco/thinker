@@ -68,6 +68,7 @@ func SetUpRouter(
 	authHandler := handlers.NewAuthHandler(authService, cfg.SecureCookies)
 	ideaHandler := handlers.NewIdeaHandler(queries, llm, embedding)
 	userHandler := handlers.NewUserHandler(queries)
+	topicHandler := handlers.NewTopicHandler(ideaHandler.Service().TopicService(), ideaHandler.Service())
 
 	authRateLimiter := middleware.NewAuthRateLimiter(15, time.Minute, 5, 15*time.Minute)
 
@@ -111,6 +112,17 @@ func SetUpRouter(
 		protected.GET(urls.Get("users:list"), userHandler.ListUsersView)
 		protected.GET(urls.Get("users:new"), userHandler.NewUser)
 		protected.POST(urls.Get("users:new"), userHandler.CreateUser)
+
+		protected.GET(urls.Get("topics:list"), topicHandler.ListTopics)
+		protected.POST(urls.Get("topics:create_moc"), topicHandler.CreateMOC)
+		protected.POST(urls.Get("topics:update_moc:route"), topicHandler.UpdateMOC)
+		protected.POST(urls.Get("topics:delete_moc:route"), topicHandler.DeleteMOC)
+		protected.POST(urls.Get("topics:toggle_moc_lock:route"), topicHandler.ToggleMOCLock)
+		protected.POST(urls.Get("topics:create_hub"), topicHandler.CreateHub)
+		protected.POST(urls.Get("topics:update_hub:route"), topicHandler.UpdateHub)
+		protected.POST(urls.Get("topics:delete_hub:route"), topicHandler.DeleteHub)
+		protected.POST(urls.Get("topics:move_idea"), topicHandler.MoveIdea)
+		protected.POST(urls.Get("topics:setting_toggle_auto"), topicHandler.ToggleAutoMOCSetting)
 	}
 
 	return router

@@ -259,16 +259,27 @@
         .backgroundColor("#09090b")
         .nodeId("id")
         .nodeLabel(node => node.label)
-        .nodeVal(node => node.type === "idea" ? 5 : 2)
+        .nodeVal(node => {
+            if (node.type === "moc") return 8;
+            if (node.type === "hub") return 5;
+            if (node.type === "idea") return 4;
+            return 2;
+        })
         .nodeColor(node => {
             if (!selectedNode) {
-                return node.type === "idea" ? "#06b6d4" : "#fcd34d";
+                if (node.type === "moc") return "#c084fc";
+                if (node.type === "hub") return "#22d3ee";
+                if (node.type === "idea") return "#38bdf8";
+                return "#fcd34d";
             }
             if (selectedNode.id === node.id) {
                 return "#ffffff";
             }
             if (neighborIds.has(node.id)) {
-                return node.type === "idea" ? "#34d399" : "#fbbf24";
+                if (node.type === "moc") return "#e879f9";
+                if (node.type === "hub") return "#34d399";
+                if (node.type === "idea") return "#67e8f9";
+                return "#fbbf24";
             }
             return "rgba(63, 63, 70, 0.22)";
         })
@@ -368,7 +379,25 @@
         contentEl.classList.remove("hidden");
         contentEl.classList.add("flex");
 
-        if (node.type === "idea") {
+        if (node.type === "moc") {
+            badgeEl.textContent = "Tema Maestro (MOC)";
+            badgeEl.className = "text-[9px] uppercase px-1.5 py-0.5 rounded-xs font-semibold bg-purple-500/20 text-purple-300";
+            titleEl.textContent = node.label;
+            metaEl.textContent = "Código: " + (node.originalContent || node.status || "-");
+            summaryBoxEl.classList.remove("hidden");
+            originalBoxEl.classList.add("hidden");
+            bodyEl.textContent = node.content || "Sin descripción disponible.";
+            kwBoxEl.classList.add("hidden");
+        } else if (node.type === "hub") {
+            badgeEl.textContent = "Concepto Sintético (Hub)";
+            badgeEl.className = "text-[9px] uppercase px-1.5 py-0.5 rounded-xs font-semibold bg-cyan-500/20 text-cyan-300";
+            titleEl.textContent = node.label;
+            metaEl.textContent = "Concepto de navegación en tu red";
+            summaryBoxEl.classList.remove("hidden");
+            originalBoxEl.classList.add("hidden");
+            bodyEl.textContent = node.content || "Sin resumen disponible.";
+            kwBoxEl.classList.add("hidden");
+        } else if (node.type === "idea") {
             badgeEl.textContent = "Idea · " + formatStatus(node.status);
             badgeEl.className = "text-[9px] uppercase px-1.5 py-0.5 rounded-xs font-semibold bg-cyan-500/20 text-cyan-300";
             titleEl.textContent = node.label;

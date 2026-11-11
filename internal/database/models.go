@@ -21,6 +21,15 @@ type ActionToken struct {
 	CreatedAt  time.Time
 }
 
+type HubIdeaEdge struct {
+	HubID            uuid.UUID
+	IdeaID           uuid.UUID
+	RelationshipType string
+	Weight           float64
+	IsManualOverride int32
+	CreatedAt        time.Time
+}
+
 type Idea struct {
 	ID                  uuid.UUID
 	UserID              uuid.UUID
@@ -65,6 +74,37 @@ type Keyword struct {
 	Name      string
 	Embedding string
 	CreatedAt time.Time
+}
+
+type KnowledgeHub struct {
+	ID            uuid.UUID
+	MocID         uuid.UUID
+	Title         string
+	Summary       string
+	SearchAliases string
+	Embedding     string
+	DisplayOrder  int32
+	IsLocked      int32
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type KnowledgeMoc struct {
+	ID           uuid.UUID
+	Code         string
+	Title        string
+	Description  string
+	Embedding    string
+	DisplayOrder int32
+	IsLocked     int32
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+type KnowledgeSetting struct {
+	Key       string
+	Value     string
+	UpdatedAt time.Time
 }
 
 type RefreshToken struct {

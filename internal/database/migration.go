@@ -54,6 +54,27 @@ func InitSchema(ctx context.Context, conn *sql.DB) error {
 		return fmt.Errorf("error while backfilling idea groups: %w", err)
 	}
 
+	if err := seedDefaultKnowledgeSettings(ctx, conn); err != nil {
+		return fmt.Errorf("error while seeding default knowledge settings: %w", err)
+	}
+
+	return nil
+}
+
+func seedDefaultKnowledgeSettings(ctx context.Context, conn *sql.DB) error {
+	defaults := [][2]string{
+		{"allow_auto_moc_creation", "true"},
+		{"hub_dedup_similarity_threshold", "0.82"},
+		{"max_auto_mocs", "15"},
+	}
+	for _, pair := range defaults {
+		if _, err := conn.ExecContext(ctx,
+			"INSERT INTO knowledge_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING",
+			pair[0], pair[1],
+		); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

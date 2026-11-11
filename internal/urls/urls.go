@@ -40,6 +40,22 @@ var RouteNames = map[string]string{
 	"network:view":      "/web/network",
 	"api:network:graph": "/api/network/graph",
 	"api:network:ask":   "/api/network/ask",
+
+	"topics:list":                    "/web/topics",
+	"topics:create_moc":              "/web/topics/mocs",
+	"topics:update_moc:route":        "/web/topics/mocs/:id",
+	"topics:update_moc":              "/web/topics/mocs/%v",
+	"topics:delete_moc:route":        "/web/topics/mocs/:id/delete",
+	"topics:delete_moc":              "/web/topics/mocs/%v/delete",
+	"topics:toggle_moc_lock:route":   "/web/topics/mocs/:id/lock",
+	"topics:toggle_moc_lock":         "/web/topics/mocs/%v/lock",
+	"topics:create_hub":              "/web/topics/hubs",
+	"topics:update_hub:route":        "/web/topics/hubs/:id",
+	"topics:update_hub":              "/web/topics/hubs/%v",
+	"topics:delete_hub:route":        "/web/topics/hubs/:id/delete",
+	"topics:delete_hub":              "/web/topics/hubs/%v/delete",
+	"topics:move_idea":               "/web/topics/ideas/move",
+	"topics:setting_toggle_auto":     "/web/topics/settings/auto-mocs",
 }
 
 func Get(name string) string {

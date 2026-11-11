@@ -98,6 +98,86 @@ type chatCompletionResponse struct {
 type IdeaAnalysisResult struct {
 	RestructuredNote string   `json:"restructured_note"`
 	KeyEntities      []string `json:"key_entities"`
+	TargetMOCCode    string   `json:"target_moc_code,omitempty"`
+	TargetMOCTitle   string   `json:"target_moc_title,omitempty"`
+	TargetMOCDesc    string   `json:"target_moc_desc,omitempty"`
+	ProposedHubTitle string   `json:"proposed_hub_title,omitempty"`
+	HubSummary       string   `json:"hub_summary,omitempty"`
+	SearchAliases    []string `json:"search_aliases,omitempty"`
+}
+
+type MOCDescriptor struct {
+	Code        string `json:"code"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+}
+
+type MOCTriageResult struct {
+	TargetMOCs []string `json:"target_mocs"`
+}
+
+func (s *LLMService) TriageQueryMOC(ctx context.Context, question string, availableMOCs []MOCDescriptor) ([]string, error) {
+	cleaned := strings.TrimSpace(question)
+	if cleaned == "" {
+		return nil, fmt.Errorf("la consulta está vacía")
+	}
+	if len(availableMOCs) == 0 {
+		return nil, nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Catálogo de Temas Maestros (MOC):\n")
+	for _, moc := range availableMOCs {
+		sb.WriteString(fmt.Sprintf("- [%s] %s: %s\n", moc.Code, moc.Title, moc.Description))
+	}
+
+	userContent := fmt.Sprintf("%s\nPregunta del usuario: %q\n\nIndica en JSON los 1 o 2 MOCs relevantes donde un investigador buscaría la respuesta.", sb.String(), cleaned)
+
+	systemPrompt := s.getPromptManager().TriageMOC()
+	resp, err := s.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model: s.model,
+		Messages: []openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: systemPrompt,
+			},
+			{
+				Role:    openai.ChatMessageRoleUser,
+				Content: userContent,
+			},
+		},
+		Temperature: 0.1,
+		MaxTokens:   150,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error conectando con el LLM para triage de MOC: %w", err)
+	}
+	if len(resp.Choices) == 0 {
+		return nil, fmt.Errorf("el LLM respondió sin opciones para triage")
+	}
+
+	rawContent := cleanLLMJSON(resp.Choices[0].Message.Content)
+	var triage MOCTriageResult
+	if err := json.Unmarshal([]byte(rawContent), &triage); err != nil {
+		return nil, fmt.Errorf("error parseando JSON de triage (%w): %s", err, rawContent)
+	}
+
+	validCodes := make(map[string]bool, len(availableMOCs))
+	for _, m := range availableMOCs {
+		validCodes[strings.ToUpper(strings.TrimSpace(m.Code))] = true
+	}
+
+	var result []string
+	for _, code := range triage.TargetMOCs {
+		normCode := strings.ToUpper(strings.TrimSpace(code))
+		if validCodes[normCode] {
+			result = append(result, normCode)
+		}
+	}
+	if len(result) > 2 {
+		result = result[:2]
+	}
+	return result, nil
 }
 
 func (s *LLMService) AnalyzeIdea(ctx context.Context, title, content string) (*IdeaAnalysisResult, error) {

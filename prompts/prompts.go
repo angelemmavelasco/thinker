@@ -17,10 +17,14 @@ var defaultExpandQuery string
 //go:embed ask_knowledge_graph.md
 var defaultAskKnowledgeGraph string
 
+//go:embed triage_moc.md
+var defaultTriageMOC string
+
 const (
 	FileAnalyzeIdea       = "analyze_idea.md"
 	FileExpandQuery       = "expand_query.md"
 	FileAskKnowledgeGraph = "ask_knowledge_graph.md"
+	FileTriageMOC         = "triage_moc.md"
 )
 
 // Manager manages prompt retrieval from external documents with embedded fallbacks.
@@ -104,6 +108,11 @@ func (m *Manager) AskKnowledgeGraph() string {
 	return m.GetPrompt(FileAskKnowledgeGraph, defaultAskKnowledgeGraph)
 }
 
+// TriageMOC returns the prompt for triaging queries into relevant MOC domains.
+func (m *Manager) TriageMOC() string {
+	return m.GetPrompt(FileTriageMOC, defaultTriageMOC)
+}
+
 var defaultManager = NewManager()
 
 // SetDefaultDir sets the base prompt directory for the package-level default manager.
@@ -129,4 +138,9 @@ func ExpandQuery() string {
 // AskKnowledgeGraph returns the default prompt for knowledge graph querying.
 func AskKnowledgeGraph() string {
 	return defaultManager.AskKnowledgeGraph()
+}
+
+// TriageMOC returns the default prompt for MOC domain triage.
+func TriageMOC() string {
+	return defaultManager.TriageMOC()
 }
