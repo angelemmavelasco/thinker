@@ -1,81 +1,322 @@
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+<style>
+    .markdown-body {
+        color: #e4e4e7;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    .markdown-body h1 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #f4f4f5;
+        border-bottom: 1px solid #27272a;
+        padding-bottom: 0.5rem;
+        margin-top: 1.25rem;
+        margin-bottom: 0.75rem;
+    }
+    .markdown-body h2 {
+        font-size: 1.4rem;
+        font-weight: 600;
+        color: #f4f4f5;
+        border-bottom: 1px solid #27272a;
+        padding-bottom: 0.35rem;
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
+    }
+    .markdown-body h3 {
+        font-size: 1.15rem;
+        font-weight: 600;
+        color: #f4f4f5;
+        margin-top: 0.85rem;
+        margin-bottom: 0.4rem;
+    }
+    .markdown-body p {
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+        line-height: 1.65;
+    }
+    .markdown-body strong {
+        font-weight: 600;
+        color: #67e8f9;
+    }
+    .markdown-body em {
+        font-style: italic;
+        color: #cbd5e1;
+    }
+    .markdown-body del {
+        text-decoration: line-through;
+        color: #71717a;
+    }
+    .markdown-body ul {
+        list-style-type: disc;
+        padding-left: 1.5rem;
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .markdown-body ol {
+        list-style-type: decimal;
+        padding-left: 1.5rem;
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .markdown-body li {
+        margin-top: 0.25rem;
+        margin-bottom: 0.25rem;
+        line-height: 1.5;
+    }
+    .markdown-body blockquote {
+        border-left: 3px solid #06b6d4;
+        padding-left: 0.85rem;
+        color: #a1a1aa;
+        font-style: italic;
+        margin-top: 0.6rem;
+        margin-bottom: 0.6rem;
+        background: rgba(6, 182, 212, 0.05);
+        padding-top: 0.35rem;
+        padding-bottom: 0.35rem;
+        border-radius: 0 0.125rem 0.125rem 0;
+    }
+    .markdown-body code {
+        background: #18181b;
+        border: 1px solid #27272a;
+        padding: 0.15rem 0.35rem;
+        border-radius: 0.2rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        color: #67e8f9;
+        font-size: 0.85em;
+    }
+    .markdown-body pre {
+        background: #09090b;
+        border: 1px solid #27272a;
+        padding: 0.85rem;
+        border-radius: 0.25rem;
+        overflow-x: auto;
+        margin-top: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+    .markdown-body pre code {
+        background: transparent;
+        border: none;
+        padding: 0;
+        color: #f4f4f5;
+        font-size: 0.85rem;
+        display: block;
+        line-height: 1.5;
+    }
+    .markdown-body hr {
+        border: none;
+        border-top: 1px solid #27272a;
+        margin: 1.25rem 0;
+    }
+    .markdown-body a {
+        color: #38bdf8;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+    .markdown-body a:hover {
+        color: #67e8f9;
+    }
+    .markdown-body table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0.75rem 0;
+    }
+    .markdown-body th, .markdown-body td {
+        border: 1px solid #27272a;
+        padding: 0.5rem 0.75rem;
+        text-align: left;
+    }
+    .markdown-body th {
+        background: #18181b;
+        color: #f4f4f5;
+        font-weight: 600;
+    }
+
+    #idea-loading-screen {
+        display: none;
+    }
+    #idea-loading-screen.active {
+        display: flex;
+    }
+</style>
+
 <form
-id="idea-form"
-action="/web/ideas/new"
-method="POST"
-enctype="multipart/form-data"
-onsubmit="return handleIdeaFormSubmit(event)"
-class="
-relative max-w-xl mx-auto
-border border-zinc-800 rounded-xs
-bg-zinc-900 p-4 sm:p-6 flex flex-col gap-4 shadow-xl
-">
-    
-    <h3 class="text-sm font-medium text-zinc-100">Nueva idea</h3>
+    id="idea-form"
+    action="/web/ideas/new"
+    method="POST"
+    enctype="multipart/form-data"
+    onsubmit="return handleIdeaFormSubmit(event)"
+    class="relative w-full flex-1 flex flex-col gap-4 bg-zinc-900/50 border border-zinc-800/80 rounded-sm p-4 sm:p-6 shadow-2xl"
+>
     <input type="hidden" name="csrf_token" value="{{.csrf_token}}" />
 
+    
+    <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-zinc-800">
+        <div class="flex items-center gap-3">
+            <h3 class="text-base font-semibold text-zinc-100 flex items-center gap-2">
+                <span>Editor de idea</span>
+                <span class="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                    Markdown
+                </span>
+            </h3>
+        </div>
+
+        
+        <div class="flex items-center gap-1 bg-zinc-950 p-1 rounded-sm border border-zinc-800 text-xs">
+            <button
+                type="button"
+                id="mode-write-btn"
+                onclick="setEditorMode('write')"
+                class="px-2.5 py-1 rounded-xs font-medium cursor-pointer transition-all bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex items-center gap-1.5"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pen-line"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                <span>Escribir</span>
+            </button>
+
+            <button
+                type="button"
+                id="mode-split-btn"
+                onclick="setEditorMode('split')"
+                class="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-xs font-medium cursor-pointer transition-all text-zinc-400 hover:text-zinc-200"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-columns-2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/></svg>
+                <span>Dividir</span>
+            </button>
+
+            <button
+                type="button"
+                id="mode-preview-btn"
+                onclick="setEditorMode('preview')"
+                class="px-2.5 py-1 rounded-xs font-medium cursor-pointer transition-all text-zinc-400 hover:text-zinc-200 flex items-center gap-1.5"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+                <span>Vista previa</span>
+            </button>
+        </div>
+
+        
+        <div class="flex items-center gap-2">
+            <button
+                type="button"
+                hx-get="/web/ideas/list"
+                hx-target="#workspace"
+                hx-swap="innerHTML"
+                class="border border-zinc-800 hover:border-zinc-700 bg-zinc-950 text-zinc-400 hover:text-zinc-200 px-3 py-1.5 rounded-xs cursor-pointer transition-colors text-xs"
+            >
+                Cancelar
+            </button>
+            <button
+                type="submit"
+                class="bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-medium px-4 py-1.5 rounded-xs cursor-pointer transition-all text-xs flex items-center gap-1.5 shadow-sm shadow-cyan-500/20 active:scale-95"
+            >
+                <span>Guardar idea</span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-right"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+            </button>
+        </div>
+    </div>
+
     {{if .error}}
-    <p class="border border-red-500/50 bg-red-500/10 text-red-300 p-2 rounded-xs">
+    <p id="idea-backend-error" class="border border-red-500/50 bg-red-500/10 text-red-300 p-2.5 rounded-xs text-xs">
         {{.error}}
     </p>
     {{end}}
 
-    <div>
-        <input type="text" name="title" placeholder="Título (opcional si subes archivo)" value="{{.ideaTitle}}"
-            class="w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1 transition-all" />
+    
+    <div class="w-full">
+        <input
+            id="idea-title-input"
+            type="text"
+            name="title"
+            placeholder="Título de la idea o documento..."
+            value="{{.ideaTitle}}"
+            class="w-full outline-none bg-transparent border-b border-zinc-800 focus:border-cyan-500 text-lg sm:text-2xl font-semibold text-zinc-100 placeholder-zinc-500 pb-2.5 transition-colors"
+        />
     </div>
 
-    <div>
-        <textarea name="content" rows="5" placeholder="Contenido de la idea (o sube un documento abajo)"
-            class="w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1 transition-all">{{.content}}</textarea>
+    
+    <div id="markdown-toolbar" class="flex flex-wrap items-center gap-1 bg-zinc-950/80 border border-zinc-800/80 p-1.5 rounded-xs text-zinc-300 text-xs">
+        <button type="button" onclick="insertMarkdown('**', '**', 'texto en negrita')" title="Negrita (**texto**)" class="p-1.5 hover:bg-zinc-800 hover:text-cyan-400 rounded-xs transition-colors font-bold font-mono">B</button>
+        <button type="button" onclick="insertMarkdown('*', '*', 'texto en cursiva')" title="Cursiva (*texto*)" class="p-1.5 hover:bg-zinc-800 hover:text-cyan-400 rounded-xs transition-colors italic font-serif">I</button>
+        <button type="button" onclick="insertMarkdown('~~', '~~', 'texto tachado')" title="Tachado (~~texto~~)" class="p-1.5 hover:bg-zinc-800 hover:text-cyan-400 rounded-xs transition-colors line-through">S</button>
+        <span class="w-[1px] h-4 bg-zinc-800 mx-1"></span>
+
+        <button type="button" onclick="insertMarkdown('# ', '', 'Encabezado principal')" title="Encabezado 1 (# Titulo)" class="px-1.5 py-1 hover:bg-zinc-800 hover:text-cyan-400 rounded-xs transition-colors font-mono font-semibold">H1</button>
+        <button type="button" onclick="insertMarkdown('## ', '', 'Encabezado de sección')" title="Encabezado 2 (## Subtitulo)" class="px-1.5 py-1 hover:bg-zinc-800 hover:text-cyan-400 rounded-xs transition-colors font-mono font-semibold">H2</button>
+        <button type="button" onclick="insertMarkdown('### ', '', 'Encabezado terciario')" title="Encabezado 3 (### Seccion)" class="px-1.5 py-1 hover:bg-zinc-800 hover:text-cyan-400 rounded-xs transition-colors font-mono font-semibold">H3</button>
+        <span class="w-[1px] h-4 bg-zinc-800 mx-1"></span>
+
+        <button type="button" onclick="insertMarkdown('- ', '', 'Elemento de lista')" title="Lista con viñetas (- Item)" class="px-2 py-1 hover:bg-zinc-800 hover:text-cyan-400 rounded-xs transition-colors font-mono">• Lista</button>
+        <button type="button" onclick="insertMarkdown('1. ', '', 'Elemento numerado')" title="Lista numerada (1. Item)" class="px-2 py-1 hover:bg-zinc-800 hover:text-cyan-400 rounded-xs transition-colors font-mono">1. Lista</button>
+        <button type="button" onclick="insertMarkdown('> ', '', 'Cita o referencia importante')" title="Cita (> Texto)" class="px-2 py-1 hover:bg-zinc-800 hover:text-cyan-400 rounded-xs transition-colors font-mono">” Cita</button>
+        <span class="w-[1px] h-4 bg-zinc-800 mx-1"></span>
+
+        <button type="button" onclick="insertMarkdown('`', '`', 'codigo_en_linea')" title="Código en línea (`codigo`)" class="px-1.5 py-1 hover:bg-zinc-800 hover:text-cyan-400 rounded-xs transition-colors font-mono">&lt;/&gt;</button>
+        <button type="button" onclick="insertMarkdown('```markdown\n', '\n```', 'codigo o texto estructurado')" title="Bloque de código (```lenguaje)" class="px-2 py-1 hover:bg-zinc-800 hover:text-cyan-400 rounded-xs transition-colors font-mono">{ }</button>
+        <button type="button" onclick="insertMarkdown('[', '](https://ejemplo.com)', 'texto del enlace')" title="Enlace ([texto](url))" class="px-2 py-1 hover:bg-zinc-800 hover:text-cyan-400 rounded-xs transition-colors font-mono">🔗 Link</button>
+        <button type="button" onclick="insertMarkdown('\n---\n', '', '')" title="Línea horizontal (---)" class="px-1.5 py-1 hover:bg-zinc-800 hover:text-cyan-400 rounded-xs transition-colors font-mono">―</button>
+
+        <span class="ml-auto text-[11px] text-zinc-500 hidden sm:inline">
+            Tab para sangría · Shift+Tab para reducir
+        </span>
     </div>
 
-    <div class="flex flex-col gap-2">
-        <input id="idea-doc-input" type="file" name="doc" accept=".txt,.md,.pdf,.docx,.csv" hidden onchange="handleIdeaFileChange(this)">
-        <button id="idea-doc-btn" type="button" onclick="document.getElementById('idea-doc-input').click()" class="cursor-pointer w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1.5 transition-all text-zinc-300 text-sm">
-            Subir archivo (.txt, .md, .pdf, .docx, .csv)
-        </button>
+    
+    <div id="editor-workspace" class="flex-1 flex flex-col md:flex-row gap-4 min-h-[480px]">
+        
+        <div id="editor-textarea-container" class="flex-1 flex flex-col w-full h-full">
+            <textarea
+                id="idea-editor-textarea"
+                name="content"
+                placeholder="Escribe aquí tu contenido en Markdown... Puedes usar encabezados (#), listas (-), tablas, negritas (**), citas (>) y código (`)."
+                class="flex-1 w-full min-h-[480px] p-4 bg-zinc-950/80 border border-zinc-800/80 focus:border-cyan-500 rounded-xs outline-none text-zinc-100 placeholder-zinc-500 font-mono text-xs sm:text-sm leading-relaxed resize-y transition-colors"
+            >{{.content}}</textarea>
+        </div>
 
-        <div id="idea-doc-preview" class="hidden items-center justify-between gap-2 border border-cyan-500/40 bg-cyan-950/20 px-2.5 py-1.5 rounded-xs text-xs">
-            <div class="flex items-center gap-2 min-w-0">
-                <span id="idea-doc-type" class="shrink-0 uppercase font-semibold tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"></span>
-                <span id="idea-doc-name" class="text-zinc-200 truncate"></span>
+        
+        <div id="editor-preview-container" class="hidden flex-1 flex flex-col w-full h-full min-h-[480px] bg-zinc-950/50 border border-zinc-800/80 rounded-xs p-5 overflow-y-auto">
+            <div id="markdown-preview-output" class="markdown-body text-sm leading-relaxed">
+                <p class="text-zinc-500 italic">La vista previa de tu texto formateado aparecerá aquí...</p>
             </div>
-            <button type="button" onclick="clearIdeaFile()" class="shrink-0 text-zinc-400 hover:text-red-400 cursor-pointer transition-colors">
+        </div>
+    </div>
+
+    
+    <div class="border-t border-zinc-800/80 pt-3 flex flex-col gap-2">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+                <input id="idea-doc-input" type="file" name="doc" accept=".txt,.md,.pdf,.docx,.csv" hidden onchange="handleIdeaFileChange(this)">
+                <button id="idea-doc-btn" type="button" onclick="document.getElementById('idea-doc-input').click()"
+                    class="cursor-pointer border border-zinc-800 hover:border-cyan-500 bg-zinc-950 px-3 py-1.5 rounded-xs transition-all text-zinc-300 text-xs flex items-center gap-1.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-paperclip"><path d="M13.234 20.252 21 12.3"/><path d="m16 6-8.414 8.586a2 2 0 0 0 0 2.828 2 2 0 0 0 2.828 0l8.414-8.586a4 4 0 0 0 0-5.656 4 4 0 0 0-5.656 0l-8.415 8.585a6 6 0 1 0 8.486 8.486"/></svg>
+                    <span>Adjuntar archivo (.md, .txt, .pdf, .docx, .csv)</span>
+                </button>
+            </div>
+
+            <span class="text-[11px] text-zinc-500">
+                Si adjuntas un archivo, se incorporará a la red junto a lo que escribas.
+            </span>
+        </div>
+
+        <div id="idea-doc-preview" class="hidden items-center justify-between gap-2 border border-cyan-500/40 bg-cyan-950/20 px-3 py-2 rounded-xs text-xs">
+            <div class="flex items-center gap-2 min-w-0">
+                <span id="idea-doc-type" class="shrink-0 uppercase font-semibold tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px]"></span>
+                <span id="idea-doc-name" class="text-zinc-200 truncate font-mono text-xs"></span>
+                <button id="idea-load-to-editor-btn" type="button" onclick="loadAttachedFileToEditor()" class="hidden ml-2 text-cyan-400 hover:text-cyan-300 underline cursor-pointer text-xs">
+                    Cargar en el editor
+                </button>
+            </div>
+            <button type="button" onclick="clearIdeaFile()" class="shrink-0 text-zinc-400 hover:text-red-400 cursor-pointer transition-colors text-xs">
                 Quitar
             </button>
         </div>
     </div>
 
-    <div class="flex gap-3 items-center justify-start">
-        <button type="submit" class="border border-zinc-50 hover:border-cyan-500 text-zinc-50 hover:text-cyan-500 rounded p-1 cursor-pointer transition-all">
-            Confirmar
-        </button>
-        <button
-        type="button"
-        hx-get="/web/ideas/list"
-        hx-target="#workspace"
-        hx-swap="innerHTML"
-        class="text-zinc-50 hover:text-red-500 cursor-pointer transition-all">
-            Cancelar
-        </button>
-    </div>
-
-    <style>
-        #idea-loading-screen {
-            display: none;
-        }
-        #idea-loading-screen.active {
-            display: flex;
-        }
-    </style>
-
+    
     <div id="idea-loading-screen" class="fixed inset-0 z-[110] bg-zinc-950/90 backdrop-blur-md flex-col items-center justify-center p-6 text-center select-none">
         <div class="flex flex-col items-center gap-4 max-w-sm w-full">
-            
             <div class="flex items-center justify-center text-blue-500">
                 <svg xmlns="http://www.w3.org/2000/svg" width="140" height="34" viewBox="0 0 130 32" fill="none" class="text-blue-500">
                     <style>
-                        /* Tanda 1 (0% a 50%): Entran en orden C, A, D, B y se reorganizan a A, B, C, D */
                         @keyframes pureSortA {
                             0% { transform: translate(50px, -12px); opacity: 0; }
                             10% { transform: translate(50px, 0); opacity: 1; }
@@ -104,8 +345,6 @@ bg-zinc-900 p-4 sm:p-6 flex flex-col gap-4 shadow-xl
                             38%, 44% { transform: translate(110px, 0); opacity: 1; }
                             49%, 100% { transform: translate(110px, 14px); opacity: 0; }
                         }
-
-                        /* Tanda 2 (50% a 100%): Entran en orden F, H, E, G y se reorganizan a E, F, G, H */
                         @keyframes pureSortE {
                             0%, 50% { transform: translate(80px, -12px); opacity: 0; }
                             60% { transform: translate(80px, 0); opacity: 1; }
@@ -135,36 +374,31 @@ bg-zinc-900 p-4 sm:p-6 flex flex-col gap-4 shadow-xl
                             99%, 100% { transform: translate(110px, 14px); opacity: 0; }
                         }
 
-                        .floating-letter {
+                        .letter-pure {
                             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
                             font-weight: 400;
-                            font-size: 16px;
-                            fill: currentColor;
-                            dominant-baseline: central;
-                            text-anchor: middle;
+                            font-size: 19px;
+                            fill: #3b82f6;
                         }
-
-                        .let-a { animation: pureSortA 5.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite; }
-                        .let-b { animation: pureSortB 5.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite; }
-                        .let-c { animation: pureSortC 5.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite; }
-                        .let-d { animation: pureSortD 5.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite; }
-
-                        .let-e { animation: pureSortE 5.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite; }
-                        .let-f { animation: pureSortF 5.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite; }
-                        .let-g { animation: pureSortG 5.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite; }
-                        .let-h { animation: pureSortH 5.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite; }
+                        .l-A { animation: pureSortA 5.2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+                        .l-B { animation: pureSortB 5.2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+                        .l-C { animation: pureSortC 5.2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+                        .l-D { animation: pureSortD 5.2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+                        .l-E { animation: pureSortE 5.2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+                        .l-F { animation: pureSortF 5.2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+                        .l-G { animation: pureSortG 5.2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+                        .l-H { animation: pureSortH 5.2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
                     </style>
-
-                    <!-- Literalmente solo las letras al aire -->
-                    <text class="floating-letter let-a" y="16">A</text>
-                    <text class="floating-letter let-b" y="16">B</text>
-                    <text class="floating-letter let-c" y="16">C</text>
-                    <text class="floating-letter let-d" y="16">D</text>
-
-                    <text class="floating-letter let-e" y="16">E</text>
-                    <text class="floating-letter let-f" y="16">F</text>
-                    <text class="floating-letter let-g" y="16">G</text>
-                    <text class="floating-letter let-h" y="16">H</text>
+                    <g>
+                        <text class="letter-pure l-A" y="22" text-anchor="middle">A</text>
+                        <text class="letter-pure l-B" y="22" text-anchor="middle">B</text>
+                        <text class="letter-pure l-C" y="22" text-anchor="middle">C</text>
+                        <text class="letter-pure l-D" y="22" text-anchor="middle">D</text>
+                        <text class="letter-pure l-E" y="22" text-anchor="middle">E</text>
+                        <text class="letter-pure l-F" y="22" text-anchor="middle">F</text>
+                        <text class="letter-pure l-G" y="22" text-anchor="middle">G</text>
+                        <text class="letter-pure l-H" y="22" text-anchor="middle">H</text>
+                    </g>
                 </svg>
             </div>
 
@@ -188,181 +422,343 @@ bg-zinc-900 p-4 sm:p-6 flex flex-col gap-4 shadow-xl
             </div>
         </div>
     </div>
-
-    <script>
-        window.handleIdeaFileChange = function(input) {
-            var preview = document.getElementById('idea-doc-preview');
-            var typeBadge = document.getElementById('idea-doc-type');
-            var nameLabel = document.getElementById('idea-doc-name');
-            var btn = document.getElementById('idea-doc-btn');
-
-            if (!input.files || !input.files.length) {
-                window.clearIdeaFile();
-                return;
-            }
-
-            var file = input.files[0];
-            var parts = file.name.split('.');
-            var ext = parts.length > 1 ? parts.pop().toUpperCase() : 'ARCHIVO';
-            var typeLabels = {
-                'TXT': 'TXT · Texto',
-                'MD': 'MD · Markdown',
-                'PDF': 'PDF · Documento',
-                'DOCX': 'DOCX · Word',
-                'CSV': 'CSV · Tabla'
-            };
-
-            typeBadge.textContent = typeLabels[ext] || ext;
-            nameLabel.textContent = file.name;
-            preview.classList.remove('hidden');
-            preview.classList.add('flex');
-            btn.textContent = 'Cambiar archivo';
-        };
-
-        window.clearIdeaFile = function() {
-            var input = document.getElementById('idea-doc-input');
-            var preview = document.getElementById('idea-doc-preview');
-            var btn = document.getElementById('idea-doc-btn');
-
-            input.value = '';
-            preview.classList.add('hidden');
-            preview.classList.remove('flex');
-            btn.textContent = 'Subir archivo (.txt, .md, .pdf, .docx, .csv)';
-        };
-
-        (function() {
-            var minCycleMs = 5200;
-            var phraseInterval = null;
-            var currentIdx = 0;
-
-            var phrases = [
-                "Revisando la información...",
-                "Separando las ideas principales...",
-                "Identificando los puntos clave...",
-                "Organizando el contenido...",
-                "Conectando temas relacionados...",
-                "Guardando todo en tu espacio..."
-            ];
-
-            function startPhraseRotation() {
-                var phraseEl = document.getElementById("idea-loading-phrase");
-                var fileInput = document.getElementById("idea-doc-input");
-                if (fileInput && fileInput.files && fileInput.files.length > 0) {
-                    phrases[0] = "Revisando archivo: " + fileInput.files[0].name;
-                } else {
-                    phrases[0] = "Revisando tu idea...";
-                }
-                currentIdx = 0;
-                if (phraseEl) {
-                    phraseEl.textContent = phrases[0];
-                    phraseEl.style.opacity = '1';
-                }
-
-                if (phraseInterval) clearInterval(phraseInterval);
-                phraseInterval = setInterval(function() {
-                    var el = document.getElementById("idea-loading-phrase");
-                    if (!el) return;
-                    el.style.opacity = '0';
-                    setTimeout(function() {
-                        currentIdx = (currentIdx + 1) % phrases.length;
-                        el.textContent = phrases[currentIdx];
-                        el.style.opacity = '1';
-                    }, 200);
-                }, 2200);
-            }
-
-            function stopPhraseRotation() {
-                if (phraseInterval) {
-                    clearInterval(phraseInterval);
-                    phraseInterval = null;
-                }
-            }
-
-            window.handleIdeaFormSubmit = async function(event) {
-                event.preventDefault();
-                event.stopPropagation();
-
-                var form = document.getElementById("idea-form");
-                var titleInput = form.querySelector('input[name="title"]');
-                var contentInput = form.querySelector('textarea[name="content"]');
-                var fileInput = document.getElementById("idea-doc-input");
-
-                var hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
-                var hasTitle = titleInput && titleInput.value.trim().length > 0;
-                var hasContent = contentInput && contentInput.value.trim().length > 0;
-
-                if (!hasFile && (!hasTitle || !hasContent)) {
-                    var errorBox = document.getElementById("idea-validation-error");
-                    if (!errorBox) {
-                        errorBox = document.createElement("p");
-                        errorBox.id = "idea-validation-error";
-                        errorBox.className = "border border-red-500/50 bg-red-500/10 text-red-300 p-2 rounded-xs";
-                        form.insertBefore(errorBox, form.children[1]);
-                    }
-                    errorBox.textContent = "El título y el contenido son obligatorios (o sube un archivo .txt, .md, .pdf, .docx, .csv).";
-                    return false;
-                }
-
-                var screen = document.getElementById("idea-loading-screen");
-                if (screen) {
-                    screen.classList.add("active");
-                    screen.style.display = "flex";
-                }
-
-                
-                startPhraseRotation();
-
-                
-                var minCyclePromise = new Promise(function(resolve) {
-                    setTimeout(resolve, minCycleMs);
-                });
-
-                
-                var formData = new FormData(form);
-                var csrfInput = form.querySelector('input[name="csrf_token"]');
-                var csrfToken = csrfInput ? csrfInput.value : "";
-
-                var fetchPromise = fetch("/web/ideas/new", {
-                    method: "POST",
-                    body: formData,
-                    headers: {
-                        "HX-Request": "true",
-                        "X-CSRF-Token": csrfToken
-                    }
-                }).catch(function(err) {
-                    return {
-                        ok: false,
-                        status: 500,
-                        text: function() { return Promise.resolve("Error al conectar con el servidor: " + err.message); }
-                    };
-                });
-
-                
-                try {
-                    var results = await Promise.all([minCyclePromise, fetchPromise]);
-                    var response = results[1];
-                    var responseHtml = await response.text();
-
-                    var workspace = document.getElementById("workspace") || document.body;
-                    workspace.innerHTML = responseHtml;
-
-                    if (window.htmx) {
-                        window.htmx.process(workspace);
-                    }
-
-                    if (response.ok) {
-                        window.history.pushState({}, "", "/web/ideas/list");
-                    }
-                } finally {
-                    stopPhraseRotation();
-                    if (screen) {
-                        screen.classList.remove("active");
-                        screen.style.display = "none";
-                    }
-                }
-
-                return false;
-            };
-        })();
-    </script>
 </form>
+
+<script>
+    var currentEditorMode = 'write';
+
+    window.setEditorMode = function(mode) {
+        currentEditorMode = mode;
+        var textareaContainer = document.getElementById('editor-textarea-container');
+        var previewContainer = document.getElementById('editor-preview-container');
+        var writeBtn = document.getElementById('mode-write-btn');
+        var splitBtn = document.getElementById('mode-split-btn');
+        var previewBtn = document.getElementById('mode-preview-btn');
+        var toolbar = document.getElementById('markdown-toolbar');
+
+        var activeClass = "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30";
+        var inactiveClass = "text-zinc-400 hover:text-zinc-200 border-transparent";
+
+        [writeBtn, splitBtn, previewBtn].forEach(function(btn) {
+            if (!btn) return;
+            btn.className = btn.className.replace(activeClass, "").replace(inactiveClass, "");
+            btn.classList.remove("bg-cyan-500/20", "text-cyan-300", "border-cyan-500/30");
+            btn.classList.add("text-zinc-400", "hover:text-zinc-200");
+        });
+
+        if (mode === 'write') {
+            textareaContainer.classList.remove('hidden');
+            previewContainer.classList.add('hidden');
+            toolbar.classList.remove('hidden');
+            writeBtn.classList.remove("text-zinc-400", "hover:text-zinc-200");
+            writeBtn.classList.add("bg-cyan-500/20", "text-cyan-300", "border", "border-cyan-500/30");
+        } else if (mode === 'split') {
+            textareaContainer.classList.remove('hidden');
+            previewContainer.classList.remove('hidden');
+            toolbar.classList.remove('hidden');
+            if (splitBtn) {
+                splitBtn.classList.remove("text-zinc-400", "hover:text-zinc-200");
+                splitBtn.classList.add("bg-cyan-500/20", "text-cyan-300", "border", "border-cyan-500/30");
+            }
+            updateMarkdownPreview();
+        } else if (mode === 'preview') {
+            textareaContainer.classList.add('hidden');
+            previewContainer.classList.remove('hidden');
+            toolbar.classList.add('hidden');
+            previewBtn.classList.remove("text-zinc-400", "hover:text-zinc-200");
+            previewBtn.classList.add("bg-cyan-500/20", "text-cyan-300", "border", "border-cyan-500/30");
+            updateMarkdownPreview();
+        }
+    };
+
+    window.updateMarkdownPreview = function() {
+        var textarea = document.getElementById('idea-editor-textarea');
+        var previewOutput = document.getElementById('markdown-preview-output');
+        if (!textarea || !previewOutput) return;
+
+        var text = textarea.value.trim();
+        if (!text) {
+            previewOutput.innerHTML = '<p class="text-zinc-500 italic">La vista previa de tu texto formateado aparecerá aquí...</p>';
+            return;
+        }
+
+        if (window.marked) {
+            previewOutput.innerHTML = window.marked.parse(textarea.value);
+        } else {
+            previewOutput.innerText = textarea.value;
+        }
+    };
+
+    window.insertMarkdown = function(prefix, suffix, placeholder) {
+        var textarea = document.getElementById('idea-editor-textarea');
+        if (!textarea) return;
+
+        var start = textarea.selectionStart;
+        var end = textarea.selectionEnd;
+        var val = textarea.value;
+        var selected = val.substring(start, end);
+        var replacement = prefix + (selected || placeholder) + suffix;
+
+        textarea.value = val.substring(0, start) + replacement + val.substring(end);
+        var newCursorPos = selected ? start + replacement.length : start + prefix.length + placeholder.length;
+        textarea.focus();
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+
+        if (currentEditorMode === 'split' || currentEditorMode === 'preview') {
+            updateMarkdownPreview();
+        }
+    };
+
+    (function initEditorEvents() {
+        var textarea = document.getElementById('idea-editor-textarea');
+        if (!textarea) return;
+
+        textarea.addEventListener('keydown', function(e) {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                var start = this.selectionStart;
+                var end = this.selectionEnd;
+                var val = this.value;
+
+                if (e.shiftKey) {
+                    if (val.substring(start - 2, start) === '  ') {
+                        this.value = val.substring(0, start - 2) + val.substring(start);
+                        this.selectionStart = this.selectionEnd = start - 2;
+                    }
+                } else {
+                    this.value = val.substring(0, start) + '  ' + val.substring(end);
+                    this.selectionStart = this.selectionEnd = start + 2;
+                }
+
+                if (currentEditorMode === 'split') {
+                    updateMarkdownPreview();
+                }
+            }
+        });
+
+        textarea.addEventListener('input', function() {
+            if (currentEditorMode === 'split') {
+                updateMarkdownPreview();
+            }
+        });
+    })();
+
+    var lastAttachedFile = null;
+
+    window.handleIdeaFileChange = function(input) {
+        var preview = document.getElementById('idea-doc-preview');
+        var typeBadge = document.getElementById('idea-doc-type');
+        var nameLabel = document.getElementById('idea-doc-name');
+        var btn = document.getElementById('idea-doc-btn');
+        var loadBtn = document.getElementById('idea-load-to-editor-btn');
+
+        if (!input.files || !input.files.length) {
+            window.clearIdeaFile();
+            return;
+        }
+
+        var file = input.files[0];
+        lastAttachedFile = file;
+        var parts = file.name.split('.');
+        var ext = parts.length > 1 ? parts.pop().toUpperCase() : 'ARCHIVO';
+        var typeLabels = {
+            'TXT': 'TXT · Texto plano',
+            'MD': 'MD · Markdown',
+            'PDF': 'PDF · Documento',
+            'DOCX': 'DOCX · Word',
+            'CSV': 'CSV · Tabla de datos'
+        };
+
+        typeBadge.textContent = typeLabels[ext] || ext;
+        nameLabel.textContent = file.name;
+        preview.classList.remove('hidden');
+        preview.classList.add('flex');
+        btn.textContent = 'Cambiar archivo';
+
+        if (ext === 'MD' || ext === 'TXT') {
+            loadBtn.classList.remove('hidden');
+            loadBtn.style.display = 'inline-block';
+        } else {
+            loadBtn.classList.add('hidden');
+            loadBtn.style.display = 'none';
+        }
+    };
+
+    window.loadAttachedFileToEditor = function() {
+        if (!lastAttachedFile) return;
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            var content = e.target.result;
+            var textarea = document.getElementById('idea-editor-textarea');
+            var titleInput = document.getElementById('idea-title-input');
+
+            if (textarea) {
+                if (textarea.value.trim().length > 0) {
+                    if (confirm("¿Deseas reemplazar el texto actual del editor con el contenido del archivo?")) {
+                        textarea.value = content;
+                    }
+                } else {
+                    textarea.value = content;
+                }
+            }
+
+            if (titleInput && !titleInput.value.trim()) {
+                var nameWithoutExt = lastAttachedFile.name.replace(/\.[^/.]+$/, "");
+                titleInput.value = nameWithoutExt;
+            }
+
+            if (currentEditorMode === 'split' || currentEditorMode === 'preview') {
+                updateMarkdownPreview();
+            }
+        };
+        reader.readAsText(lastAttachedFile);
+    };
+
+    window.clearIdeaFile = function() {
+        var input = document.getElementById('idea-doc-input');
+        var preview = document.getElementById('idea-doc-preview');
+        var btn = document.getElementById('idea-doc-btn');
+        var loadBtn = document.getElementById('idea-load-to-editor-btn');
+
+        lastAttachedFile = null;
+        input.value = '';
+        preview.classList.add('hidden');
+        preview.classList.remove('flex');
+        if (loadBtn) {
+            loadBtn.classList.add('hidden');
+            loadBtn.style.display = 'none';
+        }
+        btn.textContent = 'Adjuntar archivo (.md, .txt, .pdf, .docx, .csv)';
+    };
+
+    (function() {
+        var minCycleMs = 5200;
+        var phraseInterval = null;
+        var currentIdx = 0;
+
+        var phrases = [
+            "Revisando la información...",
+            "Separando las ideas principales...",
+            "Identificando los puntos clave...",
+            "Organizando el contenido...",
+            "Conectando temas relacionados...",
+            "Guardando todo en tu espacio..."
+        ];
+
+        function startPhraseRotation() {
+            var phraseEl = document.getElementById("idea-loading-phrase");
+            var fileInput = document.getElementById("idea-doc-input");
+            if (fileInput && fileInput.files && fileInput.files.length > 0) {
+                phrases[0] = "Revisando archivo: " + fileInput.files[0].name;
+            } else {
+                phrases[0] = "Revisando tu idea...";
+            }
+            currentIdx = 0;
+            if (phraseEl) {
+                phraseEl.textContent = phrases[0];
+                phraseEl.style.opacity = '1';
+            }
+
+            if (phraseInterval) clearInterval(phraseInterval);
+            phraseInterval = setInterval(function() {
+                var el = document.getElementById("idea-loading-phrase");
+                if (!el) return;
+                el.style.opacity = '0';
+                setTimeout(function() {
+                    currentIdx = (currentIdx + 1) % phrases.length;
+                    el.textContent = phrases[currentIdx];
+                    el.style.opacity = '1';
+                }, 200);
+            }, 2200);
+        }
+
+        function stopPhraseRotation() {
+            if (phraseInterval) {
+                clearInterval(phraseInterval);
+                phraseInterval = null;
+            }
+        }
+
+        window.handleIdeaFormSubmit = async function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            var form = document.getElementById("idea-form");
+            var titleInput = form.querySelector('input[name="title"]');
+            var contentInput = form.querySelector('textarea[name="content"]');
+            var fileInput = document.getElementById("idea-doc-input");
+
+            var hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+            var hasTitle = titleInput && titleInput.value.trim().length > 0;
+            var hasContent = contentInput && contentInput.value.trim().length > 0;
+
+            if (!hasFile && (!hasTitle || !hasContent)) {
+                var errorBox = document.getElementById("idea-validation-error");
+                if (!errorBox) {
+                    errorBox = document.createElement("p");
+                    errorBox.id = "idea-validation-error";
+                    errorBox.className = "border border-red-500/50 bg-red-500/10 text-red-300 p-2.5 rounded-xs text-xs";
+                    form.insertBefore(errorBox, form.children[1]);
+                }
+                errorBox.textContent = "El título y el contenido son obligatorios (o adjunta un archivo .txt, .md, .pdf, .docx, .csv).";
+                return false;
+            }
+
+            var screen = document.getElementById("idea-loading-screen");
+            if (screen) {
+                screen.classList.add("active");
+                screen.style.display = "flex";
+            }
+
+            startPhraseRotation();
+
+            var minCyclePromise = new Promise(function(resolve) {
+                setTimeout(resolve, minCycleMs);
+            });
+
+            var formData = new FormData(form);
+            var csrfInput = form.querySelector('input[name="csrf_token"]');
+            var csrfToken = csrfInput ? csrfInput.value : "";
+
+            var fetchPromise = fetch("/web/ideas/new", {
+                method: "POST",
+                body: formData,
+                headers: {
+                    "HX-Request": "true",
+                    "X-CSRF-Token": csrfToken
+                }
+            }).catch(function(err) {
+                return {
+                    ok: false,
+                    status: 500,
+                    text: function() { return Promise.resolve("Error al conectar con el servidor: " + err.message); }
+                };
+            });
+
+            try {
+                var results = await Promise.all([minCyclePromise, fetchPromise]);
+                var response = results[1];
+                var responseHtml = await response.text();
+
+                var workspace = document.getElementById("workspace") || document.body;
+                workspace.innerHTML = responseHtml;
+
+                if (window.htmx) {
+                    window.htmx.process(workspace);
+                }
+
+                if (response.ok) {
+                    window.history.pushState({}, "", "/web/ideas/list");
+                }
+            } finally {
+                stopPhraseRotation();
+                if (screen) {
+                    screen.classList.remove("active");
+                    screen.style.display = "none";
+                }
+            }
+
+            return false;
+        };
+    })();
+</script>
