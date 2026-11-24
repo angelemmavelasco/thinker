@@ -1,10 +1,10 @@
 # Thinker
 
-Thinker is an associative knowledge graph and collaborative LLM wiki built for teams that need a shared digital brain. Instead of asking people to manually categorize documents into rigid folders or write bidirectional links by hand, the platform ingests raw notes and thoughts, extracts core concepts with a language model, and compiles them into a living graph structure inspired by the LLM wiki pattern proposed by Andrej Karpathy.
+Thinker is an associative knowledge graph and collaborative LLM wiki built for teams that need a shared digital brain. Instead of asking people to manually categorize documents into rigid folders or write bidirectional links by hand, the platform ingests raw notes and thoughts, extracts core concepts with a local language model, and compiles them into a living graph structure inspired by the LLM wiki pattern proposed by Andrej Karpathy.
 
-By pairing an interactive neural network graph interface with role based access control, the system lets organizations maintain an autonomous second brain where knowledge compounds naturally as users write.
+By pairing a linked interface (graph that looks like a neural network) with role based access control, the system lets organizations maintain an autonomous second brain where knowledge compounds naturally as users write.
 
-The codebase provides the core Go web service, dual SQLite and PostgreSQL storage, sqlc generated database access, server rendered HTML templates, asynchronous entity extraction workers, dynamic knowledge graph traversal, and an externalized prompts system.
+The codebase currently provides the core Go web service, PostgreSQL storage, sqlc generated database access, and server rendered HTML templates. The asynchronous entity extraction worker and graph expansion pipeline represent the immediate architectural roadmap.
 
 ## Overview
 
@@ -12,68 +12,53 @@ Most note taking platforms rely on folder hierarchies or basic keyword search. W
 
 Thinker treats ideas as an active, compounding artifact:
 
-```mermaid
-flowchart TD
-    N1["1. Idea Ingestion<br/>Raw note or thought becomes an idea node inside semantic graph"]
-    N2["2. Semantic Compilation<br/>Language model extracts entities, topics, and connections"]
-    N3["3. Relationship Linking<br/>Explicit edges connect ideas for multi hop discovery"]
-    N4["4. Role Based Access<br/>Permissions govern knowledge traversal by user role"]
-    N5["5. Graph Search and Discovery<br/>Combines text matching with semantic graph expansion"]
-
-    N1 --> N2 --> N3 --> N4 --> N5
-```
-
-The present build contains the foundation for user and idea records, authentication, security middleware, named route handling, database access layer, and server rendered template views.
+- Every submitted note or thought becomes an idea node inside a semantic graph.
+- A local language model compiles incoming content, extracting entities, identifying topics, and noting connections or contradictions.
+- Explicit relationships create edges between ideas, allowing multi hop discovery without relying solely on brittle text matching.
+- Role based access control ensures users only discover and traverse knowledge permitted for their organizational role.
+- The search experience operates independently of manual tagging by traversing the graph structure and combining text matching with graph expansion.
+The present build contains the foundation for user and idea records, named route handling, database access layer, and server rendered template views.
 
 ## Stack
+- go 1.26.5
+> - [github.com/gin-contrib/multitemplate v1.1.4](https://pkg.go.dev/github.com/gin-contrib/multitemplate@v1.1.4)
+> - [github.com/gin-gonic/gin v1.12.0](https://pkg.go.dev/github.com/gin-gonic/gin@v1.12.0)
+> - [github.com/jackc/pgx/v5 v5.11.0](https://pkg.go.dev/github.com/jackc/pgx/v5@v5.11.0)
+> - [github.com/joho/godotenv v1.5.1](https://pkg.go.dev/github.com/joho/godotenv@v1.5.1)
 
-#### Backend and language
-go 1.26.5
-github.com/gin gonic/gin v1.12.0
-github.com/gin contrib/multitemplate v1.1.4
-github.com/jackc/pgx/v5 v5.11.0
-github.com/joho/godotenv v1.5.1
-github.com/sashabaranov/go openai v1.43.0
-golang.org/x/crypto/argon2
+- LLM
+> - [Qwen2.5-3B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF)
+> - [MiniMax M3.1 Flash](https://www.minimax.io/blog/minimax-m31f)
 
-#### Language models and embeddings
-Local inference with llama server using Qwen 2.5 3B GGUF
-Local embedding inference with llama server using bge small en v1.5
-External cloud providers compatible with OpenAI API standard
-
-#### Database and storage
-SQLite for local development
-PostgreSQL for relational storage and graph relations
-
-#### Frontend
-HTML5
-CSS with Tailwind 4
-JavaScript
+- HTML5
+- CSS
+> - [Tailwind 4](https://tailwindcss.com/docs/installation/using-vite)
+- JavaScript
 
 ## Architecture and data flow
 ```mermaid
-flowchart TD
+flowchart LR
 
     P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7 --> P8
 
     subgraph Col1 [" "]
-        direction LR
-        P1["1. Ingestion"]
+        direction TB
+        P1("1. Ingestion")
         C1_1["Gin HTTP router"]
         C1_2["RBAC middleware"]
         P1 ~~~ C1_1 ~~~ C1_2
     end
 
     subgraph Col2 [" "]
-        direction LR
-        P2["2. Validation"]
+        direction TB
+        P2("2. Validation")
         C2_1["Go input type<br/>validation handler"]
         P2 ~~~ C2_1
     end
 
     subgraph Col3 [" "]
-        direction LR
-        P3["3. Preprocessing"]
+        direction TB
+        P3("3. Preprocessing")
         C3_1["Go chunkenizer"]
         C3_2["Go structs"]
         C3_3["SQLC payload<br/>validation"]
@@ -81,16 +66,16 @@ flowchart TD
     end
 
     subgraph Col4 [" "]
-        direction LR
-        P4["4. Async dispatch"]
+        direction TB
+        P4("4. Async dispatch")
         C4_1["Go buffered channel"]
         C4_2["Bounded worker pool"]
         P4 ~~~ C4_1 ~~~ C4_2
     end
 
     subgraph Col5 [" "]
-        direction LR
-        P5["5. Semantic<br/>extraction"]
+        direction TB
+        P5("5. Semantic<br/>extraction")
         C5_1["llama server"]
         C5_2["Qwen 2.5 3B GGUF"]
         C5_3["Grammar JSON"]
@@ -98,16 +83,16 @@ flowchart TD
     end
 
     subgraph Col6 [" "]
-        direction LR
-        P6["6. Vector<br/>embedding"]
+        direction TB
+        P6("6. Vector<br/>embedding")
         C6_1["Specialized embedding<br/>model"]
         T6["PGVector coords<br/>storage & indexation"]
         P6 ~~~ C6_1 ~~~ T6
     end
 
     subgraph Col7 [" "]
-        direction LR
-        P7["7. Linking"]
+        direction TB
+        P7("7. Linking")
         C7_1["Postgres KNN search"]
         C7_2["Go overlap concept<br/>linker"]
         C7_3["Go bidirectional<br/>injector"]
@@ -115,8 +100,8 @@ flowchart TD
     end
 
     subgraph Col8 [" "]
-        direction LR
-        P8["8. Wiki and<br/>consulting"]
+        direction TB
+        P8("8. Wiki and<br/>consulting")
         C8_1["Go graph traversal<br/>PPR"]
         C8_2["Gin HTML templates"]
         T8["Postgres knowledge<br/>graph"]
@@ -141,119 +126,92 @@ flowchart TD
     style Col8 fill:none,stroke:none;
 ```
 
-Ingestion
-> Gin HTTP router
-    Access to a url path via web app.
 
-> RBAC role based access control middleware
-    Controls permissions for every idea, keyword, and action according to the user role to enforce enterprise privacy.
+1. Ingestion
+- Gin HTTP router
+    > Access to a url path via web app.
+- RBAC (Role-based access control) middleware
+    > Controls permissions for every idea, keyword, and action according to the user role to enforce enterprise privacy.
 
-Validation
-> Go input type validation handler
-    Validates that submitted files like pdf, csv, txt, docx match allowed extensions and size limits before processing.
+2. Validation
+- Go input type validation handler
+    > Validates that submitted files (.pdf, .csv, .txt, .docx) match allowed extensions and size limits before processing.
 
-Preprocessing
-> Go chunkenizer
-    Splits long documents into manageable, coherent text segments so the model can ingest them within context limits.
+3. Preprocessing
+- Go chunkenizer
+    > Splits long documents into manageable, coherent text segments so the local model can ingest them within its context limits.
+- Go structs
+    > Type-safe memory structures that hold and transform validated raw data across backend layers.
+- SQLC payload validation
+    > Validates and coerces incoming request parameters into generated database types to reject malformed data before hitting the database.
 
-> Go structs
-    Type safe memory structures that hold and transform validated raw data across backend layers.
+4. Async dispatch
+- Go buffered channel
+    > Queues validated document tasks in memory so the HTTP handler can respond immediately without blocking the client.
+- Bounded worker pool
+    > Limits the number of concurrent background tasks to prevent local CPU and memory exhaustion during heavy inference.
 
-> SQLC payload validation
-    Validates and coerces incoming request parameters into generated database types to reject malformed data before hitting the database.
+5. Semantic extraction
+- llama server
+    > High-performance C++ inference engine that exposes a lightweight local HTTP endpoint for the model without Python overhead.
+- Qwen 2.5 3B GGUF
+    > Fast, low-footprint local language model that reads the text to extract summaries, entities, and conceptual relations.
+- Grammar JSON
+    > Forces the model output into an exact schema via GBNF grammars to ensure deterministic parsing in Go.
 
-Async dispatch
-> Go buffered channel
-Queues validated document tasks in memory so the HTTP handler can respond immediately without blocking the client.
+6. Vector embedding
+- specialized embedding model
+    > Translates extracted concepts and idea texts into dense numerical vectors that capture geometric semantic meaning.
+- PGVector vector cords storage and indexation
+    > Stores embeddings in PostgreSQL and accelerates similarity searches through HNSW indexing.
 
-> Bounded worker pool
-Limits the number of concurrent background tasks to prevent CPU and memory exhaustion during heavy inference.
+7. Linking
+- Postgres knn search
+    > Queries the nearest neighbor vectors in the database to identify candidate ideas with high semantic similarity.
+- Go overlap concept linker
+    > Computes intersections between extracted entity tags to reinforce edges that share common named concepts.
+- Go bidirectional injector
+    > Creates reciprocal graph edges in the database and inserts bidirectional links into markdown documents.
 
-Semantic extraction
-> llama server or external cloud provider
-Inference engine that exposes a lightweight HTTP endpoint compatible with OpenAI API standards.
-
-> Language model concept extraction
-Model that reads the text to extract summaries, entities, and conceptual relations using externalized markdown prompts.
-
->Grammar JSON
-Forces the model output into an exact schema to ensure deterministic parsing in Go.
-
-Vector embedding
->Specialized embedding model
-Translates extracted concepts and idea texts into dense numerical vectors that capture geometric semantic meaning.
-
->Vector coordinates storage and indexation
-Stores embeddings and accelerates similarity searches through vector indexing.
-
-Linking
->Nearest neighbor vector search
-Queries the nearest neighbor vectors in the database to identify candidate ideas with high semantic similarity.
-
->Go overlap concept linker
-Computes intersections between extracted entity tags to reinforce edges that share common named concepts.
-
->Go bidirectional injector
-Creates reciprocal graph edges in the database and inserts bidirectional links into markdown documents.
-
-Wiki and consulting
->Go graph traversal and expansion
-Executes graph walks across edges to retrieve deep, multi hop related ideas without flat chunking.
-
->Gin HTML templates
-Renders server side web layouts and interactive graph views directly to the browser.
-
->Relational knowledge graph
-The persistent relational store that preserves all nodes, edges, and permission constraints as a compounding single source of truth.
+8. Wiki and consulting
+- Go graph traversal PPR
+    > Executes Personalized PageRank walks across graph edges to retrieve deep, multi-hop related ideas without flat chunking.
+- Gin HTML templates
+    > Renders server-side web layouts and interactive graph views directly to the browser.
+- Postgres knowledge graph
+    > The persistent relational store that preserves all nodes, edges, and permission constraints as a compounding single source of truth.
 
 ### Architecture
 
-Thinker is almost entirely built on Go. This decision was taken due to the quickness and native concurrency support provided by the language.
+Thinker is almost enteraly built on Go. This decision was taken due to the quickness and native concurrency support provided by the language.
 
-This allows Thinker be structured in different modules comfortably and following SOLID principles with an idiomatic Go approach.
+This allows Thinker be structured in different modules confortably and following SOLID principles with an idiomatic Go approach.
 
 ```
 └── thinker/
     └── docs/
-        └── dev/
-        └── user/
     └── internal/
-        └── auth/
         └── config/
         └── database/
-            └── migrations/
         └── dtos/
         └── handlers/
-        └── middleware/
         └── routes/
-        └── services/
         └── urls/
     └── models/
-    └── prompts/
     └── static/
-        └── pages/
-            └── landing/
     └── templates/
         └── includes/
         └── layouts/
         └── pages/
-            └── auth/
-            └── landing/
-        └── partials/
-            └── ideas/
-            └── users/
         └── views/
-            └── ideas/
-            └── network/
-            └── users/
     ├── .env
     ├── .gitignore
     ├── docker-compose.yaml
     ├── go.mod
     ├── go.sum
     ├── main.go
-    ├── Makefile
     ├── README.md
+    ├── README.pdf
     ├── sqlc.yaml
     └── style_schema.md
 ```
@@ -261,26 +219,245 @@ This allows Thinker be structured in different modules comfortably and following
 ## Current Status
 
 The system currently includes:
-1. Gin HTTP setup with graceful initialization and structured routing.
-2. Dual database support with SQLite for local development and PostgreSQL with sqlc integration.
-3. User authentication with Argon2id password hashing, automatic Bcrypt migration, JWT rotation, and Google OAuth2 integration.
-4. Security middleware including IP and account rate limiting, strict CSRF validation, and secure cookie sessions.
-5. Asynchronous worker pool for background document processing and semantic analysis.
-6. Decoupled AI architecture supporting both local llama server inference and OpenAI API compatible external cloud providers.
-7. Externalized prompts architecture in separate markdown documents with dynamic disk loading and embedded fallbacks.
-8. Semantic knowledge graph with dynamic text chunking, keyword extraction, and bidirectional similarity linking.
-9. Graph traversal engine with multi hop expansion and strict grounding against prompt leakage.
-10. Interactive network graph visualization and server rendered HTML templates using Tailwind CSS.
-11. Comprehensive unit and integration test suite covering auth, config, middleware, routes, services, and prompts.
+- Gin HTTP setup and graceful initialization.
+- Single pool PostgreSQL connector with sqlc integration.
+- User listing through both JSON APIs and HTML pages.
+- Basic idea listing views.
+- Centralized route directory with reverse template resolution.
+- Base layout composition using Tailwind CSS.
+- Targeted routing and rendering unit tests.
 
 ## Next Milestones
 
-1. Production deployment setup with native pgvector index optimization.
-2. Advanced clustering and topic community detection algorithms across semantic graph nodes.
-3. Batch document ingestion supporting automated parsing of PDF, Word, and Markdown files.
-4. Export and import tools for knowledge graph backups and interoperability with Obsidian and Logseq.
-5. Fine grained role based access control filters applied directly to graph traversal subgraphs.
+- Implement authentication, session handling, and role based access control on notes and graph queries.
+- Upgrade the PostgreSQL container setup to support pgvector natively.
+- Set up a bounded Go worker pool for asynchronous note ingestion and relationship building.
+- Connect the worker pool to a local Qwen 2.5 3B instance for concept extraction and summary generation.
+- Create graph edge tables to store typed links and mutual relevance scores.
+- Implement graph traversal queries with role aware filters using recursive SQL queries.
+- Build an interactive visual graph explorer view in the web interface.
 
 ## References
-
 1. https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f
+
+
+# Plan de Implementación: Soporte para MiniMax y Proveedores Externos vs Locales
+
+Este plan define la arquitectura y los pasos para desacoplar y configurar de forma independiente los proveedores de **Generación (LLM)** y **Embeddings**, permitiendo alternar entre modelos locales (`llama-server`) y proveedores externos en la nube (**MiniMax** u otros compatibles con la API de OpenAI) a través de banderas de entorno explícitas.
+
+---
+
+## Descripción del Objetivo
+
+El sistema actual fue concebido para interactuar con `llama-server` local en los puertos `8081` y `8082`. Sin embargo, las máquinas locales con restricciones de RAM o GPU no siempre pueden alojar modelos pesados en local.
+
+MiniMax ofrece endpoints compatibles con el estándar de OpenAI tanto para chat (`MiniMax-Text-01` o `abab6.5s-chat`) como para embeddings (`embo-01`). Para operar con ellos de forma limpia y extensible, necesitamos:
+1. Reconocer las banderas `USE_EXTERNAL_LLM_PROVIDER` y `USE_EXTERNAL_EMBEDDING_PROVIDER` de forma independiente.
+2. Separar completamente las configuraciones de autenticación y endpoints (`LLM_API_KEY` vs `EMBEDDING_API_KEY`, `LLM_BASE_URL` vs `EMBEDDING_BASE_URL`, `LLM_MODEL` vs `EMBEDDING_MODEL`).
+3. Enviar el campo obligatorio `"model"` en el cuerpo JSON de las solicitudes HTTP tanto en `chat/completions` como en `embeddings`.
+4. Normalizar URLs para tolerar tanto sufijos `/v1` como rutas base limpias.
+5. Mantener compatibilidad absoluta con todos los tests unitarios existentes.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Autonomía de credenciales:**
+> Aunque en tu archivo `.env` ambas claves apunten al mismo valor (`LLM_API_KEY` y `EMBEDDING_API_KEY`), el cargador de configuración tratará cada servicio como una entidad totalmente independiente. No habrá acoplamiento cruzado.
+
+> [!NOTE]
+> **Compatibilidad de Embeddings:**
+> Como acordamos, no se requiere migración de los embeddings existentes en este paso. Al activar MiniMax (`embo-01`), las nuevas notas y búsquedas generarán vectores de 1536 dimensiones.
+
+---
+
+## Open Questions
+
+1. **URL base por defecto de MiniMax:**
+   MiniMax dispone de dos dominios principales según la cuenta: `https://api.minimax.io` (internacional/global) y `https://api.minimax.chat` (portal alternativo). Estableceremos por defecto `https://api.minimax.io` con posibilidad de sobreescribirlo libremente en `LLM_BASE_URL` / `EMBEDDING_BASE_URL`. ¿Tu cuenta de MiniMax usa el portal internacional (`api.minimax.io`)?
+2. **Modelo de texto preferido:**
+   ¿Prefieres `MiniMax-Text-01` o `abab6.5s-chat` como modelo por defecto para generación de texto? (Ambos son configurables vía `LLM_MODEL`).
+
+---
+
+## Arquitectura de Configuración
+
+```mermaid
+flowchart TD
+    Env[Variables de Entorno .env] --> Parser[config.LoadConfig]
+
+    subgraph LLM Configuration
+        Parser --> FlagLLM{USE_EXTERNAL_LLM_PROVIDER?}
+        FlagLLM -- true --> ExtLLM[Proveedor: minimax / externo<br/>BaseURL: https://api.minimax.io<br/>Key: LLM_API_KEY<br/>Model: MiniMax-Text-01]
+        FlagLLM -- false --> LocLLM[Proveedor: local<br/>BaseURL: http://127.0.0.1:8081<br/>Key: ''<br/>Model: '']
+    end
+
+    subgraph Embedding Configuration
+        Parser --> FlagEmbed{USE_EXTERNAL_EMBEDDING_PROVIDER?}
+        FlagEmbed -- true --> ExtEmbed[Proveedor: minimax / externo<br/>BaseURL: https://api.minimax.io<br/>Key: EMBEDDING_API_KEY<br/>Model: embo-01]
+        FlagEmbed -- false --> LocEmbed[Proveedor: local<br/>BaseURL: http://127.0.0.1:8082<br/>Key: ''<br/>Model: '']
+    end
+
+    ExtLLM --> LLMSvc[services.NewLLMService]
+    LocLLM --> LLMSvc
+    ExtEmbed --> EmbedSvc[services.NewEmbeddingService]
+    LocEmbed --> EmbedSvc
+```
+
+---
+
+## Proposed Changes
+
+### 1. Capa de Configuración (`internal/config`)
+
+#### [MODIFY] [internal/config/config.go](file:///c:/Users/Analista-GDL/iCloudDrive/Developer_shared/thinker1/thinker/internal/config/config.go)
+- Extender la estructura `BaseConfig` con:
+  ```go
+  UseExternalLLM       bool
+  LLMProvider          string
+  LLMApiKey            string
+  LLMBaseURL           string
+  LLMModel             string
+
+  UseExternalEmbedding bool
+  EmbeddingProvider    string
+  EmbeddingApiKey      string
+  EmbeddingBaseURL     string
+  EmbeddingModel       string
+  ```
+- Implementar la función auxiliar `normalizeBaseURL(url string) string` que elimina `/` al final y remueve `/v1` si fue provisto para prevenir concatenaciones erróneas (`/v1/v1/chat/completions`).
+- Implementar la lógica condicional en `LoadConfig()`:
+  - Leer booleanos para `USE_EXTERNAL_LLM_PROVIDER` y `USE_EXTERNAL_EMBEDDING_PROVIDER`.
+  - Si es externo, aplicar valores por defecto de MiniMax (`https://api.minimax.io`, `MiniMax-Text-01`, `embo-01`) salvo que el `.env` especifique otros valores.
+  - Si es local, aplicar valores por defecto de `llama-server` (`http://127.0.0.1:8081` y `8082`, modelos vacíos).
+  - Leer de forma aislada `LLM_API_KEY` y `EMBEDDING_API_KEY`.
+
+---
+
+### 2. Capa de Servicios (`internal/services`)
+
+#### [MODIFY] [internal/services/llm_service.go](file:///c:/Users/Analista-GDL/iCloudDrive/Developer_shared/thinker1/thinker/internal/services/llm_service.go)
+- Agregar campos a `LLMService`:
+  ```go
+  type LLMService struct {
+      baseURL    string
+      apiKey     string
+      model      string
+      provider   string
+      httpClient *http.Client
+  }
+  ```
+- Permitir firma variádica en `NewLLMService`:
+  ```go
+  func NewLLMService(baseURL, apiKey string, model ...string) *LLMService
+  ```
+  *(Esto garantiza que los tests unitarios existentes que llaman a `NewLLMService(url, key)` sigan compilando sin romperse).*
+- Agregar métodos `SetModel(m string)` y `Model() string`.
+- Modificar `chatCompletionRequest` para incluir `"model"` opcional/condicional:
+  ```go
+  type chatCompletionRequest struct {
+      Model       string        `json:"model,omitempty"`
+      Messages    []chatMessage `json:"messages"`
+      Temperature float64       `json:"temperature"`
+      MaxTokens   int           `json:"max_tokens"`
+  }
+  ```
+- En `AnalyzeIdea`, `ExpandQuery` y `AskKnowledgeGraph`, asignar `Model: s.model`.
+
+#### [MODIFY] [internal/services/embedding_service.go](file:///c:/Users/Analista-GDL/iCloudDrive/Developer_shared/thinker1/thinker/internal/services/embedding_service.go)
+- Agregar campos a `EmbeddingService`:
+  ```go
+  type EmbeddingService struct {
+      baseURL    string
+      apiKey     string
+      model      string
+      provider   string
+      httpClient *http.Client
+  }
+  ```
+- Permitir firma variádica en `NewEmbeddingService`:
+  ```go
+  func NewEmbeddingService(baseURL, apiKey string, model ...string) *EmbeddingService
+  ```
+- Modificar `embeddingRequest` para incluir `"model"`:
+  ```go
+  type embeddingRequest struct {
+      Model string `json:"model,omitempty"`
+      Input string `json:"input"`
+  }
+  ```
+- En `GenerateEmbedding`, asignar `Model: s.model`.
+
+---
+
+### 3. Punto de Entrada (`main.go`)
+
+#### [MODIFY] [main.go](file:///c:/Users/Analista-GDL/iCloudDrive/Developer_shared/thinker1/thinker/main.go)
+- Actualizar la inicialización de los servicios:
+  ```go
+  llmService := services.NewLLMService(baseConfig.LLMBaseURL, baseConfig.LLMApiKey, baseConfig.LLMModel)
+  embeddingService := services.NewEmbeddingService(baseConfig.EmbeddingBaseURL, baseConfig.EmbeddingApiKey, baseConfig.EmbeddingModel)
+  ```
+- Agregar logs informativos al arranque que evidencien el modo activo:
+  ```go
+  log.Printf("[llm] Proveedor: %s (Externo: %v) | URL: %s | Modelo: %s", baseConfig.LLMProvider, baseConfig.UseExternalLLM, baseConfig.LLMBaseURL, baseConfig.LLMModel)
+  log.Printf("[embedding] Proveedor: %s (Externo: %v) | URL: %s | Modelo: %s", baseConfig.EmbeddingProvider, baseConfig.UseExternalEmbedding, baseConfig.EmbeddingBaseURL, baseConfig.EmbeddingModel)
+  ```
+
+---
+
+### 4. Entorno de Configuración (`.env`)
+
+#### [MODIFY] [.env](file:///c:/Users/Analista-GDL/iCloudDrive/Developer_shared/thinker1/thinker/.env)
+- Agregar las variables de control y defaults documentados:
+  ```dotenv
+  # --- AI Providers Configuration ---
+  USE_EXTERNAL_LLM_PROVIDER=true
+  LLM_PROVIDER=minimax
+  LLM_API_KEY=tu_api_key_aqui
+  LLM_BASE_URL=https://api.minimax.io
+  LLM_MODEL=MiniMax-Text-01
+
+  USE_EXTERNAL_EMBEDDING_PROVIDER=true
+  EMBEDDING_PROVIDER=minimax
+  EMBEDDING_API_KEY=tu_api_key_aqui
+  EMBEDDING_BASE_URL=https://api.minimax.io
+  EMBEDDING_MODEL=embo-01
+  ```
+
+---
+
+### 5. Pruebas Unitarias (`internal/config` & `internal/services`)
+
+#### [NEW] [internal/config/config_provider_test.go](file:///c:/Users/Analista-GDL/iCloudDrive/Developer_shared/thinker1/thinker/internal/config/config_provider_test.go)
+- Validar que con `USE_EXTERNAL_LLM_PROVIDER=true` se resuelvan correctamente las credenciales y URLs de MiniMax.
+- Validar que con `USE_EXTERNAL_LLM_PROVIDER=false` se resuelvan los defaults locales de `127.0.0.1:8081`.
+- Validar normalización de URLs (con y sin `/v1`, trailing slashes).
+- Validar que `LLM_API_KEY` y `EMBEDDING_API_KEY` se carguen de manera independiente sin mezclarse.
+
+#### [NEW] [internal/services/provider_payload_test.go](file:///c:/Users/Analista-GDL/iCloudDrive/Developer_shared/thinker1/thinker/internal/services/provider_payload_test.go)
+- Validar mediante un HTTP mock client que cuando `model` está configurado (`embo-01` o `MiniMax-Text-01`), el payload JSON enviado al servidor contenga el campo `"model"` respectivo.
+- Validar que cuando `model` está vacío (modo local), el payload no rompa y mantenga compatibilidad.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+1. Ejecutar las nuevas pruebas de configuración y serialización:
+   ```powershell
+   go test -v ./internal/config/...
+   go test -v ./internal/services/... -run "TestProviderPayload"
+   ```
+2. Ejecutar la suite completa para asegurar regresión cero:
+   ```powershell
+   go test ./...
+   ```
+
+### Manual Verification
+1. Configurar en `.env` las variables con `USE_EXTERNAL_LLM_PROVIDER=true` y `USE_EXTERNAL_EMBEDDING_PROVIDER=true` con tu API key de MiniMax.
+2. Ejecutar `go run main.go` y verificar que los logs muestren claramente:
+   - Proveedor de LLM MiniMax y URL `https://api.minimax.io`.
+   - Proveedor de Embedding MiniMax y modelo `embo-01`.
+3. Crear o reanalizar una idea desde la interfaz web o enviar una consulta para verificar la respuesta del API en vivo.

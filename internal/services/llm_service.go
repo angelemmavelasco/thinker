@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sashabaranov/go-openai"
+
 	"thinker/prompts"
 )
 
@@ -146,8 +147,12 @@ func (s *LLMService) TriageQueryMOC(ctx context.Context, question string, availa
 				Content: userContent,
 			},
 		},
-		Temperature: 0.1,
-		MaxTokens:   150,
+		Temperature:     0.1,
+		MaxTokens:       1024,
+		ReasoningEffort: "low",
+		ResponseFormat: &openai.ChatCompletionResponseFormat{
+			Type: openai.ChatCompletionResponseFormatTypeJSONObject,
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error conectando con el LLM para triage de MOC: %w", err)
@@ -156,10 +161,17 @@ func (s *LLMService) TriageQueryMOC(ctx context.Context, question string, availa
 		return nil, fmt.Errorf("el LLM respondió sin opciones para triage")
 	}
 
-	rawContent := cleanLLMJSON(resp.Choices[0].Message.Content)
+	choice := resp.Choices[0]
+	rawContent := cleanLLMJSON(choice.Message.Content)
+	if strings.TrimSpace(rawContent) == "" {
+		return nil, fmt.Errorf("el LLM devolvió contenido vacío en triage [finish_reason=%s, prompt_tokens=%d, completion_tokens=%d]",
+			choice.FinishReason, resp.Usage.PromptTokens, resp.Usage.CompletionTokens)
+	}
+
 	var triage MOCTriageResult
 	if err := json.Unmarshal([]byte(rawContent), &triage); err != nil {
-		return nil, fmt.Errorf("error parseando JSON de triage (%w): %s", err, rawContent)
+		return nil, fmt.Errorf("error parseando JSON de triage (%w) [finish_reason=%s, prompt_tokens=%d, completion_tokens=%d]: %s",
+			err, choice.FinishReason, resp.Usage.PromptTokens, resp.Usage.CompletionTokens, rawContent)
 	}
 
 	validCodes := make(map[string]bool, len(availableMOCs))
@@ -194,8 +206,12 @@ func (s *LLMService) AnalyzeIdea(ctx context.Context, title, content string) (*I
 				Content: fmt.Sprintf("Título: %s\n\nContenido:\n%s", title, content),
 			},
 		},
-		Temperature: 0.2,
-		MaxTokens:   500,
+		Temperature:     0.2,
+		MaxTokens:       4096,
+		ReasoningEffort: "low",
+		ResponseFormat: &openai.ChatCompletionResponseFormat{
+			Type: openai.ChatCompletionResponseFormatTypeJSONObject,
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error conectando con el LLM: %w", err)
@@ -204,11 +220,17 @@ func (s *LLMService) AnalyzeIdea(ctx context.Context, title, content string) (*I
 		return nil, fmt.Errorf("el LLM respondió sin resultados")
 	}
 
-	rawContent := cleanLLMJSON(resp.Choices[0].Message.Content)
+	choice := resp.Choices[0]
+	rawContent := cleanLLMJSON(choice.Message.Content)
+	if strings.TrimSpace(rawContent) == "" {
+		return nil, fmt.Errorf("el LLM devolvió contenido vacío [finish_reason=%s, prompt_tokens=%d, completion_tokens=%d]",
+			choice.FinishReason, resp.Usage.PromptTokens, resp.Usage.CompletionTokens)
+	}
 
 	var result IdeaAnalysisResult
 	if err := json.Unmarshal([]byte(rawContent), &result); err != nil {
-		return nil, fmt.Errorf("error parseando JSON del LLM (%w). Respuesta cruda: %s", err, rawContent)
+		return nil, fmt.Errorf("error parseando JSON del LLM (%w) [finish_reason=%s, prompt_tokens=%d, completion_tokens=%d]. Respuesta cruda: %s",
+			err, choice.FinishReason, resp.Usage.PromptTokens, resp.Usage.CompletionTokens, rawContent)
 	}
 
 	return &result, nil
@@ -216,6 +238,9 @@ func (s *LLMService) AnalyzeIdea(ctx context.Context, title, content string) (*I
 
 func cleanLLMJSON(raw string) string {
 	s := strings.TrimSpace(raw)
+	if endThink := strings.LastIndex(s, "</think>"); endThink != -1 {
+		s = strings.TrimSpace(s[endThink+len("</think>"):])
+	}
 	if start := strings.IndexByte(s, '{'); start != -1 {
 		if end := strings.LastIndexByte(s, '}'); end != -1 && end > start {
 			s = s[start : end+1]
@@ -284,8 +309,9 @@ func (s *LLMService) ExpandQuery(ctx context.Context, query string) (string, err
 				Content: fmt.Sprintf("Consulta:\n%s", cleaned),
 			},
 		},
-		Temperature: 0.1,
-		MaxTokens:   150,
+		Temperature:     0.1,
+		MaxTokens:       1024,
+		ReasoningEffort: "low",
 	})
 	if err != nil {
 		return "", fmt.Errorf("error conectando con el LLM para expansión: %w", err)
@@ -334,7 +360,7 @@ func (s *LLMService) AskKnowledgeGraph(ctx context.Context, question string, sub
 			},
 		},
 		Temperature: 0.1,
-		MaxTokens:   800,
+		MaxTokens:   4096,
 	})
 	if err != nil {
 		return "", fmt.Errorf("error conectando con el LLM: %w", err)
