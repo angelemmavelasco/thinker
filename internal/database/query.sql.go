@@ -13,6 +13,23 @@ import (
 	"github.com/google/uuid"
 )
 
+const assignRoleToUser = `-- name: AssignRoleToUser :exec
+INSERT INTO user_roles (user_id, role_id, assigned_by)
+VALUES ($1, $2, $3)
+ON CONFLICT (user_id, role_id) DO NOTHING
+`
+
+type AssignRoleToUserParams struct {
+	UserID     uuid.UUID
+	RoleID     uuid.UUID
+	AssignedBy uuid.NullUUID
+}
+
+func (q *Queries) AssignRoleToUser(ctx context.Context, arg AssignRoleToUserParams) error {
+	_, err := q.db.ExecContext(ctx, assignRoleToUser, arg.UserID, arg.RoleID, arg.AssignedBy)
+	return err
+}
+
 const consumeActionToken = `-- name: ConsumeActionToken :one
 UPDATE action_tokens
 SET consumed_at = $2
@@ -58,6 +75,19 @@ SELECT COUNT(*) FROM knowledge_mocs
 
 func (q *Queries) CountKnowledgeMOCs(ctx context.Context) (int64, error) {
 	row := q.db.QueryRowContext(ctx, countKnowledgeMOCs)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countSuperusers = `-- name: CountSuperusers :one
+SELECT COUNT(1)
+FROM users
+WHERE is_superuser = 1
+`
+
+func (q *Queries) CountSuperusers(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countSuperusers)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -141,7 +171,7 @@ func (q *Queries) CreateHubIdeaEdge(ctx context.Context, arg CreateHubIdeaEdgePa
 const createIdea = `-- name: CreateIdea :one
 INSERT INTO ideas (id, user_id, group_id, chunk_index, chunk_total, title, content, status)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, user_id, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
+RETURNING id, user_id, updated_by, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
 `
 
 type CreateIdeaParams struct {
@@ -170,6 +200,7 @@ func (q *Queries) CreateIdea(ctx context.Context, arg CreateIdeaParams) (Idea, e
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.UpdatedBy,
 		&i.GroupID,
 		&i.ChunkIndex,
 		&i.ChunkTotal,
@@ -384,10 +415,42 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 	return i, err
 }
 
+const createRole = `-- name: CreateRole :one
+INSERT INTO roles (id, name, slug, description)
+VALUES ($1, $2, $3, $4)
+RETURNING id, name, slug, description, created_at, updated_at
+`
+
+type CreateRoleParams struct {
+	ID          uuid.UUID
+	Name        string
+	Slug        string
+	Description string
+}
+
+func (q *Queries) CreateRole(ctx context.Context, arg CreateRoleParams) (Role, error) {
+	row := q.db.QueryRowContext(ctx, createRole,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.Description,
+	)
+	var i Role
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, email, password_hash, role, auth_provider, google_id, email_verified, token_version)
 VALUES ($1, $2, $3, $4, $5, $6, $7, 1)
-RETURNING id, email, password_hash, role, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at
+RETURNING id, email, password_hash, role, is_superuser, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at
 `
 
 type CreateUserParams struct {
@@ -416,6 +479,53 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Email,
 		&i.PasswordHash,
 		&i.Role,
+		&i.IsSuperuser,
+		&i.AuthProvider,
+		&i.GoogleID,
+		&i.EmailVerified,
+		&i.TokenVersion,
+		&i.FailedLoginAttempts,
+		&i.LockedUntil,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createUserWithSuperuser = `-- name: CreateUserWithSuperuser :one
+INSERT INTO users (id, email, password_hash, role, is_superuser, auth_provider, google_id, email_verified, token_version)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)
+RETURNING id, email, password_hash, role, is_superuser, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at
+`
+
+type CreateUserWithSuperuserParams struct {
+	ID            uuid.UUID
+	Email         string
+	PasswordHash  string
+	Role          string
+	IsSuperuser   int32
+	AuthProvider  string
+	GoogleID      string
+	EmailVerified int32
+}
+
+func (q *Queries) CreateUserWithSuperuser(ctx context.Context, arg CreateUserWithSuperuserParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, createUserWithSuperuser,
+		arg.ID,
+		arg.Email,
+		arg.PasswordHash,
+		arg.Role,
+		arg.IsSuperuser,
+		arg.AuthProvider,
+		arg.GoogleID,
+		arg.EmailVerified,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.IsSuperuser,
 		&i.AuthProvider,
 		&i.GoogleID,
 		&i.EmailVerified,
@@ -501,6 +611,16 @@ func (q *Queries) DeleteIdeaLinksByIdeaID(ctx context.Context, sourceIdeaID uuid
 	return err
 }
 
+const deleteIdeaRolePermissionsByIdeaID = `-- name: DeleteIdeaRolePermissionsByIdeaID :exec
+DELETE FROM idea_role_permissions
+WHERE idea_id = $1
+`
+
+func (q *Queries) DeleteIdeaRolePermissionsByIdeaID(ctx context.Context, ideaID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteIdeaRolePermissionsByIdeaID, ideaID)
+	return err
+}
+
 const deleteIdeasByGroupID = `-- name: DeleteIdeasByGroupID :exec
 DELETE FROM ideas
 WHERE group_id = $1
@@ -531,6 +651,17 @@ func (q *Queries) DeleteKnowledgeMOC(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const deleteNonSequenceIdeaLinksByIdeaID = `-- name: DeleteNonSequenceIdeaLinksByIdeaID :exec
+DELETE FROM idea_links
+WHERE (source_idea_id = $1 OR target_idea_id = $1)
+  AND relation_type != 'sequence'
+`
+
+func (q *Queries) DeleteNonSequenceIdeaLinksByIdeaID(ctx context.Context, sourceIdeaID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteNonSequenceIdeaLinksByIdeaID, sourceIdeaID)
+	return err
+}
+
 const deleteOrphanKeywords = `-- name: DeleteOrphanKeywords :exec
 DELETE FROM keywords
 WHERE id NOT IN (SELECT DISTINCT keyword_id FROM idea_keywords)
@@ -538,6 +669,26 @@ WHERE id NOT IN (SELECT DISTINCT keyword_id FROM idea_keywords)
 
 func (q *Queries) DeleteOrphanKeywords(ctx context.Context) error {
 	_, err := q.db.ExecContext(ctx, deleteOrphanKeywords)
+	return err
+}
+
+const deleteRole = `-- name: DeleteRole :exec
+DELETE FROM roles
+WHERE id = $1
+`
+
+func (q *Queries) DeleteRole(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteRole, id)
+	return err
+}
+
+const deleteUserRolesByUserID = `-- name: DeleteUserRolesByUserID :exec
+DELETE FROM user_roles
+WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserRolesByUserID(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteUserRolesByUserID, userID)
 	return err
 }
 
@@ -563,6 +714,54 @@ func (q *Queries) FindOverlappingIdeas(ctx context.Context, ideaID uuid.UUID) ([
 	var items []FindOverlappingIdeasRow
 	for rows.Next() {
 		var i FindOverlappingIdeasRow
+		if err := rows.Scan(&i.IdeaID, &i.SharedCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const findOverlappingIdeasInScope = `-- name: FindOverlappingIdeasInScope :many
+SELECT ik2.idea_id, COUNT(ik2.keyword_id) AS shared_count
+FROM idea_keywords ik1
+JOIN idea_keywords ik2 ON ik1.keyword_id = ik2.keyword_id
+JOIN ideas i1 ON i1.id = ik1.idea_id
+JOIN ideas i2 ON i2.id = ik2.idea_id
+WHERE ik1.idea_id = $1
+  AND ik2.idea_id != $1
+  AND (
+      i1.user_id = i2.user_id
+      OR EXISTS (
+          SELECT 1
+          FROM idea_role_permissions p1
+          JOIN idea_role_permissions p2 ON p1.role_id = p2.role_id
+          WHERE p1.idea_id = i1.id AND p2.idea_id = i2.id
+      )
+  )
+GROUP BY ik2.idea_id
+`
+
+type FindOverlappingIdeasInScopeRow struct {
+	IdeaID      uuid.UUID
+	SharedCount int64
+}
+
+func (q *Queries) FindOverlappingIdeasInScope(ctx context.Context, ideaID uuid.UUID) ([]FindOverlappingIdeasInScopeRow, error) {
+	rows, err := q.db.QueryContext(ctx, findOverlappingIdeasInScope, ideaID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindOverlappingIdeasInScopeRow
+	for rows.Next() {
+		var i FindOverlappingIdeasInScopeRow
 		if err := rows.Scan(&i.IdeaID, &i.SharedCount); err != nil {
 			return nil, err
 		}
@@ -603,7 +802,7 @@ func (q *Queries) GetActionTokenByHash(ctx context.Context, arg GetActionTokenBy
 }
 
 const getIdeaByID = `-- name: GetIdeaByID :one
-SELECT id, user_id, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
+SELECT id, user_id, updated_by, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
 FROM ideas
 WHERE id = $1
 LIMIT 1
@@ -615,6 +814,7 @@ func (q *Queries) GetIdeaByID(ctx context.Context, id uuid.UUID) (Idea, error) {
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.UpdatedBy,
 		&i.GroupID,
 		&i.ChunkIndex,
 		&i.ChunkTotal,
@@ -732,8 +932,46 @@ func (q *Queries) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (
 	return i, err
 }
 
+const getRoleByID = `-- name: GetRoleByID :one
+SELECT id, name, slug, description, created_at, updated_at FROM roles
+WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetRoleByID(ctx context.Context, id uuid.UUID) (Role, error) {
+	row := q.db.QueryRowContext(ctx, getRoleByID, id)
+	var i Role
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getRoleBySlug = `-- name: GetRoleBySlug :one
+SELECT id, name, slug, description, created_at, updated_at FROM roles
+WHERE LOWER(slug) = LOWER($1) LIMIT 1
+`
+
+func (q *Queries) GetRoleBySlug(ctx context.Context, lower string) (Role, error) {
+	row := q.db.QueryRowContext(ctx, getRoleBySlug, lower)
+	var i Role
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, role, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at FROM users
+SELECT id, email, password_hash, role, is_superuser, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at FROM users
 WHERE LOWER(email) = LOWER($1) LIMIT 1
 `
 
@@ -745,6 +983,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, lower string) (User, error
 		&i.Email,
 		&i.PasswordHash,
 		&i.Role,
+		&i.IsSuperuser,
 		&i.AuthProvider,
 		&i.GoogleID,
 		&i.EmailVerified,
@@ -757,7 +996,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, lower string) (User, error
 }
 
 const getUserByGoogleID = `-- name: GetUserByGoogleID :one
-SELECT id, email, password_hash, role, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at FROM users
+SELECT id, email, password_hash, role, is_superuser, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at FROM users
 WHERE google_id = $1 AND google_id != '' LIMIT 1
 `
 
@@ -769,6 +1008,7 @@ func (q *Queries) GetUserByGoogleID(ctx context.Context, googleID string) (User,
 		&i.Email,
 		&i.PasswordHash,
 		&i.Role,
+		&i.IsSuperuser,
 		&i.AuthProvider,
 		&i.GoogleID,
 		&i.EmailVerified,
@@ -781,7 +1021,7 @@ func (q *Queries) GetUserByGoogleID(ctx context.Context, googleID string) (User,
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, role, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at FROM users
+SELECT id, email, password_hash, role, is_superuser, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at FROM users
 WHERE id = $1 LIMIT 1
 `
 
@@ -793,6 +1033,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.Email,
 		&i.PasswordHash,
 		&i.Role,
+		&i.IsSuperuser,
 		&i.AuthProvider,
 		&i.GoogleID,
 		&i.EmailVerified,
@@ -802,6 +1043,60 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const hasUserEditPermissionOnIdea = `-- name: HasUserEditPermissionOnIdea :one
+SELECT COUNT(1)
+FROM ideas i
+WHERE i.id = $1
+  AND (
+      i.user_id = $2
+      OR EXISTS (
+          SELECT 1
+          FROM idea_role_permissions irp
+          JOIN user_roles ur ON ur.role_id = irp.role_id
+          WHERE irp.idea_id = i.id AND ur.user_id = $2 AND irp.permission = 'edit'
+      )
+  )
+`
+
+type HasUserEditPermissionOnIdeaParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) HasUserEditPermissionOnIdea(ctx context.Context, arg HasUserEditPermissionOnIdeaParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasUserEditPermissionOnIdea, arg.ID, arg.UserID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const hasUserViewPermissionOnIdea = `-- name: HasUserViewPermissionOnIdea :one
+SELECT COUNT(1)
+FROM ideas i
+WHERE i.id = $1
+  AND (
+      i.user_id = $2
+      OR EXISTS (
+          SELECT 1
+          FROM idea_role_permissions irp
+          JOIN user_roles ur ON ur.role_id = irp.role_id
+          WHERE irp.idea_id = i.id AND ur.user_id = $2
+      )
+  )
+`
+
+type HasUserViewPermissionOnIdeaParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) HasUserViewPermissionOnIdea(ctx context.Context, arg HasUserViewPermissionOnIdeaParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasUserViewPermissionOnIdea, arg.ID, arg.UserID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const incrementUserTokenVersion = `-- name: IncrementUserTokenVersion :one
@@ -840,7 +1135,7 @@ UPDATE users
 SET google_id = $2,
     email_verified = 1
 WHERE id = $1
-RETURNING id, email, password_hash, role, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at
+RETURNING id, email, password_hash, role, is_superuser, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at
 `
 
 type LinkGoogleAccountParams struct {
@@ -856,6 +1151,7 @@ func (q *Queries) LinkGoogleAccount(ctx context.Context, arg LinkGoogleAccountPa
 		&i.Email,
 		&i.PasswordHash,
 		&i.Role,
+		&i.IsSuperuser,
 		&i.AuthProvider,
 		&i.GoogleID,
 		&i.EmailVerified,
@@ -881,6 +1177,207 @@ type LinkIdeaKeywordParams struct {
 func (q *Queries) LinkIdeaKeyword(ctx context.Context, arg LinkIdeaKeywordParams) error {
 	_, err := q.db.ExecContext(ctx, linkIdeaKeyword, arg.IdeaID, arg.KeywordID)
 	return err
+}
+
+const listAccessibleDirectConnectedIdeas = `-- name: ListAccessibleDirectConnectedIdeas :many
+SELECT
+    i.id,
+    i.title,
+    i.content,
+    i.restructured_content,
+    i.status,
+    il.relation_type,
+    il.weight
+FROM idea_links il
+JOIN ideas i ON i.id = il.target_idea_id
+WHERE il.source_idea_id = $1
+  AND (
+      i.user_id = $2
+      OR EXISTS (
+          SELECT 1
+          FROM idea_role_permissions irp
+          JOIN user_roles ur ON ur.role_id = irp.role_id
+          WHERE irp.idea_id = i.id AND ur.user_id = $2
+      )
+  )
+ORDER BY il.weight DESC
+`
+
+type ListAccessibleDirectConnectedIdeasParams struct {
+	SourceIdeaID uuid.UUID
+	UserID       uuid.UUID
+}
+
+type ListAccessibleDirectConnectedIdeasRow struct {
+	ID                  uuid.UUID
+	Title               string
+	Content             string
+	RestructuredContent string
+	Status              string
+	RelationType        string
+	Weight              float64
+}
+
+func (q *Queries) ListAccessibleDirectConnectedIdeas(ctx context.Context, arg ListAccessibleDirectConnectedIdeasParams) ([]ListAccessibleDirectConnectedIdeasRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAccessibleDirectConnectedIdeas, arg.SourceIdeaID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAccessibleDirectConnectedIdeasRow
+	for rows.Next() {
+		var i ListAccessibleDirectConnectedIdeasRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Content,
+			&i.RestructuredContent,
+			&i.Status,
+			&i.RelationType,
+			&i.Weight,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccessibleIdeasByHubID = `-- name: ListAccessibleIdeasByHubID :many
+SELECT i.id, i.user_id, i.updated_by, i.group_id, i.chunk_index, i.chunk_total, i.title, i.content, i.restructured_content, i.status, i.embedding, i.created_at, i.updated_at, hie.relationship_type, hie.weight, hie.is_manual_override
+FROM ideas i
+JOIN hub_idea_edges hie ON hie.idea_id = i.id
+WHERE hie.hub_id = $1
+  AND (
+      i.user_id = $2
+      OR EXISTS (
+          SELECT 1
+          FROM idea_role_permissions irp
+          JOIN user_roles ur ON ur.role_id = irp.role_id
+          WHERE irp.idea_id = i.id AND ur.user_id = $2
+      )
+  )
+ORDER BY hie.weight DESC
+`
+
+type ListAccessibleIdeasByHubIDParams struct {
+	HubID  uuid.UUID
+	UserID uuid.UUID
+}
+
+type ListAccessibleIdeasByHubIDRow struct {
+	ID                  uuid.UUID
+	UserID              uuid.UUID
+	UpdatedBy           uuid.NullUUID
+	GroupID             uuid.UUID
+	ChunkIndex          int32
+	ChunkTotal          int32
+	Title               string
+	Content             string
+	RestructuredContent string
+	Status              string
+	Embedding           string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	RelationshipType    string
+	Weight              float64
+	IsManualOverride    int32
+}
+
+func (q *Queries) ListAccessibleIdeasByHubID(ctx context.Context, arg ListAccessibleIdeasByHubIDParams) ([]ListAccessibleIdeasByHubIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAccessibleIdeasByHubID, arg.HubID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAccessibleIdeasByHubIDRow
+	for rows.Next() {
+		var i ListAccessibleIdeasByHubIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.UpdatedBy,
+			&i.GroupID,
+			&i.ChunkIndex,
+			&i.ChunkTotal,
+			&i.Title,
+			&i.Content,
+			&i.RestructuredContent,
+			&i.Status,
+			&i.Embedding,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RelationshipType,
+			&i.Weight,
+			&i.IsManualOverride,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAccessibleIdeasByUser = `-- name: ListAccessibleIdeasByUser :many
+SELECT i.id, i.user_id, i.updated_by, i.group_id, i.chunk_index, i.chunk_total, i.title, i.content, i.restructured_content, i.status, i.embedding, i.created_at, i.updated_at
+FROM ideas i
+WHERE i.user_id = $1
+   OR EXISTS (
+       SELECT 1
+       FROM idea_role_permissions irp
+       JOIN user_roles ur ON ur.role_id = irp.role_id
+       WHERE irp.idea_id = i.id AND ur.user_id = $1
+   )
+ORDER BY i.created_at DESC
+`
+
+func (q *Queries) ListAccessibleIdeasByUser(ctx context.Context, userID uuid.UUID) ([]Idea, error) {
+	rows, err := q.db.QueryContext(ctx, listAccessibleIdeasByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Idea
+	for rows.Next() {
+		var i Idea
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.UpdatedBy,
+			&i.GroupID,
+			&i.ChunkIndex,
+			&i.ChunkTotal,
+			&i.Title,
+			&i.Content,
+			&i.RestructuredContent,
+			&i.Status,
+			&i.Embedding,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAllHubIdeaEdges = `-- name: ListAllHubIdeaEdges :many
@@ -954,6 +1451,55 @@ func (q *Queries) ListAllIdeaLinks(ctx context.Context) ([]IdeaLink, error) {
 	return items, nil
 }
 
+const listAllIdeaRolePermissions = `-- name: ListAllIdeaRolePermissions :many
+SELECT
+    irp.idea_id,
+    irp.role_id,
+    r.name AS role_name,
+    r.slug AS role_slug,
+    irp.permission
+FROM idea_role_permissions irp
+JOIN roles r ON r.id = irp.role_id
+ORDER BY r.name ASC
+`
+
+type ListAllIdeaRolePermissionsRow struct {
+	IdeaID     uuid.UUID
+	RoleID     uuid.UUID
+	RoleName   string
+	RoleSlug   string
+	Permission string
+}
+
+func (q *Queries) ListAllIdeaRolePermissions(ctx context.Context) ([]ListAllIdeaRolePermissionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAllIdeaRolePermissions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAllIdeaRolePermissionsRow
+	for rows.Next() {
+		var i ListAllIdeaRolePermissionsRow
+		if err := rows.Scan(
+			&i.IdeaID,
+			&i.RoleID,
+			&i.RoleName,
+			&i.RoleSlug,
+			&i.Permission,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAllKnowledgeHubs = `-- name: ListAllKnowledgeHubs :many
 SELECT id, moc_id, title, summary, search_aliases, embedding, display_order, is_locked, created_at, updated_at FROM knowledge_hubs
 ORDER BY display_order ASC, created_at ASC
@@ -979,6 +1525,48 @@ func (q *Queries) ListAllKnowledgeHubs(ctx context.Context) ([]KnowledgeHub, err
 			&i.IsLocked,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllUserRoles = `-- name: ListAllUserRoles :many
+SELECT ur.user_id, r.id AS role_id, r.name AS role_name, r.slug AS role_slug
+FROM user_roles ur
+JOIN roles r ON r.id = ur.role_id
+ORDER BY r.name ASC
+`
+
+type ListAllUserRolesRow struct {
+	UserID   uuid.UUID
+	RoleID   uuid.UUID
+	RoleName string
+	RoleSlug string
+}
+
+func (q *Queries) ListAllUserRoles(ctx context.Context) ([]ListAllUserRolesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAllUserRoles)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAllUserRolesRow
+	for rows.Next() {
+		var i ListAllUserRolesRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.RoleID,
+			&i.RoleName,
+			&i.RoleSlug,
 		); err != nil {
 			return nil, err
 		}
@@ -1110,8 +1698,87 @@ func (q *Queries) ListHubsByIdeaID(ctx context.Context, ideaID uuid.UUID) ([]Lis
 	return items, nil
 }
 
+const listIdeaIDsByRoleID = `-- name: ListIdeaIDsByRoleID :many
+SELECT DISTINCT idea_id
+FROM idea_role_permissions
+WHERE role_id = $1
+`
+
+func (q *Queries) ListIdeaIDsByRoleID(ctx context.Context, roleID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.QueryContext(ctx, listIdeaIDsByRoleID, roleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var idea_id uuid.UUID
+		if err := rows.Scan(&idea_id); err != nil {
+			return nil, err
+		}
+		items = append(items, idea_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIdeaRolePermissionsByIdeaID = `-- name: ListIdeaRolePermissionsByIdeaID :many
+SELECT
+    irp.idea_id,
+    irp.role_id,
+    r.name AS role_name,
+    r.slug AS role_slug,
+    irp.permission
+FROM idea_role_permissions irp
+JOIN roles r ON r.id = irp.role_id
+WHERE irp.idea_id = $1
+ORDER BY r.name ASC
+`
+
+type ListIdeaRolePermissionsByIdeaIDRow struct {
+	IdeaID     uuid.UUID
+	RoleID     uuid.UUID
+	RoleName   string
+	RoleSlug   string
+	Permission string
+}
+
+func (q *Queries) ListIdeaRolePermissionsByIdeaID(ctx context.Context, ideaID uuid.UUID) ([]ListIdeaRolePermissionsByIdeaIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, listIdeaRolePermissionsByIdeaID, ideaID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIdeaRolePermissionsByIdeaIDRow
+	for rows.Next() {
+		var i ListIdeaRolePermissionsByIdeaIDRow
+		if err := rows.Scan(
+			&i.IdeaID,
+			&i.RoleID,
+			&i.RoleName,
+			&i.RoleSlug,
+			&i.Permission,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listIdeas = `-- name: ListIdeas :many
-SELECT id, user_id, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
+SELECT id, user_id, updated_by, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
 FROM ideas
 ORDER BY created_at DESC
 `
@@ -1128,6 +1795,7 @@ func (q *Queries) ListIdeas(ctx context.Context) ([]Idea, error) {
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
+			&i.UpdatedBy,
 			&i.GroupID,
 			&i.ChunkIndex,
 			&i.ChunkTotal,
@@ -1197,7 +1865,7 @@ func (q *Queries) ListIdeasByGroupID(ctx context.Context, groupID uuid.UUID) ([]
 }
 
 const listIdeasByHubID = `-- name: ListIdeasByHubID :many
-SELECT i.id, i.user_id, i.group_id, i.chunk_index, i.chunk_total, i.title, i.content, i.restructured_content, i.status, i.embedding, i.created_at, i.updated_at, hie.relationship_type, hie.weight, hie.is_manual_override
+SELECT i.id, i.user_id, i.updated_by, i.group_id, i.chunk_index, i.chunk_total, i.title, i.content, i.restructured_content, i.status, i.embedding, i.created_at, i.updated_at, hie.relationship_type, hie.weight, hie.is_manual_override
 FROM ideas i
 JOIN hub_idea_edges hie ON hie.idea_id = i.id
 WHERE hie.hub_id = $1
@@ -1207,6 +1875,7 @@ ORDER BY hie.weight DESC
 type ListIdeasByHubIDRow struct {
 	ID                  uuid.UUID
 	UserID              uuid.UUID
+	UpdatedBy           uuid.NullUUID
 	GroupID             uuid.UUID
 	ChunkIndex          int32
 	ChunkTotal          int32
@@ -1234,6 +1903,7 @@ func (q *Queries) ListIdeasByHubID(ctx context.Context, hubID uuid.UUID) ([]List
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
+			&i.UpdatedBy,
 			&i.GroupID,
 			&i.ChunkIndex,
 			&i.ChunkTotal,
@@ -1262,7 +1932,7 @@ func (q *Queries) ListIdeasByHubID(ctx context.Context, hubID uuid.UUID) ([]List
 }
 
 const listIdeasByUserID = `-- name: ListIdeasByUserID :many
-SELECT id, user_id, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
+SELECT id, user_id, updated_by, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
 FROM ideas
 WHERE user_id = $1
 ORDER BY created_at DESC
@@ -1280,6 +1950,7 @@ func (q *Queries) ListIdeasByUserID(ctx context.Context, userID uuid.UUID) ([]Id
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
+			&i.UpdatedBy,
 			&i.GroupID,
 			&i.ChunkIndex,
 			&i.ChunkTotal,
@@ -1325,6 +1996,52 @@ func (q *Queries) ListIdeasWithEmbeddings(ctx context.Context, id uuid.UUID) ([]
 	var items []ListIdeasWithEmbeddingsRow
 	for rows.Next() {
 		var i ListIdeasWithEmbeddingsRow
+		if err := rows.Scan(&i.ID, &i.Title, &i.Embedding); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIdeasWithEmbeddingsInScope = `-- name: ListIdeasWithEmbeddingsInScope :many
+SELECT i2.id, i2.title, i2.embedding
+FROM ideas i1
+JOIN ideas i2 ON i2.id != i1.id
+WHERE i1.id = $1
+  AND i2.embedding != ''
+  AND (
+      i1.user_id = i2.user_id
+      OR EXISTS (
+          SELECT 1
+          FROM idea_role_permissions p1
+          JOIN idea_role_permissions p2 ON p1.role_id = p2.role_id
+          WHERE p1.idea_id = i1.id AND p2.idea_id = i2.id
+      )
+  )
+`
+
+type ListIdeasWithEmbeddingsInScopeRow struct {
+	ID        uuid.UUID
+	Title     string
+	Embedding string
+}
+
+func (q *Queries) ListIdeasWithEmbeddingsInScope(ctx context.Context, id uuid.UUID) ([]ListIdeasWithEmbeddingsInScopeRow, error) {
+	rows, err := q.db.QueryContext(ctx, listIdeasWithEmbeddingsInScope, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIdeasWithEmbeddingsInScopeRow
+	for rows.Next() {
+		var i ListIdeasWithEmbeddingsInScopeRow
 		if err := rows.Scan(&i.ID, &i.Title, &i.Embedding); err != nil {
 			return nil, err
 		}
@@ -1481,8 +2198,138 @@ func (q *Queries) ListKnowledgeSettings(ctx context.Context) ([]KnowledgeSetting
 	return items, nil
 }
 
+const listRoles = `-- name: ListRoles :many
+SELECT id, name, slug, description, created_at, updated_at FROM roles
+ORDER BY name ASC
+`
+
+func (q *Queries) ListRoles(ctx context.Context) ([]Role, error) {
+	rows, err := q.db.QueryContext(ctx, listRoles)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Role
+	for rows.Next() {
+		var i Role
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRolesByUserID = `-- name: ListRolesByUserID :many
+SELECT r.id, r.name, r.slug, r.description, r.created_at, r.updated_at
+FROM roles r
+JOIN user_roles ur ON ur.role_id = r.id
+WHERE ur.user_id = $1
+ORDER BY r.name ASC
+`
+
+func (q *Queries) ListRolesByUserID(ctx context.Context, userID uuid.UUID) ([]Role, error) {
+	rows, err := q.db.QueryContext(ctx, listRolesByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Role
+	for rows.Next() {
+		var i Role
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRolesWithUsage = `-- name: ListRolesWithUsage :many
+SELECT
+    r.id,
+    r.name,
+    r.slug,
+    r.description,
+    r.created_at,
+    r.updated_at,
+    (SELECT COUNT(1) FROM user_roles ur WHERE ur.role_id = r.id) AS user_count,
+    (SELECT COUNT(1) FROM idea_role_permissions irp WHERE irp.role_id = r.id) AS idea_count
+FROM roles r
+ORDER BY r.name ASC
+`
+
+type ListRolesWithUsageRow struct {
+	ID          uuid.UUID
+	Name        string
+	Slug        string
+	Description string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	UserCount   int64
+	IdeaCount   int64
+}
+
+func (q *Queries) ListRolesWithUsage(ctx context.Context) ([]ListRolesWithUsageRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRolesWithUsage)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRolesWithUsageRow
+	for rows.Next() {
+		var i ListRolesWithUsageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.UserCount,
+			&i.IdeaCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsers = `-- name: ListUsers :many
-SELECT id, email, role, auth_provider, email_verified, created_at
+SELECT id, email, role, is_superuser, auth_provider, email_verified, created_at
 FROM users
 ORDER BY created_at DESC
 `
@@ -1491,6 +2338,7 @@ type ListUsersRow struct {
 	ID            uuid.UUID
 	Email         string
 	Role          string
+	IsSuperuser   int32
 	AuthProvider  string
 	EmailVerified int32
 	CreatedAt     time.Time
@@ -1509,6 +2357,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
 			&i.ID,
 			&i.Email,
 			&i.Role,
+			&i.IsSuperuser,
 			&i.AuthProvider,
 			&i.EmailVerified,
 			&i.CreatedAt,
@@ -1549,7 +2398,7 @@ const markUserEmailVerified = `-- name: MarkUserEmailVerified :one
 UPDATE users
 SET email_verified = 1
 WHERE id = $1
-RETURNING id, email, password_hash, role, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at
+RETURNING id, email, password_hash, role, is_superuser, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at
 `
 
 func (q *Queries) MarkUserEmailVerified(ctx context.Context, id uuid.UUID) (User, error) {
@@ -1560,6 +2409,7 @@ func (q *Queries) MarkUserEmailVerified(ctx context.Context, id uuid.UUID) (User
 		&i.Email,
 		&i.PasswordHash,
 		&i.Role,
+		&i.IsSuperuser,
 		&i.AuthProvider,
 		&i.GoogleID,
 		&i.EmailVerified,
@@ -1576,7 +2426,7 @@ UPDATE users
 SET failed_login_attempts = $2,
     locked_until = $3
 WHERE id = $1
-RETURNING id, email, password_hash, role, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at
+RETURNING id, email, password_hash, role, is_superuser, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at
 `
 
 type RecordFailedLoginAttemptParams struct {
@@ -1593,6 +2443,7 @@ func (q *Queries) RecordFailedLoginAttempt(ctx context.Context, arg RecordFailed
 		&i.Email,
 		&i.PasswordHash,
 		&i.Role,
+		&i.IsSuperuser,
 		&i.AuthProvider,
 		&i.GoogleID,
 		&i.EmailVerified,
@@ -1623,7 +2474,7 @@ SET restructured_content = '',
     status = 'borrador',
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $1
-RETURNING id, user_id, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
+RETURNING id, user_id, updated_by, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
 `
 
 func (q *Queries) ResetIdeaForReanalysis(ctx context.Context, id uuid.UUID) (Idea, error) {
@@ -1632,6 +2483,7 @@ func (q *Queries) ResetIdeaForReanalysis(ctx context.Context, id uuid.UUID) (Ide
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.UpdatedBy,
 		&i.GroupID,
 		&i.ChunkIndex,
 		&i.ChunkTotal,
@@ -1687,7 +2539,7 @@ SET restructured_content = $2,
     status = $4,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $1
-RETURNING id, user_id, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
+RETURNING id, user_id, updated_by, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
 `
 
 type UpdateIdeaAnalysisParams struct {
@@ -1708,6 +2560,7 @@ func (q *Queries) UpdateIdeaAnalysis(ctx context.Context, arg UpdateIdeaAnalysis
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.UpdatedBy,
 		&i.GroupID,
 		&i.ChunkIndex,
 		&i.ChunkTotal,
@@ -1726,26 +2579,34 @@ const updateIdeaContentAndReset = `-- name: UpdateIdeaContentAndReset :one
 UPDATE ideas
 SET title = $2,
     content = $3,
+    updated_by = $4,
     restructured_content = '',
     embedding = '',
     status = 'borrador',
     updated_at = CURRENT_TIMESTAMP
 WHERE id = $1
-RETURNING id, user_id, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
+RETURNING id, user_id, updated_by, group_id, chunk_index, chunk_total, title, content, restructured_content, status, embedding, created_at, updated_at
 `
 
 type UpdateIdeaContentAndResetParams struct {
-	ID      uuid.UUID
-	Title   string
-	Content string
+	ID        uuid.UUID
+	Title     string
+	Content   string
+	UpdatedBy uuid.NullUUID
 }
 
 func (q *Queries) UpdateIdeaContentAndReset(ctx context.Context, arg UpdateIdeaContentAndResetParams) (Idea, error) {
-	row := q.db.QueryRowContext(ctx, updateIdeaContentAndReset, arg.ID, arg.Title, arg.Content)
+	row := q.db.QueryRowContext(ctx, updateIdeaContentAndReset,
+		arg.ID,
+		arg.Title,
+		arg.Content,
+		arg.UpdatedBy,
+	)
 	var i Idea
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.UpdatedBy,
 		&i.GroupID,
 		&i.ChunkIndex,
 		&i.ChunkTotal,
@@ -1942,6 +2803,42 @@ func (q *Queries) UpdateKnowledgeMOCLock(ctx context.Context, arg UpdateKnowledg
 	return i, err
 }
 
+const updateRole = `-- name: UpdateRole :one
+UPDATE roles
+SET name = $2,
+    slug = $3,
+    description = $4,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING id, name, slug, description, created_at, updated_at
+`
+
+type UpdateRoleParams struct {
+	ID          uuid.UUID
+	Name        string
+	Slug        string
+	Description string
+}
+
+func (q *Queries) UpdateRole(ctx context.Context, arg UpdateRoleParams) (Role, error) {
+	row := q.db.QueryRowContext(ctx, updateRole,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.Description,
+	)
+	var i Role
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateUserPasswordAndBumpTokenVersion = `-- name: UpdateUserPasswordAndBumpTokenVersion :one
 UPDATE users
 SET password_hash = $2,
@@ -1949,7 +2846,7 @@ SET password_hash = $2,
     failed_login_attempts = 0,
     locked_until = NULL
 WHERE id = $1
-RETURNING id, email, password_hash, role, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at
+RETURNING id, email, password_hash, role, is_superuser, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at
 `
 
 type UpdateUserPasswordAndBumpTokenVersionParams struct {
@@ -1965,6 +2862,7 @@ func (q *Queries) UpdateUserPasswordAndBumpTokenVersion(ctx context.Context, arg
 		&i.Email,
 		&i.PasswordHash,
 		&i.Role,
+		&i.IsSuperuser,
 		&i.AuthProvider,
 		&i.GoogleID,
 		&i.EmailVerified,
@@ -1972,6 +2870,76 @@ func (q *Queries) UpdateUserPasswordAndBumpTokenVersion(ctx context.Context, arg
 		&i.FailedLoginAttempts,
 		&i.LockedUntil,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateUserSuperuserStatus = `-- name: UpdateUserSuperuserStatus :one
+UPDATE users
+SET is_superuser = $2,
+    role = $3
+WHERE id = $1
+RETURNING id, email, password_hash, role, is_superuser, auth_provider, google_id, email_verified, token_version, failed_login_attempts, locked_until, created_at
+`
+
+type UpdateUserSuperuserStatusParams struct {
+	ID          uuid.UUID
+	IsSuperuser int32
+	Role        string
+}
+
+func (q *Queries) UpdateUserSuperuserStatus(ctx context.Context, arg UpdateUserSuperuserStatusParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUserSuperuserStatus, arg.ID, arg.IsSuperuser, arg.Role)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.IsSuperuser,
+		&i.AuthProvider,
+		&i.GoogleID,
+		&i.EmailVerified,
+		&i.TokenVersion,
+		&i.FailedLoginAttempts,
+		&i.LockedUntil,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const upsertIdeaRolePermission = `-- name: UpsertIdeaRolePermission :one
+INSERT INTO idea_role_permissions (idea_id, role_id, permission, granted_by)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (idea_id, role_id)
+DO UPDATE SET permission = EXCLUDED.permission,
+              granted_by = EXCLUDED.granted_by,
+              updated_at = CURRENT_TIMESTAMP
+RETURNING idea_id, role_id, permission, granted_by, created_at, updated_at
+`
+
+type UpsertIdeaRolePermissionParams struct {
+	IdeaID     uuid.UUID
+	RoleID     uuid.UUID
+	Permission string
+	GrantedBy  uuid.NullUUID
+}
+
+func (q *Queries) UpsertIdeaRolePermission(ctx context.Context, arg UpsertIdeaRolePermissionParams) (IdeaRolePermission, error) {
+	row := q.db.QueryRowContext(ctx, upsertIdeaRolePermission,
+		arg.IdeaID,
+		arg.RoleID,
+		arg.Permission,
+		arg.GrantedBy,
+	)
+	var i IdeaRolePermission
+	err := row.Scan(
+		&i.IdeaID,
+		&i.RoleID,
+		&i.Permission,
+		&i.GrantedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

@@ -33,6 +33,7 @@ type HubIdeaEdge struct {
 type Idea struct {
 	ID                  uuid.UUID
 	UserID              uuid.UUID
+	UpdatedBy           uuid.NullUUID
 	GroupID             uuid.UUID
 	ChunkIndex          int32
 	ChunkTotal          int32
@@ -67,6 +68,15 @@ type IdeaLink struct {
 	RelationType string
 	Weight       float64
 	CreatedAt    time.Time
+}
+
+type IdeaRolePermission struct {
+	IdeaID     uuid.UUID
+	RoleID     uuid.UUID
+	Permission string
+	GrantedBy  uuid.NullUUID
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
 type Keyword struct {
@@ -121,11 +131,21 @@ type RefreshToken struct {
 	RevokedAt    sql.NullTime
 }
 
+type Role struct {
+	ID          uuid.UUID
+	Name        string
+	Slug        string
+	Description string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 type User struct {
 	ID                  uuid.UUID
 	Email               string
 	PasswordHash        string
 	Role                string
+	IsSuperuser         int32
 	AuthProvider        string
 	GoogleID            string
 	EmailVerified       int32
@@ -133,4 +153,11 @@ type User struct {
 	FailedLoginAttempts int32
 	LockedUntil         sql.NullTime
 	CreatedAt           time.Time
+}
+
+type UserRole struct {
+	UserID     uuid.UUID
+	RoleID     uuid.UUID
+	AssignedBy uuid.NullUUID
+	CreatedAt  time.Time
 }
