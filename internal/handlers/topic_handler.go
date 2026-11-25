@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"thinker/internal/config"
+	"thinker/internal/middleware"
 	"thinker/internal/services"
 	"thinker/internal/urls"
 )
@@ -62,15 +64,36 @@ type HubOptionItem struct {
 	MocTitle string
 }
 
+func (h *TopicHandler) requireTopicAdmin(c *gin.Context) (services.Actor, bool) {
+	actor, ok := middleware.ActorFromContext(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return services.Actor{}, false
+	}
+	if !actor.CanManageTopics() {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Solo un superusuario puede administrar temas y categorías"})
+		return services.Actor{}, false
+	}
+	return actor, true
+}
+
 func (h *TopicHandler) ListTopics(c *gin.Context) {
+	actor, ok := middleware.ActorFromContext(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
 	ctx := c.Request.Context()
 
 	rawMOCs, err := h.topicService.ListMOCs(ctx)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "Error consultando temas: %v", err)
+		log.Printf("[topics] Error consultando temas: %v", err)
+		c.String(http.StatusInternalServerError, "Error consultando temas")
 		return
 	}
 
+	canManage := actor.CanManageTopics()
 	totalHubs := 0
 	totalIdeasLinked := 0
 	mocsView := make([]TopicMOCViewItem, 0, len(rawMOCs))
@@ -84,6 +107,11 @@ func (h *TopicHandler) ListTopics(c *gin.Context) {
 
 		hubsView := make([]TopicHubViewItem, 0, len(rawHubs))
 		for _, hub := range rawHubs {
+			rawIdeas, _ := h.topicService.ListAccessibleIdeasByHub(ctx, actor, hub.ID)
+			if !canManage && len(rawIdeas) == 0 {
+				continue
+			}
+
 			totalHubs++
 
 			var aliases []string
@@ -91,7 +119,6 @@ func (h *TopicHandler) ListTopics(c *gin.Context) {
 				_ = json.Unmarshal([]byte(hub.SearchAliases), &aliases)
 			}
 
-			rawIdeas, _ := h.topicService.ListIdeasByHub(ctx, hub.ID)
 			ideasView := make([]TopicIdeaViewItem, 0, len(rawIdeas))
 			for _, idea := range rawIdeas {
 				totalIdeasLinked++
@@ -115,12 +142,18 @@ func (h *TopicHandler) ListTopics(c *gin.Context) {
 				Ideas:         ideasView,
 			})
 
-			allHubOptions = append(allHubOptions, HubOptionItem{
-				ID:       hub.ID.String(),
-				Title:    hub.Title,
-				MocCode:  m.Code,
-				MocTitle: m.Title,
-			})
+			if canManage {
+				allHubOptions = append(allHubOptions, HubOptionItem{
+					ID:       hub.ID.String(),
+					Title:    hub.Title,
+					MocCode:  m.Code,
+					MocTitle: m.Title,
+				})
+			}
+		}
+
+		if !canManage && len(hubsView) == 0 {
+			continue
 		}
 
 		mocsView = append(mocsView, TopicMOCViewItem{
@@ -134,13 +167,17 @@ func (h *TopicHandler) ListTopics(c *gin.Context) {
 		})
 	}
 
-	allowAuto := h.topicService.GetBoolSetting(ctx, "allow_auto_moc_creation", true)
+	allowAuto := false
+	if canManage {
+		allowAuto = h.topicService.GetBoolSetting(ctx, "allow_auto_moc_creation", true)
+	}
 
 	data := gin.H{
 		"title":              "Temas e índices",
 		"mocs":               mocsView,
 		"hub_options":        allHubOptions,
 		"allow_auto_mocs":    allowAuto,
+		"can_manage_topics":  canManage,
 		"total_mocs":         len(mocsView),
 		"total_hubs":         totalHubs,
 		"total_ideas_linked": totalIdeasLinked,
@@ -150,6 +187,10 @@ func (h *TopicHandler) ListTopics(c *gin.Context) {
 }
 
 func (h *TopicHandler) CreateMOC(c *gin.Context) {
+	if _, ok := h.requireTopicAdmin(c); !ok {
+		return
+	}
+
 	ctx := c.Request.Context()
 	code := strings.TrimSpace(c.PostForm("code"))
 	title := strings.TrimSpace(c.PostForm("title"))
@@ -179,6 +220,10 @@ func (h *TopicHandler) CreateMOC(c *gin.Context) {
 }
 
 func (h *TopicHandler) UpdateMOC(c *gin.Context) {
+	if _, ok := h.requireTopicAdmin(c); !ok {
+		return
+	}
+
 	ctx := c.Request.Context()
 	mocIDStr := c.Param("id")
 	mocID, err := uuid.Parse(mocIDStr)
@@ -196,6 +241,10 @@ func (h *TopicHandler) UpdateMOC(c *gin.Context) {
 }
 
 func (h *TopicHandler) DeleteMOC(c *gin.Context) {
+	if _, ok := h.requireTopicAdmin(c); !ok {
+		return
+	}
+
 	ctx := c.Request.Context()
 	mocIDStr := c.Param("id")
 	if mocID, err := uuid.Parse(mocIDStr); err == nil {
@@ -205,6 +254,10 @@ func (h *TopicHandler) DeleteMOC(c *gin.Context) {
 }
 
 func (h *TopicHandler) ToggleMOCLock(c *gin.Context) {
+	if _, ok := h.requireTopicAdmin(c); !ok {
+		return
+	}
+
 	ctx := c.Request.Context()
 	mocIDStr := c.Param("id")
 	if mocID, err := uuid.Parse(mocIDStr); err == nil {
@@ -217,6 +270,10 @@ func (h *TopicHandler) ToggleMOCLock(c *gin.Context) {
 }
 
 func (h *TopicHandler) CreateHub(c *gin.Context) {
+	if _, ok := h.requireTopicAdmin(c); !ok {
+		return
+	}
+
 	ctx := c.Request.Context()
 	mocIDStr := c.PostForm("moc_id")
 	mocID, err := uuid.Parse(mocIDStr)
@@ -244,6 +301,10 @@ func (h *TopicHandler) CreateHub(c *gin.Context) {
 }
 
 func (h *TopicHandler) UpdateHub(c *gin.Context) {
+	if _, ok := h.requireTopicAdmin(c); !ok {
+		return
+	}
+
 	ctx := c.Request.Context()
 	hubIDStr := c.Param("id")
 	hubID, err := uuid.Parse(hubIDStr)
@@ -278,6 +339,10 @@ func (h *TopicHandler) UpdateHub(c *gin.Context) {
 }
 
 func (h *TopicHandler) DeleteHub(c *gin.Context) {
+	if _, ok := h.requireTopicAdmin(c); !ok {
+		return
+	}
+
 	ctx := c.Request.Context()
 	hubIDStr := c.Param("id")
 	if hubID, err := uuid.Parse(hubIDStr); err == nil {
@@ -287,6 +352,10 @@ func (h *TopicHandler) DeleteHub(c *gin.Context) {
 }
 
 func (h *TopicHandler) MoveIdea(c *gin.Context) {
+	if _, ok := h.requireTopicAdmin(c); !ok {
+		return
+	}
+
 	ctx := c.Request.Context()
 	ideaIDStr := strings.TrimSpace(c.PostForm("idea_id"))
 	targetHubIDStr := strings.TrimSpace(c.PostForm("target_hub_id"))
@@ -304,6 +373,10 @@ func (h *TopicHandler) MoveIdea(c *gin.Context) {
 }
 
 func (h *TopicHandler) ToggleAutoMOCSetting(c *gin.Context) {
+	if _, ok := h.requireTopicAdmin(c); !ok {
+		return
+	}
+
 	ctx := c.Request.Context()
 	current := h.topicService.GetBoolSetting(ctx, "allow_auto_moc_creation", true)
 	newVal := "false"
