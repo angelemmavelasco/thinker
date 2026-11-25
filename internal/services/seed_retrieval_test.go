@@ -69,12 +69,13 @@ func setupTestSeedService(t *testing.T) (*IdeaService, *database.Queries, uuid.U
 }
 
 func TestFindSeedIdeas_EmptyOrBlank(t *testing.T) {
-	svc, _, _, cleanup := setupTestSeedService(t)
+	svc, _, userID, cleanup := setupTestSeedService(t)
 	defer cleanup()
 
 	ctx := context.Background()
+	actor := Actor{UserID: userID}
 
-	res, err := svc.FindSeedIdeas(ctx, "", 3)
+	res, err := svc.FindSeedIdeas(ctx, actor, "", 3)
 	if err != nil {
 		t.Fatalf("unexpected error for empty query: %v", err)
 	}
@@ -82,7 +83,7 @@ func TestFindSeedIdeas_EmptyOrBlank(t *testing.T) {
 		t.Fatalf("expected 0 results for empty query, got %d", len(res))
 	}
 
-	res, err = svc.FindSeedIdeas(ctx, "     ", 3)
+	res, err = svc.FindSeedIdeas(ctx, actor, "     ", 3)
 	if err != nil {
 		t.Fatalf("unexpected error for blank query: %v", err)
 	}
@@ -105,7 +106,8 @@ func TestFindSeedIdeas_KeywordMatchingOnly(t *testing.T) {
 	_, _ = svc.keywordService.SaveKeywordsForIdea(ctx, idea2.ID, []string{"cocina", "pastas"})
 	_, _ = svc.keywordService.SaveKeywordsForIdea(ctx, idea3.ID, []string{"criptografia", "seguridad", "jwt"})
 
-	results, err := svc.FindSeedIdeas(ctx, "seguridad en criptografia con tokens jwt", 3)
+	actor := Actor{UserID: userID}
+	results, err := svc.FindSeedIdeas(ctx, actor, "seguridad en criptografia con tokens jwt", 3)
 	if err != nil {
 		t.Fatalf("FindSeedIdeas failed: %v", err)
 	}
@@ -175,7 +177,8 @@ func TestFindSeedIdeas_VectorSimilarity(t *testing.T) {
 		Status:              "procesada",
 	})
 
-	results, err := svc.FindSeedIdeas(ctx, "matematica y calculo", 2)
+	actor := Actor{UserID: userID}
+	results, err := svc.FindSeedIdeas(ctx, actor, "matematica y calculo", 2)
 	if err != nil {
 		t.Fatalf("FindSeedIdeas failed: %v", err)
 	}
@@ -208,7 +211,8 @@ func TestSearchAndExpand_EndToEnd(t *testing.T) {
 	linkTestIdeas(ctx, t, q, hop1Idea.ID, hop2Idea.ID, "semantic", 0.85)
 
 	opts := DefaultTraversalOptions()
-	subGraph, seeds, err := svc.SearchAndExpand(ctx, "grafos y redes asociativas", 1, opts)
+	actor := Actor{UserID: userID}
+	subGraph, seeds, err := svc.SearchAndExpand(ctx, actor, "grafos y redes asociativas", 1, opts)
 	if err != nil {
 		t.Fatalf("SearchAndExpand failed: %v", err)
 	}

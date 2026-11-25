@@ -223,7 +223,8 @@ func TestSeedRetrieval_StrictThresholdPruning(t *testing.T) {
 		Status:              "procesada",
 	})
 
-	seeds, err := svc.FindSeedIdeas(ctx, "acoso hostigamiento denuncia confidencial", 3)
+	actor := Actor{UserID: userID}
+	seeds, err := svc.FindSeedIdeas(ctx, actor, "acoso hostigamiento denuncia confidencial", 3)
 	if err != nil {
 		t.Fatalf("FindSeedIdeas failed: %v", err)
 	}
@@ -317,7 +318,8 @@ func TestQueryGraph_ColloquialHarassmentRetrieval_EndToEnd(t *testing.T) {
 	})
 
 	colloquialQuery := "Oye, si un profe me anda acosando por mensajes o tirando la onda, ¿con quien voy para que no tome represalias y que pasa si no quiero que se entere mi familia ni que el profe sepa que fui yo?"
-	result, err := svc.QueryGraph(ctx, colloquialQuery)
+	actor := Actor{UserID: userID}
+	result, err := svc.QueryGraph(ctx, actor, colloquialQuery)
 	if err != nil {
 		t.Fatalf("QueryGraph failed: %v", err)
 	}
