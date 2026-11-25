@@ -1,12 +1,12 @@
 <form
-hx-post="/web/users/new"
+hx-post='{{url "users:new"}}'
 hx-target="#workspace"
 hx-swap="innerHTML"
-hx-push-url="/web/users"
+hx-push-url='{{url "users:list"}}'
 class="
 max-w-xl mx-auto
 border border-zinc-800 rounded-xs
-bg-zinc-900 p-4 sm:p-6 flex flex-col gap-4 shadow-xl
+bg-zinc-900 p-4 sm:p-6 flex flex-col gap-4 shadow-xl text-xs
 ">
     <h3 class="text-sm font-medium text-zinc-100">Nuevo usuario</h3>
     <input type="hidden" name="csrf_token" value="{{.csrf_token}}" />
@@ -17,34 +17,51 @@ bg-zinc-900 p-4 sm:p-6 flex flex-col gap-4 shadow-xl
     </p>
     {{end}}
 
-    <div>
+    <div class="flex flex-col gap-1">
+        <label class="text-[11px] text-zinc-400">Correo electrónico</label>
         <input type="email" name="email" placeholder="Correo electrónico" value="{{.email}}" required
-            class="w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1 transition-all" />
+            class="w-full outline-none border border-zinc-800 hover:border-cyan-500 focus:border-cyan-500 rounded-xs bg-zinc-950 px-2.5 py-1.5 text-zinc-100 transition-all" />
     </div>
 
-    <div>
+    <div class="flex flex-col gap-1">
+        <label class="text-[11px] text-zinc-400">Contraseña (mínimo 8 caracteres)</label>
         <input type="password" name="password" placeholder="Contraseña" required
-            class="w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1 transition-all" />
+            class="w-full outline-none border border-zinc-800 hover:border-cyan-500 focus:border-cyan-500 rounded-xs bg-zinc-950 px-2.5 py-1.5 text-zinc-100 transition-all" />
     </div>
 
-    <div>
-        <select name="role"
-            class="w-full outline-none border border-zinc-800 hover:border-cyan-500 rounded-xs bg-zinc-950 p-1 transition-all text-zinc-100">
-            <option value="member" {{if eq .role "member"}}selected{{end}}>Miembro</option>
-            <option value="admin" {{if eq .role "admin"}}selected{{end}}>Administrador</option>
-        </select>
+    <div class="border-t border-zinc-800 pt-3 flex flex-col gap-2">
+        <label class="inline-flex items-center gap-2 text-amber-300 cursor-pointer select-none">
+            <input type="checkbox" name="is_superuser" value="1" {{if .isSuperuser}}checked{{end}} class="accent-amber-500" />
+            <span>Conceder privilegios de superusuario</span>
+        </label>
     </div>
 
-    <div class="flex gap-3 items-center justify-start">
-        <button type="submit" class="border border-zinc-50 hover:border-cyan-500 text-zinc-50 hover:text-cyan-500 rounded p-1 cursor-pointer transition-all">
+    <div class="flex flex-col gap-2">
+        <span class="text-[11px] text-zinc-400">Roles iniciales</span>
+        {{if .allRoles}}
+        <div class="flex flex-wrap gap-2">
+            {{range $role := .allRoles}}
+            <label class="inline-flex items-center gap-1.5 border border-zinc-800 bg-zinc-950 hover:border-cyan-500/60 px-2.5 py-1 rounded-xs text-zinc-200 cursor-pointer select-none">
+                <input type="checkbox" name="role_ids" value="{{$role.ID}}" class="accent-cyan-500" />
+                <span>{{$role.Name}}</span>
+            </label>
+            {{end}}
+        </div>
+        {{else}}
+        <span class="text-[11px] text-zinc-500 italic">Aún no hay roles creados. Puedes crearlos desde la pestaña Roles.</span>
+        {{end}}
+    </div>
+
+    <div class="flex gap-3 items-center justify-start pt-2 border-t border-zinc-800">
+        <button type="submit" class="bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-medium rounded-xs px-3.5 py-1.5 cursor-pointer transition-all">
             Confirmar
         </button>
         <button
         type="button"
-        hx-get="/web/users"
+        hx-get='{{url "users:list"}}'
         hx-target="#workspace"
         hx-swap="innerHTML"
-        class="text-zinc-50 hover:text-red-500 cursor-pointer transition-all">
+        class="text-zinc-400 hover:text-red-400 cursor-pointer transition-all">
             Cancelar
         </button>
     </div>
