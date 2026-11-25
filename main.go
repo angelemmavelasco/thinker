@@ -38,6 +38,11 @@ func main() {
 	if err := database.InitSchema(ctx, conn); err != nil {
 		log.Fatal(err.Error())
 	}
+	if baseConfig.SuperuserEmail != "" {
+		if err := database.EnsureBootstrapSuperuser(ctx, conn, baseConfig.SuperuserEmail); err != nil {
+			log.Fatal(err.Error())
+		}
+	}
 	if baseConfig.Debug {
 		if err := database.EnsureDevelopmentUser(ctx, conn); err != nil {
 			log.Fatal(err.Error())

@@ -41,6 +41,7 @@ type BaseConfig struct {
 	SMTPUsername              string
 	SMTPPassword              string
 	SMTPFrom                  string
+	SuperuserEmail            string
 }
 
 func parseBoolEnv(key string) bool {
@@ -143,6 +144,8 @@ func LoadConfig() (*BaseConfig, error) {
 		smtpFrom = "no-reply@thinker.local"
 	}
 
+	superuserEmail := strings.ToLower(strings.TrimSpace(os.Getenv("SUPERUSER_EMAIL")))
+
 	cfg := BaseConfig{
 		Debug:                     debug,
 		AppBaseURL:                appBaseURL,
@@ -171,6 +174,7 @@ func LoadConfig() (*BaseConfig, error) {
 		SMTPUsername:              smtpUsername,
 		SMTPPassword:              smtpPassword,
 		SMTPFrom:                  smtpFrom,
+		SuperuserEmail:            superuserEmail,
 	}
 	fmt.Println("Base config loaded successfully:")
 	return &cfg, nil
