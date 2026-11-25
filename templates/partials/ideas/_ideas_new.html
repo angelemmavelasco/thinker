@@ -282,6 +282,40 @@
 
     
     <div class="border-t border-zinc-800/80 pt-3 flex flex-col gap-2">
+        <details class="border border-zinc-800/80 bg-zinc-950/60 rounded-xs p-3 text-xs">
+            <summary class="cursor-pointer select-none flex items-center justify-between text-zinc-200 font-medium">
+                <span>Visibilidad y permisos por rol</span>
+                <span class="text-[10px] font-mono text-zinc-400">Privada por defecto (solo tú y superusuarios)</span>
+            </summary>
+
+            <div class="mt-3 pt-3 border-t border-zinc-800/80 flex flex-col gap-2">
+                {{if .allRoles}}
+                <p class="text-[11px] text-zinc-400">
+                    Define qué roles pueden ver o editar esta nota. Si no seleccionas ninguno, solo tú y el superusuario tendrán acceso.
+                </p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {{range $role := .allRoles}}
+                    <div class="flex items-center justify-between gap-2 border border-zinc-800 bg-zinc-900/70 px-2.5 py-1.5 rounded-xs">
+                        <span class="text-zinc-200 truncate" title="{{$role.Description}}">{{$role.Name}}</span>
+                        <select
+                            name="role_perm[{{$role.ID}}]"
+                            class="bg-zinc-950 border border-zinc-700 focus:border-cyan-500 rounded-xs px-2 py-0.5 text-[11px] text-zinc-200 outline-none"
+                        >
+                            <option value="">Sin acceso</option>
+                            <option value="view">Solo ver</option>
+                            <option value="edit">Ver y editar</option>
+                        </select>
+                    </div>
+                    {{end}}
+                </div>
+                {{else}}
+                <p class="text-[11px] text-zinc-500 italic">
+                    No hay roles definidos todavía. Esta nota se guardará como privada (solo visible para ti y superusuarios).
+                </p>
+                {{end}}
+            </div>
+        </details>
+
         <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-2">
                 <input id="idea-doc-input" type="file" name="doc" accept=".txt,.md,.pdf,.docx,.csv" hidden onchange="handleIdeaFileChange(this)">

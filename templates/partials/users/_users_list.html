@@ -1,34 +1,149 @@
-<div class="overflow-x-auto border border-zinc-800 rounded-sm w-full">
-    <table class="w-full text-left text-xs text-zinc-300 min-w-[500px]">
-        <thead class="bg-zinc-900 border-b border-zinc-800 text-zinc-400 uppercase text-[11px]">
-            <tr>
-                <th class="py-2 px-3 font-medium">ID</th>
-                <th class="py-2 px-3 font-medium">Usuario</th>
-                <th class="py-2 px-3 font-medium">Creación</th>
-            </tr>
-        </thead>
-        <tbody class="divide-y divide-zinc-800/60 bg-zinc-950/40">
-            {{range $user := .users}}
-                <tr class="hover:bg-zinc-900/50 transition-colors">
-                    <td class="py-2 px-3 text-zinc-500 font-mono text-[11px]">
-                        {{$user.ID}}
-                    </td>
+<div class="flex flex-col gap-3 w-full">
+    {{if .error}}
+    <p class="border border-red-500/50 bg-red-500/10 text-red-300 p-2.5 rounded-xs text-xs">
+        {{.error}}
+    </p>
+    {{end}}
+    {{if .success}}
+    <p class="border border-emerald-500/50 bg-emerald-500/10 text-emerald-300 p-2.5 rounded-xs text-xs">
+        {{.success}}
+    </p>
+    {{end}}
 
-                    <td class="py-2 px-3 text-zinc-200">
-                        {{$user.Email}}
-                    </td>
-
-                    <td class="py-2 px-3 text-zinc-400 text-[11px]">
-                        {{$user.CreatedAt.Format "02/01/2006 15:04"}}
-                    </td>
-                </tr>
-            {{else}}
+    <div class="overflow-x-auto border border-zinc-800 rounded-sm w-full">
+        <table class="w-full text-left text-xs text-zinc-300 min-w-[680px]">
+            <thead class="bg-zinc-900 border-b border-zinc-800 text-zinc-400 uppercase text-[11px]">
                 <tr>
-                    <td colspan="3" class="px-4 py-16 text-center text-zinc-500 text-xs">
-                        No hay usuarios registrados.
-                    </td>
+                    <th class="py-2 px-3 font-medium">Usuario</th>
+                    <th class="py-2 px-3 font-medium">Nivel</th>
+                    <th class="py-2 px-3 font-medium">Roles asignados</th>
+                    <th class="py-2 px-3 font-medium">Creación</th>
+                    <th class="py-2 px-3 font-medium text-right">Permisos</th>
                 </tr>
-            {{end}}
-        </tbody>
-    </table>
+            </thead>
+            <tbody class="divide-y divide-zinc-800/60 bg-zinc-950/40">
+                {{range $user := .users}}
+                    <tr class="hover:bg-zinc-900/50 transition-colors align-top">
+                        <td class="py-2.5 px-3 text-zinc-200">
+                            <div class="font-medium">{{$user.Email}}</div>
+                            <div class="text-[10px] text-zinc-500 font-mono">{{$user.ID}}</div>
+                        </td>
+
+                        <td class="py-2.5 px-3">
+                            {{if $user.IsSuperuser}}
+                            <span class="text-[10px] font-mono uppercase px-2 py-0.5 rounded-xs bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                Superusuario
+                            </span>
+                            {{else}}
+                            <span class="text-[10px] font-mono uppercase px-2 py-0.5 rounded-xs bg-zinc-800 text-zinc-400 border border-zinc-700">
+                                Estándar
+                            </span>
+                            {{end}}
+                        </td>
+
+                        <td class="py-2.5 px-3">
+                            {{if $user.Roles}}
+                            <div class="flex flex-wrap gap-1.5">
+                                {{range $r := $user.Roles}}
+                                <span class="text-[10px] px-2 py-0.5 rounded-xs bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                                    {{$r.Name}}
+                                </span>
+                                {{end}}
+                            </div>
+                            {{else}}
+                            <span class="text-[11px] text-zinc-500 italic">Sin roles</span>
+                            {{end}}
+                        </td>
+
+                        <td class="py-2.5 px-3 text-zinc-400 text-[11px]">
+                            {{$user.CreatedAt.Format "02/01/2006 15:04"}}
+                        </td>
+
+                        <td class="py-2.5 px-3 text-right">
+                            <button
+                                type="button"
+                                onclick="document.getElementById('user-access-{{$user.ID}}').classList.toggle('hidden')"
+                                class="border border-zinc-800 hover:border-cyan-500 bg-zinc-900 px-2.5 py-1 rounded-xs text-[11px] text-zinc-300 hover:text-cyan-300 cursor-pointer transition-colors"
+                            >
+                                Gestionar acceso
+                            </button>
+                        </td>
+                    </tr>
+                    <tr id="user-access-{{$user.ID}}" class="hidden bg-zinc-900/60">
+                        <td colspan="5" class="p-3.5 border-t border-zinc-800/80">
+                            <form
+                                hx-post='{{url "users:update_access" $user.ID}}'
+                                hx-target="#workspace"
+                                hx-swap="innerHTML"
+                                class="flex flex-col gap-3"
+                            >
+                                <input type="hidden" name="csrf_token" value="{{$.csrf_token}}" />
+
+                                <div class="flex flex-wrap items-center justify-between gap-3">
+                                    <span class="text-xs font-medium text-zinc-200">
+                                        Configurar acceso de {{$user.Email}}
+                                    </span>
+
+                                    <label class="inline-flex items-center gap-2 text-xs text-amber-300 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            name="is_superuser"
+                                            value="1"
+                                            {{if $user.IsSuperuser}}checked{{end}}
+                                            class="accent-amber-500"
+                                        />
+                                        <span>Superusuario (acceso total)</span>
+                                    </label>
+                                </div>
+
+                                <div class="flex flex-col gap-1.5">
+                                    <span class="text-[11px] text-zinc-400">Roles asignados:</span>
+                                    {{if $.allRoles}}
+                                    <div class="flex flex-wrap gap-2">
+                                        {{range $role := $.allRoles}}
+                                        <label class="inline-flex items-center gap-1.5 border border-zinc-800 bg-zinc-950/80 hover:border-cyan-500/60 px-2.5 py-1 rounded-xs text-[11px] text-zinc-200 cursor-pointer select-none">
+                                            <input
+                                                type="checkbox"
+                                                name="role_ids"
+                                                value="{{$role.ID}}"
+                                                {{if index $user.RoleIDMap $role.ID.String}}checked{{end}}
+                                                class="accent-cyan-500"
+                                            />
+                                            <span>{{$role.Name}}</span>
+                                        </label>
+                                        {{end}}
+                                    </div>
+                                    {{else}}
+                                    <span class="text-[11px] text-zinc-500 italic">No hay roles creados todavía. Créalos en la sección Roles.</span>
+                                    {{end}}
+                                </div>
+
+                                <div class="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800/80">
+                                    <button
+                                        type="button"
+                                        onclick="document.getElementById('user-access-{{$user.ID}}').classList.add('hidden')"
+                                        class="px-2.5 py-1 text-zinc-400 hover:text-zinc-200 cursor-pointer text-xs"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        class="bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-medium px-3 py-1 rounded-xs cursor-pointer text-xs transition-colors"
+                                    >
+                                        Guardar acceso
+                                    </button>
+                                </div>
+                            </form>
+                        </td>
+                    </tr>
+                {{else}}
+                    <tr>
+                        <td colspan="5" class="px-4 py-16 text-center text-zinc-500 text-xs">
+                            No hay usuarios registrados.
+                        </td>
+                    </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
 </div>

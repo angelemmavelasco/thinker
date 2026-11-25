@@ -293,6 +293,44 @@ func (s *TopicService) ListIdeasByHub(ctx context.Context, hubID uuid.UUID) ([]d
 	return s.queries.ListIdeasByHubID(ctx, hubID)
 }
 
+func (s *TopicService) ListAccessibleIdeasByHub(ctx context.Context, actor Actor, hubID uuid.UUID) ([]database.ListIdeasByHubIDRow, error) {
+	if !actor.IsValid() {
+		return nil, ErrUnauthorized
+	}
+	if actor.IsSuperuser {
+		return s.queries.ListIdeasByHubID(ctx, hubID)
+	}
+	rows, err := s.queries.ListAccessibleIdeasByHubID(ctx, database.ListAccessibleIdeasByHubIDParams{
+		HubID:  hubID,
+		UserID: actor.UserID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	res := make([]database.ListIdeasByHubIDRow, 0, len(rows))
+	for _, r := range rows {
+		res = append(res, database.ListIdeasByHubIDRow{
+			ID:                  r.ID,
+			UserID:              r.UserID,
+			UpdatedBy:           r.UpdatedBy,
+			GroupID:             r.GroupID,
+			ChunkIndex:          r.ChunkIndex,
+			ChunkTotal:          r.ChunkTotal,
+			Title:               r.Title,
+			Content:             r.Content,
+			RestructuredContent: r.RestructuredContent,
+			Status:              r.Status,
+			Embedding:           r.Embedding,
+			CreatedAt:           r.CreatedAt,
+			UpdatedAt:           r.UpdatedAt,
+			RelationshipType:    r.RelationshipType,
+			Weight:              r.Weight,
+			IsManualOverride:    r.IsManualOverride,
+		})
+	}
+	return res, nil
+}
+
 func (s *TopicService) ListHubsByIdea(ctx context.Context, ideaID uuid.UUID) ([]database.ListHubsByIdeaIDRow, error) {
 	return s.queries.ListHubsByIdeaID(ctx, ideaID)
 }

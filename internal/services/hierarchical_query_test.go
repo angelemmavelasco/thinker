@@ -152,9 +152,9 @@ func TestHierarchicalQuery_PetShopDietResolution_EndToEnd(t *testing.T) {
 	})
 	_ = svc.topicService.LinkIdeaToHub(ctx, hub.ID, clause24.ID, "GOVERNS", false)
 
-	// User query
 	userQuery := "¿un negocio de estética que pide dietas patológicas puede comprarlas?"
-	res, err := svc.QueryGraph(ctx, userQuery)
+	actor := Actor{UserID: userID}
+	res, err := svc.QueryGraph(ctx, actor, userQuery)
 	if err != nil {
 		t.Fatalf("QueryGraph failed: %v", err)
 	}
@@ -207,9 +207,9 @@ func TestHierarchicalQuery_FallbackWhenNoMOCs(t *testing.T) {
 	embSvc.SetHTTPClient(mockEmbClient)
 	svc.embedding = embSvc
 
-	// Call SearchAndExpand: should fall back smoothly to FindSeedIdeas
 	opts := DefaultTraversalOptions()
-	subGraph, seeds, err := svc.SearchAndExpand(ctx, "microservicios distribuidos", 3, opts)
+	actor := Actor{UserID: userID}
+	subGraph, seeds, err := svc.SearchAndExpand(ctx, actor, "microservicios distribuidos", 3, opts)
 	if err != nil {
 		t.Fatalf("SearchAndExpand failed: %v", err)
 	}

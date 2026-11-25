@@ -1,0 +1,199 @@
+<div class="flex flex-col gap-5 w-full">
+    {{if .error}}
+    <p class="border border-red-500/50 bg-red-500/10 text-red-300 p-2.5 rounded-xs text-xs">
+        {{.error}}
+    </p>
+    {{end}}
+    {{if .success}}
+    <p class="border border-emerald-500/50 bg-emerald-500/10 text-emerald-300 p-2.5 rounded-xs text-xs">
+        {{.success}}
+    </p>
+    {{end}}
+
+    <form
+        hx-post='{{url "roles:create"}}'
+        hx-target="#workspace"
+        hx-swap="innerHTML"
+        class="border border-zinc-800 rounded-xs bg-zinc-900/70 p-4 flex flex-col gap-3 text-xs"
+    >
+        <input type="hidden" name="csrf_token" value="{{.csrf_token}}" />
+        <h3 class="text-sm font-medium text-zinc-100">Crear nuevo rol</h3>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="flex flex-col gap-1">
+                <label class="text-[11px] text-zinc-400">Nombre del rol</label>
+                <input
+                    type="text"
+                    name="name"
+                    value="{{.roleName}}"
+                    required
+                    minlength="2"
+                    maxlength="100"
+                    placeholder="Ej: Ingeniería, Ventas, Dirección"
+                    class="w-full outline-none border border-zinc-800 focus:border-cyan-500 rounded-xs bg-zinc-950 px-2.5 py-1.5 text-zinc-100"
+                />
+            </div>
+
+            <div class="md:col-span-2 flex flex-col gap-1">
+                <label class="text-[11px] text-zinc-400">Descripción (opcional)</label>
+                <input
+                    type="text"
+                    name="description"
+                    value="{{.roleDescription}}"
+                    maxlength="500"
+                    placeholder="Alcance o área del equipo que usará este rol"
+                    class="w-full outline-none border border-zinc-800 focus:border-cyan-500 rounded-xs bg-zinc-950 px-2.5 py-1.5 text-zinc-100"
+                />
+            </div>
+        </div>
+
+        <div class="flex justify-end">
+            <button
+                type="submit"
+                class="bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-medium px-4 py-1.5 rounded-xs cursor-pointer transition-all text-xs"
+            >
+                Crear rol
+            </button>
+        </div>
+    </form>
+
+    <div class="overflow-x-auto border border-zinc-800 rounded-sm w-full">
+        <table class="w-full text-left text-xs text-zinc-300 min-w-[640px]">
+            <thead class="bg-zinc-900 border-b border-zinc-800 text-zinc-400 uppercase text-[11px]">
+                <tr>
+                    <th class="py-2 px-3 font-medium">Rol</th>
+                    <th class="py-2 px-3 font-medium">Descripción</th>
+                    <th class="py-2 px-3 font-medium">Usuarios</th>
+                    <th class="py-2 px-3 font-medium">Notas</th>
+                    <th class="py-2 px-3 font-medium text-right">Acciones</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-zinc-800/60 bg-zinc-950/40">
+                {{range $role := .roles}}
+                    <tr class="hover:bg-zinc-900/50 transition-colors align-top">
+                        <td class="py-2.5 px-3">
+                            <div class="font-medium text-zinc-100">{{$role.Name}}</div>
+                            <div class="text-[10px] font-mono text-zinc-500">{{$role.Slug}}</div>
+                        </td>
+
+                        <td class="py-2.5 px-3 text-zinc-400">
+                            {{if $role.Description}}{{$role.Description}}{{else}}<span class="italic text-zinc-600">Sin descripción</span>{{end}}
+                        </td>
+
+                        <td class="py-2.5 px-3 font-mono text-cyan-300">
+                            {{$role.UserCount}}
+                        </td>
+
+                        <td class="py-2.5 px-3 font-mono text-emerald-300">
+                            {{$role.IdeaCount}}
+                        </td>
+
+                        <td class="py-2.5 px-3 text-right">
+                            <div class="inline-flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onclick="document.getElementById('role-edit-{{$role.ID}}').classList.toggle('hidden')"
+                                    class="border border-zinc-800 hover:border-cyan-500 bg-zinc-900 px-2 py-1 rounded-xs text-[11px] text-zinc-300 hover:text-cyan-300 cursor-pointer"
+                                >
+                                    Editar
+                                </button>
+                                <button
+                                    type="button"
+                                    onclick="document.getElementById('role-del-{{$role.ID}}').classList.toggle('hidden')"
+                                    class="border border-zinc-800 hover:border-red-500 bg-zinc-900 px-2 py-1 rounded-xs text-[11px] text-zinc-400 hover:text-red-400 cursor-pointer"
+                                >
+                                    Eliminar
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr id="role-edit-{{$role.ID}}" class="hidden bg-zinc-900/60">
+                        <td colspan="5" class="p-3 border-t border-zinc-800/80">
+                            <form
+                                hx-post='{{url "roles:update" $role.ID}}'
+                                hx-target="#workspace"
+                                hx-swap="innerHTML"
+                                class="flex flex-wrap items-end gap-3"
+                            >
+                                <input type="hidden" name="csrf_token" value="{{$.csrf_token}}" />
+                                <div class="flex flex-col gap-1 flex-1 min-w-[180px]">
+                                    <label class="text-[10px] text-zinc-400">Nombre</label>
+                                    <input
+                                        type="text"
+                                        name="name"
+                                        value="{{$role.Name}}"
+                                        required
+                                        minlength="2"
+                                        maxlength="100"
+                                        class="outline-none border border-zinc-800 focus:border-cyan-500 rounded-xs bg-zinc-950 px-2 py-1 text-xs text-zinc-100"
+                                    />
+                                </div>
+                                <div class="flex flex-col gap-1 flex-[2] min-w-[240px]">
+                                    <label class="text-[10px] text-zinc-400">Descripción</label>
+                                    <input
+                                        type="text"
+                                        name="description"
+                                        value="{{$role.Description}}"
+                                        maxlength="500"
+                                        class="outline-none border border-zinc-800 focus:border-cyan-500 rounded-xs bg-zinc-950 px-2 py-1 text-xs text-zinc-100"
+                                    />
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onclick="document.getElementById('role-edit-{{$role.ID}}').classList.add('hidden')"
+                                        class="text-zinc-400 hover:text-zinc-200 px-2 py-1 cursor-pointer"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        class="bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-medium px-3 py-1 rounded-xs cursor-pointer"
+                                    >
+                                        Guardar
+                                    </button>
+                                </div>
+                            </form>
+                        </td>
+                    </tr>
+                    <tr id="role-del-{{$role.ID}}" class="hidden bg-red-950/20">
+                        <td colspan="5" class="p-3 border-t border-red-500/30">
+                            <div class="flex flex-wrap items-center justify-between gap-3">
+                                <span class="text-xs text-red-200">
+                                    ¿Eliminar el rol <strong>{{$role.Name}}</strong>? Se quitará de {{$role.UserCount}} usuario(s) y {{$role.IdeaCount}} nota(s), y se recalcularán las relaciones del grafo.
+                                </span>
+                                <form
+                                    hx-post='{{url "roles:delete" $role.ID}}'
+                                    hx-target="#workspace"
+                                    hx-swap="innerHTML"
+                                    class="inline-flex items-center gap-2"
+                                >
+                                    <input type="hidden" name="csrf_token" value="{{$.csrf_token}}" />
+                                    <button
+                                        type="button"
+                                        onclick="document.getElementById('role-del-{{$role.ID}}').classList.add('hidden')"
+                                        class="text-zinc-400 hover:text-zinc-200 px-2 py-1 cursor-pointer"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        class="border border-red-500/70 bg-red-500/20 hover:bg-red-500/30 text-red-200 font-medium px-3 py-1 rounded-xs cursor-pointer"
+                                    >
+                                        Confirmar eliminación
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                {{else}}
+                    <tr>
+                        <td colspan="5" class="px-4 py-12 text-center text-zinc-500 text-xs">
+                            No hay roles creados todavía. Crea el primero arriba para asignar permisos por nota y usuario.
+                        </td>
+                    </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>

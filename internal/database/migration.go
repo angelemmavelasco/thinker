@@ -149,9 +149,9 @@ func backfillIdeaGroups(ctx context.Context, conn *sql.DB) error {
 
 func EnsureDevelopmentUser(ctx context.Context, conn *sql.DB) error {
 	const query = `
-		INSERT INTO users (id, email, password_hash, role, auth_provider, email_verified, token_version)
-		VALUES ($1, $2, $3, 'admin', 'local', 1, 1)
-		ON CONFLICT (id) DO UPDATE SET email_verified = 1
+		INSERT INTO users (id, email, password_hash, role, is_superuser, auth_provider, email_verified, token_version)
+		VALUES ($1, $2, $3, 'admin', 1, 'local', 1, 1)
+		ON CONFLICT (id) DO UPDATE SET email_verified = 1, role = 'admin', is_superuser = 1
 	`
 
 	_, err := conn.ExecContext(
@@ -161,6 +161,23 @@ func EnsureDevelopmentUser(ctx context.Context, conn *sql.DB) error {
 		"development@thinker.local",
 		"development-only",
 	)
+	return err
+}
+
+func EnsureBootstrapSuperuser(ctx context.Context, conn *sql.DB, email string) error {
+	cleanEmail := strings.ToLower(strings.TrimSpace(email))
+	if cleanEmail == "" {
+		return nil
+	}
+
+	const query = `
+		UPDATE users
+		SET is_superuser = 1,
+		    role = 'admin'
+		WHERE LOWER(email) = LOWER($1)
+	`
+
+	_, err := conn.ExecContext(ctx, query, cleanEmail)
 	return err
 }
 

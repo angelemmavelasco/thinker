@@ -2,26 +2,35 @@ package handlers
 
 import (
 	"context"
+	"errors"
+	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"thinker/internal/config"
 	"thinker/internal/database"
+	"thinker/internal/middleware"
 	"thinker/internal/services"
 )
 
 type IdeaHandler struct {
-	service *services.IdeaService
+	service     *services.IdeaService
+	roleService *services.RoleService
 }
 
-func NewIdeaHandler(queries *database.Queries, llm *services.LLMService, embedding *services.EmbeddingService) *IdeaHandler {
+func NewIdeaHandler(queries *database.Queries, llm *services.LLMService, embedding *services.EmbeddingService, roleService *services.RoleService) *IdeaHandler {
 	svc := services.NewIdeaService(queries, llm, embedding)
+	if roleService != nil {
+		roleService.SetOnIdeasAffected(svc.EnqueueIdeasRelink)
+	}
 	go svc.ProcessPendingIdeas(context.Background())
 	return &IdeaHandler{
-		service: svc,
+		service:     svc,
+		roleService: roleService,
 	}
 }
 
@@ -29,10 +38,56 @@ func (h *IdeaHandler) Service() *services.IdeaService {
 	return h.service
 }
 
-func (h *IdeaHandler) ListIdeas(c *gin.Context) {
-	ideas, err := h.service.ListIdeas(c.Request.Context())
+func (h *IdeaHandler) listAvailableRoles(ctx context.Context) []database.Role {
+	if h.roleService == nil {
+		return nil
+	}
+	roles, err := h.roleService.ListRoles(ctx)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "Error al consultar el repositorio de ideas: %v", err)
+		return nil
+	}
+	return roles
+}
+
+func parseRolePermissionsFromForm(c *gin.Context) map[uuid.UUID]string {
+	perms := make(map[uuid.UUID]string)
+	if c.Request.MultipartForm != nil {
+		for key, values := range c.Request.MultipartForm.Value {
+			extractRolePermEntry(perms, key, values)
+		}
+	}
+	_ = c.Request.ParseForm()
+	for key, values := range c.Request.PostForm {
+		extractRolePermEntry(perms, key, values)
+	}
+	return perms
+}
+
+func extractRolePermEntry(dst map[uuid.UUID]string, key string, values []string) {
+	if !strings.HasPrefix(key, "role_perm[") || !strings.HasSuffix(key, "]") || len(values) == 0 {
+		return
+	}
+	rawID := strings.TrimSuffix(strings.TrimPrefix(key, "role_perm["), "]")
+	roleID, err := uuid.Parse(strings.TrimSpace(rawID))
+	if err != nil || roleID == uuid.Nil {
+		return
+	}
+	if perm, ok := services.NormalizePermission(values[0]); ok {
+		dst[roleID] = perm
+	}
+}
+
+func (h *IdeaHandler) ListIdeas(c *gin.Context) {
+	actor, ok := middleware.ActorFromContext(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	ideas, err := h.service.ListIdeas(c.Request.Context(), actor)
+	if err != nil {
+		log.Printf("[ideas] Error listando ideas: %v", err)
+		c.String(http.StatusInternalServerError, "Error al consultar el repositorio de ideas")
 		return
 	}
 
@@ -51,7 +106,8 @@ func (h *IdeaHandler) ListIdeas(c *gin.Context) {
 
 func (h *IdeaHandler) NewIdea(c *gin.Context) {
 	data := gin.H{
-		"title": "Nueva idea",
+		"title":    "Nueva idea",
+		"allRoles": h.listAvailableRoles(c.Request.Context()),
 	}
 
 	if c.GetHeader("HX-Request") == "true" {
@@ -63,8 +119,16 @@ func (h *IdeaHandler) NewIdea(c *gin.Context) {
 }
 
 func (h *IdeaHandler) CreateIdea(c *gin.Context) {
+	actor, ok := middleware.ActorFromContext(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
 	title := strings.TrimSpace(c.PostForm("title"))
 	content := strings.TrimSpace(c.PostForm("content"))
+	rolePerms := parseRolePermissionsFromForm(c)
+	allRoles := h.listAvailableRoles(c.Request.Context())
 
 	fileHeader, fileErr := c.FormFile("doc")
 	if fileErr == nil && fileHeader != nil && fileHeader.Size > 0 {
@@ -75,6 +139,7 @@ func (h *IdeaHandler) CreateIdea(c *gin.Context) {
 				"error":     err.Error(),
 				"ideaTitle": title,
 				"content":   content,
+				"allRoles":  allRoles,
 			}
 			if c.GetHeader("HX-Request") == "true" {
 				config.Render(c, http.StatusBadRequest, "_ideas_new.html", data)
@@ -102,6 +167,7 @@ func (h *IdeaHandler) CreateIdea(c *gin.Context) {
 			"error":     "El título y el contenido son obligatorios (o sube un archivo .txt, .md, .pdf, .docx, .csv).",
 			"ideaTitle": title,
 			"content":   content,
+			"allRoles":  allRoles,
 		}
 
 		if c.GetHeader("HX-Request") == "true" {
@@ -113,16 +179,33 @@ func (h *IdeaHandler) CreateIdea(c *gin.Context) {
 		return
 	}
 
-	_, err := h.service.CreateIdeasFromInput(c.Request.Context(), c.GetString("user"), title, content)
+	_, err := h.service.CreateIdeasFromInput(c.Request.Context(), actor, title, content, rolePerms)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "Error al guardar la idea: %v", err)
+		if errors.Is(err, services.ErrInvalidPermission) || errors.Is(err, services.ErrRoleNotFound) {
+			data := gin.H{
+				"title":     "Nueva idea",
+				"error":     "Los permisos de rol seleccionados no son válidos.",
+				"ideaTitle": title,
+				"content":   content,
+				"allRoles":  allRoles,
+			}
+			if c.GetHeader("HX-Request") == "true" {
+				config.Render(c, http.StatusBadRequest, "_ideas_new.html", data)
+				return
+			}
+			config.Render(c, http.StatusBadRequest, "ideas_new.html", data)
+			return
+		}
+		log.Printf("[ideas] Error guardando idea: %v", err)
+		c.String(http.StatusInternalServerError, "Error al guardar la idea")
 		return
 	}
 
 	if c.GetHeader("HX-Request") == "true" {
-		ideas, err := h.service.ListIdeas(c.Request.Context())
+		ideas, err := h.service.ListIdeas(c.Request.Context(), actor)
 		if err != nil {
-			c.String(http.StatusInternalServerError, "La idea se guardó, pero no se pudo actualizar el listado: %v", err)
+			log.Printf("[ideas] Error actualizando listado: %v", err)
+			c.String(http.StatusInternalServerError, "La idea se guardó, pero no se pudo actualizar el listado")
 			return
 		}
 
@@ -143,8 +226,15 @@ func (h *IdeaHandler) NetworkView(c *gin.Context) {
 }
 
 func (h *IdeaHandler) NetworkGraphJSON(c *gin.Context) {
-	graph, err := h.service.GetNetworkGraph(c.Request.Context())
+	actor, ok := middleware.ActorFromContext(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "No autenticado"})
+		return
+	}
+
+	graph, err := h.service.GetNetworkGraph(c.Request.Context(), actor)
 	if err != nil {
+		log.Printf("[network] Error cargando grafo: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "No se pudo cargar la red de conocimiento"})
 		return
 	}
@@ -173,6 +263,12 @@ type AskNetworkResponse struct {
 }
 
 func (h *IdeaHandler) AskNetworkGraph(c *gin.Context) {
+	actor, ok := middleware.ActorFromContext(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "No autenticado"})
+		return
+	}
+
 	var req AskNetworkRequest
 	if err := c.ShouldBind(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Consulta inválida"})
@@ -185,10 +281,10 @@ func (h *IdeaHandler) AskNetworkGraph(c *gin.Context) {
 		return
 	}
 
-	res, err := h.service.QueryGraph(c.Request.Context(), cleanedQuestion)
+	res, err := h.service.QueryGraph(c.Request.Context(), actor, cleanedQuestion)
 	if err != nil {
 		opts := services.DefaultTraversalOptions()
-		subGraph, _, subErr := h.service.SearchAndExpand(c.Request.Context(), cleanedQuestion, 3, opts)
+		subGraph, _, subErr := h.service.SearchAndExpand(c.Request.Context(), actor, cleanedQuestion, 3, opts)
 		if subErr == nil && subGraph != nil && len(subGraph.Nodes) > 0 {
 			titleMap := make(map[string]string)
 			for _, n := range subGraph.Nodes {
@@ -272,16 +368,30 @@ func (h *IdeaHandler) AskNetworkGraph(c *gin.Context) {
 }
 
 func (h *IdeaHandler) IdeaDetail(c *gin.Context) {
+	actor, ok := middleware.ActorFromContext(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
 	ideaID := c.Param("id")
-	detail, err := h.service.GetIdeaDetail(c.Request.Context(), ideaID)
+	detail, err := h.service.GetIdeaDetail(c.Request.Context(), actor, ideaID)
 	if err != nil {
-		c.String(http.StatusNotFound, "No se encontró la idea solicitada: %v", err)
+		if errors.Is(err, services.ErrIdeaNotFound) {
+			c.String(http.StatusNotFound, "No se encontró la idea solicitada")
+			return
+		}
+		log.Printf("[ideas] Error consultando detalle [%s]: %v", ideaID, err)
+		c.String(http.StatusInternalServerError, "Error al consultar la idea")
 		return
 	}
 
 	data := gin.H{
 		"title":  detail.Idea.Title,
 		"detail": detail,
+	}
+	if detail.CanManageRoles {
+		data["allRoles"] = h.listAvailableRoles(c.Request.Context())
 	}
 
 	if c.GetHeader("HX-Request") == "true" {
@@ -293,10 +403,26 @@ func (h *IdeaHandler) IdeaDetail(c *gin.Context) {
 }
 
 func (h *IdeaHandler) EditIdeaView(c *gin.Context) {
+	actor, ok := middleware.ActorFromContext(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
 	ideaID := c.Param("id")
-	detail, err := h.service.GetIdeaDetail(c.Request.Context(), ideaID)
+	detail, err := h.service.GetIdeaDetail(c.Request.Context(), actor, ideaID)
 	if err != nil {
-		c.String(http.StatusNotFound, "No se encontró la idea solicitada: %v", err)
+		if errors.Is(err, services.ErrIdeaNotFound) {
+			c.String(http.StatusNotFound, "No se encontró la idea solicitada")
+			return
+		}
+		log.Printf("[ideas] Error cargando edición [%s]: %v", ideaID, err)
+		c.String(http.StatusInternalServerError, "Error al cargar la idea")
+		return
+	}
+
+	if !detail.CanEdit {
+		c.String(http.StatusForbidden, "No tienes permisos para editar esta idea")
 		return
 	}
 
@@ -316,6 +442,12 @@ func (h *IdeaHandler) EditIdeaView(c *gin.Context) {
 }
 
 func (h *IdeaHandler) UpdateIdea(c *gin.Context) {
+	actor, ok := middleware.ActorFromContext(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
 	ideaID := c.Param("id")
 	title := strings.TrimSpace(c.PostForm("title"))
 	content := strings.TrimSpace(c.PostForm("content"))
@@ -338,15 +470,71 @@ func (h *IdeaHandler) UpdateIdea(c *gin.Context) {
 		return
 	}
 
-	detail, err := h.service.UpdateIdea(c.Request.Context(), ideaID, title, content)
+	detail, err := h.service.UpdateIdea(c.Request.Context(), actor, ideaID, title, content)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "Error al actualizar la idea: %v", err)
+		if errors.Is(err, services.ErrIdeaNotFound) {
+			c.String(http.StatusNotFound, "No se encontró la idea solicitada")
+			return
+		}
+		if errors.Is(err, services.ErrForbidden) {
+			c.String(http.StatusForbidden, "No tienes permisos para editar esta idea")
+			return
+		}
+		log.Printf("[ideas] Error actualizando idea [%s]: %v", ideaID, err)
+		c.String(http.StatusInternalServerError, "Error al actualizar la idea")
 		return
 	}
 
 	data := gin.H{
 		"title":  detail.Idea.Title,
 		"detail": detail,
+	}
+	if detail.CanManageRoles {
+		data["allRoles"] = h.listAvailableRoles(c.Request.Context())
+	}
+
+	if c.GetHeader("HX-Request") == "true" {
+		config.Render(c, http.StatusOK, "_idea_detail.html", data)
+		return
+	}
+
+	c.Redirect(http.StatusSeeOther, "/web/ideas/"+ideaID)
+}
+
+func (h *IdeaHandler) UpdateIdeaPermissions(c *gin.Context) {
+	actor, ok := middleware.ActorFromContext(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	ideaID := c.Param("id")
+	rolePerms := parseRolePermissionsFromForm(c)
+
+	detail, err := h.service.UpdateIdeaPermissions(c.Request.Context(), actor, ideaID, rolePerms)
+	if err != nil {
+		if errors.Is(err, services.ErrIdeaNotFound) {
+			c.String(http.StatusNotFound, "No se encontró la idea solicitada")
+			return
+		}
+		if errors.Is(err, services.ErrForbidden) {
+			c.String(http.StatusForbidden, "Solo el autor o un superusuario pueden modificar los permisos de esta nota")
+			return
+		}
+		if errors.Is(err, services.ErrInvalidPermission) || errors.Is(err, services.ErrRoleNotFound) {
+			c.String(http.StatusBadRequest, "Los permisos seleccionados no son válidos")
+			return
+		}
+		log.Printf("[ideas] Error actualizando permisos [%s]: %v", ideaID, err)
+		c.String(http.StatusInternalServerError, "Error al actualizar los permisos de la idea")
+		return
+	}
+
+	data := gin.H{
+		"title":           detail.Idea.Title,
+		"detail":          detail,
+		"allRoles":        h.listAvailableRoles(c.Request.Context()),
+		"permSaveSuccess": "Permisos de visualización actualizados y relaciones sincronizadas.",
 	}
 
 	if c.GetHeader("HX-Request") == "true" {
@@ -358,16 +546,34 @@ func (h *IdeaHandler) UpdateIdea(c *gin.Context) {
 }
 
 func (h *IdeaHandler) ReanalyzeIdea(c *gin.Context) {
+	actor, ok := middleware.ActorFromContext(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
 	ideaID := c.Param("id")
-	detail, err := h.service.ReanalyzeIdea(c.Request.Context(), ideaID)
+	detail, err := h.service.ReanalyzeIdea(c.Request.Context(), actor, ideaID)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "Error al volver a analizar la idea: %v", err)
+		if errors.Is(err, services.ErrIdeaNotFound) {
+			c.String(http.StatusNotFound, "No se encontró la idea solicitada")
+			return
+		}
+		if errors.Is(err, services.ErrForbidden) {
+			c.String(http.StatusForbidden, "No tienes permisos para reanalizar esta idea")
+			return
+		}
+		log.Printf("[ideas] Error reanalizando idea [%s]: %v", ideaID, err)
+		c.String(http.StatusInternalServerError, "Error al volver a analizar la idea")
 		return
 	}
 
 	data := gin.H{
 		"title":  detail.Idea.Title,
 		"detail": detail,
+	}
+	if detail.CanManageRoles {
+		data["allRoles"] = h.listAvailableRoles(c.Request.Context())
 	}
 
 	if c.GetHeader("HX-Request") == "true" {
@@ -379,30 +585,61 @@ func (h *IdeaHandler) ReanalyzeIdea(c *gin.Context) {
 }
 
 func (h *IdeaHandler) DeleteIdeaFragment(c *gin.Context) {
-	ideaID := c.Param("id")
-	if err := h.service.DeleteIdeaFragment(c.Request.Context(), ideaID); err != nil {
-		c.String(http.StatusInternalServerError, "Error al eliminar el fragmento: %v", err)
+	actor, ok := middleware.ActorFromContext(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
 
-	h.renderIdeasListOrRedirect(c)
+	ideaID := c.Param("id")
+	if err := h.service.DeleteIdeaFragment(c.Request.Context(), actor, ideaID); err != nil {
+		if errors.Is(err, services.ErrIdeaNotFound) {
+			c.String(http.StatusNotFound, "No se encontró la idea solicitada")
+			return
+		}
+		if errors.Is(err, services.ErrForbidden) {
+			c.String(http.StatusForbidden, "Solo el autor o un superusuario pueden eliminar esta idea")
+			return
+		}
+		log.Printf("[ideas] Error eliminando fragmento [%s]: %v", ideaID, err)
+		c.String(http.StatusInternalServerError, "Error al eliminar el fragmento")
+		return
+	}
+
+	h.renderIdeasListOrRedirect(c, actor)
 }
 
 func (h *IdeaHandler) DeleteIdeaGroup(c *gin.Context) {
-	ideaID := c.Param("id")
-	if err := h.service.DeleteIdeaGroup(c.Request.Context(), ideaID); err != nil {
-		c.String(http.StatusInternalServerError, "Error al eliminar la idea completa: %v", err)
+	actor, ok := middleware.ActorFromContext(c)
+	if !ok {
+		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
 
-	h.renderIdeasListOrRedirect(c)
+	ideaID := c.Param("id")
+	if err := h.service.DeleteIdeaGroup(c.Request.Context(), actor, ideaID); err != nil {
+		if errors.Is(err, services.ErrIdeaNotFound) {
+			c.String(http.StatusNotFound, "No se encontró la idea solicitada")
+			return
+		}
+		if errors.Is(err, services.ErrForbidden) {
+			c.String(http.StatusForbidden, "Solo el autor o un superusuario pueden eliminar esta idea")
+			return
+		}
+		log.Printf("[ideas] Error eliminando grupo [%s]: %v", ideaID, err)
+		c.String(http.StatusInternalServerError, "Error al eliminar la idea completa")
+		return
+	}
+
+	h.renderIdeasListOrRedirect(c, actor)
 }
 
-func (h *IdeaHandler) renderIdeasListOrRedirect(c *gin.Context) {
+func (h *IdeaHandler) renderIdeasListOrRedirect(c *gin.Context, actor services.Actor) {
 	if c.GetHeader("HX-Request") == "true" {
-		ideas, err := h.service.ListIdeas(c.Request.Context())
+		ideas, err := h.service.ListIdeas(c.Request.Context(), actor)
 		if err != nil {
-			c.String(http.StatusInternalServerError, "Error al actualizar el repositorio de ideas: %v", err)
+			log.Printf("[ideas] Error actualizando repositorio: %v", err)
+			c.String(http.StatusInternalServerError, "Error al actualizar el repositorio de ideas")
 			return
 		}
 

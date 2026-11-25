@@ -14,13 +14,14 @@
             </p>
         </div>
 
+        {{if .can_manage_topics}}
         <div class="flex flex-wrap items-center gap-3">
             <div class="flex items-center gap-2 bg-zinc-900/80 border border-zinc-800 px-3 py-1.5 rounded-xs text-[11px] text-zinc-300">
                 <span class="text-zinc-400">Organización automática:</span>
                 <form method="POST" action='{{url "topics:setting_toggle_auto"}}' class="inline">
                     <input type="hidden" name="csrf_token" value="{{.csrf_token}}">
                     <button type="submit" title="{{if .allow_auto_mocs}}Haz clic para pausar y usar solo los temas actuales{{else}}Haz clic para permitir que Thinker cree nuevos temas automáticamente{{end}}" class="px-2 py-0.5 rounded-xs text-[10px] font-mono cursor-pointer transition-all {{if .allow_auto_mocs}}bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30{{else}}bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-zinc-200{{end}}">
-                        {{if .allow_auto_mocs}}Activada{{end}}
+                        {{if .allow_auto_mocs}}Activada{{else}}Pausada{{end}}
                     </button>
                 </form>
             </div>
@@ -31,6 +32,7 @@
                 <span>Nuevo tema principal</span>
             </button>
         </div>
+        {{end}}
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -57,10 +59,12 @@
         <p class="text-xs text-zinc-400 max-w-md leading-relaxed">
             Conforme vayas guardando notas o subiendo documentos, Thinker los ordenará automáticamente aquí por ti. También puedes crear un tema principal tú mismo cuando quieras.
         </p>
+        {{if .can_manage_topics}}
         <button type="button" onclick="document.getElementById('modal-new-moc').classList.remove('hidden')"
             class="mt-2 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-medium px-4 py-1.5 rounded-xs text-xs cursor-pointer transition-all">
             Crear mi primer tema
         </button>
+        {{end}}
     </div>
     {{else}}
 
@@ -96,6 +100,7 @@
                     </div>
                 </button>
 
+                {{if $.can_manage_topics}}
                 <div class="flex items-center gap-2 shrink-0 self-end md:self-center pl-6 md:pl-0">
                     <form method="POST" action='{{url "topics:toggle_moc_lock" .ID}}' class="inline">
                         <input type="hidden" name="csrf_token" value="{{$.csrf_token}}">
@@ -111,7 +116,7 @@
                         <span>Subtema</span>
                     </button>
 
-                    <form method="POST" action='{{url "topics:delete_moc" .ID}}' class="inline" onsubmit="return confirm('¿Seguro que deseas eliminar este tema? Las notas que contiene se mantendrán seguras.');">
+                    <form method="POST" action='{{url "topics:delete_moc" .ID}}' class="inline">
                         <input type="hidden" name="csrf_token" value="{{$.csrf_token}}">
                         <button type="submit" title="Eliminar este tema"
                             class="border border-zinc-800 hover:border-red-800/80 bg-zinc-950 hover:bg-red-950/20 px-2 py-1 rounded-xs text-[11px] text-zinc-500 hover:text-red-400 cursor-pointer transition-all">
@@ -119,6 +124,7 @@
                         </button>
                     </form>
                 </div>
+                {{end}}
             </div>
 
             <div id="moc-body-{{.ID}}" class="hidden border-t border-zinc-850 p-4 bg-zinc-950/40 flex-col gap-3">
@@ -157,12 +163,14 @@
                                 </div>
                             </button>
 
-                            <form method="POST" action='{{url "topics:delete_hub" .ID}}' class="inline shrink-0" onsubmit="return confirm('¿Seguro que deseas eliminar este subtema?');">
+                            {{if $.can_manage_topics}}
+                            <form method="POST" action='{{url "topics:delete_hub" .ID}}' class="inline shrink-0">
                                 <input type="hidden" name="csrf_token" value="{{$.csrf_token}}">
                                 <button type="submit" title="Eliminar subtema" class="text-zinc-600 hover:text-red-400 cursor-pointer p-1">
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                 </button>
                             </form>
+                            {{end}}
                         </div>
 
                         <div id="hub-body-{{.ID}}" class="hidden flex-col gap-3 pt-2.5 border-t border-zinc-850/80">
@@ -212,10 +220,12 @@
                                             Manual
                                         </span>
                                         {{end}}
+                                        {{if $.can_manage_topics}}
                                         <button type="button" onclick="openMoveModal('{{.ID}}', '{{.Title}}')"
                                             class="text-[10px] text-zinc-500 hover:text-cyan-400 cursor-pointer shrink-0 ml-1" title="Mover esta nota a otro subtema">
                                             Mover
                                         </button>
+                                        {{end}}
                                     </div>
                                     {{end}}
                                     {{end}}
@@ -235,6 +245,7 @@
 
 </div>
 
+{{if .can_manage_topics}}
 <div id="modal-new-moc" class="hidden fixed inset-0 z-50 bg-zinc-950/80 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-zinc-900 border border-zinc-800 rounded-xs w-full max-w-md p-5 flex flex-col gap-4 shadow-xl">
         <div class="flex items-center justify-between pb-2 border-b border-zinc-800">
@@ -358,6 +369,7 @@
         </form>
     </div>
 </div>
+{{end}}
 
 <script>
 function toggleSection(bodyId, chevronId) {

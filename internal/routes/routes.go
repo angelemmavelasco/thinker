@@ -51,6 +51,9 @@ func SetUpRouter(
 	mailer := services.NewMailerService(cfg)
 	googleOAuth := services.NewGoogleOAuthService(cfg)
 	authService := services.NewAuthService(queries, jwtMgr, mailer, googleOAuth)
+	authService.SetSuperuserEmail(cfg.SuperuserEmail)
+
+	roleService := services.NewRoleService(queries)
 
 	router := gin.Default()
 	router.Use(middleware.SecurityHeadersMiddleware())
@@ -66,8 +69,9 @@ func SetUpRouter(
 	router.HTMLRender = config.LoadTemplates("./templates/")
 
 	authHandler := handlers.NewAuthHandler(authService, cfg.SecureCookies)
-	ideaHandler := handlers.NewIdeaHandler(queries, llm, embedding)
-	userHandler := handlers.NewUserHandler(queries)
+	ideaHandler := handlers.NewIdeaHandler(queries, llm, embedding, roleService)
+	userHandler := handlers.NewUserHandler(queries, roleService)
+	roleHandler := handlers.NewRoleHandler(roleService)
 	topicHandler := handlers.NewTopicHandler(ideaHandler.Service().TopicService(), ideaHandler.Service())
 
 	authRateLimiter := middleware.NewAuthRateLimiter(15, time.Minute, 5, 15*time.Minute)
@@ -95,7 +99,6 @@ func SetUpRouter(
 	protected := router.Group("/")
 	protected.Use(middleware.RequireAuthMiddleware(authService, cfg.SecureCookies))
 	{
-		protected.GET(urls.Get("api:users:list"), userHandler.ListUsers)
 		protected.GET(urls.Get("api:network:graph"), ideaHandler.NetworkGraphJSON)
 		protected.POST(urls.Get("api:network:ask"), ideaHandler.AskNetworkGraph)
 		protected.GET(urls.Get("network:view"), ideaHandler.NetworkView)
@@ -105,24 +108,37 @@ func SetUpRouter(
 		protected.GET(urls.Get("ideas:detail:route"), ideaHandler.IdeaDetail)
 		protected.GET(urls.Get("ideas:edit:route"), ideaHandler.EditIdeaView)
 		protected.POST(urls.Get("ideas:edit:route"), ideaHandler.UpdateIdea)
+		protected.POST(urls.Get("ideas:permissions:route"), ideaHandler.UpdateIdeaPermissions)
 		protected.POST(urls.Get("ideas:reanalyze:route"), ideaHandler.ReanalyzeIdea)
 		protected.POST(urls.Get("ideas:delete:route"), ideaHandler.DeleteIdeaFragment)
 		protected.POST(urls.Get("ideas:delete_group:route"), ideaHandler.DeleteIdeaGroup)
 
-		protected.GET(urls.Get("users:list"), userHandler.ListUsersView)
-		protected.GET(urls.Get("users:new"), userHandler.NewUser)
-		protected.POST(urls.Get("users:new"), userHandler.CreateUser)
-
 		protected.GET(urls.Get("topics:list"), topicHandler.ListTopics)
-		protected.POST(urls.Get("topics:create_moc"), topicHandler.CreateMOC)
-		protected.POST(urls.Get("topics:update_moc:route"), topicHandler.UpdateMOC)
-		protected.POST(urls.Get("topics:delete_moc:route"), topicHandler.DeleteMOC)
-		protected.POST(urls.Get("topics:toggle_moc_lock:route"), topicHandler.ToggleMOCLock)
-		protected.POST(urls.Get("topics:create_hub"), topicHandler.CreateHub)
-		protected.POST(urls.Get("topics:update_hub:route"), topicHandler.UpdateHub)
-		protected.POST(urls.Get("topics:delete_hub:route"), topicHandler.DeleteHub)
-		protected.POST(urls.Get("topics:move_idea"), topicHandler.MoveIdea)
-		protected.POST(urls.Get("topics:setting_toggle_auto"), topicHandler.ToggleAutoMOCSetting)
+
+		superuserOnly := protected.Group("/")
+		superuserOnly.Use(middleware.RequireSuperuserMiddleware())
+		{
+			superuserOnly.GET(urls.Get("api:users:list"), userHandler.ListUsers)
+			superuserOnly.GET(urls.Get("users:list"), userHandler.ListUsersView)
+			superuserOnly.GET(urls.Get("users:new"), userHandler.NewUser)
+			superuserOnly.POST(urls.Get("users:new"), userHandler.CreateUser)
+			superuserOnly.POST(urls.Get("users:update_access:route"), userHandler.UpdateUserAccess)
+
+			superuserOnly.GET(urls.Get("roles:list"), roleHandler.ListRolesView)
+			superuserOnly.POST(urls.Get("roles:create"), roleHandler.CreateRole)
+			superuserOnly.POST(urls.Get("roles:update:route"), roleHandler.UpdateRole)
+			superuserOnly.POST(urls.Get("roles:delete:route"), roleHandler.DeleteRole)
+
+			superuserOnly.POST(urls.Get("topics:create_moc"), topicHandler.CreateMOC)
+			superuserOnly.POST(urls.Get("topics:update_moc:route"), topicHandler.UpdateMOC)
+			superuserOnly.POST(urls.Get("topics:delete_moc:route"), topicHandler.DeleteMOC)
+			superuserOnly.POST(urls.Get("topics:toggle_moc_lock:route"), topicHandler.ToggleMOCLock)
+			superuserOnly.POST(urls.Get("topics:create_hub"), topicHandler.CreateHub)
+			superuserOnly.POST(urls.Get("topics:update_hub:route"), topicHandler.UpdateHub)
+			superuserOnly.POST(urls.Get("topics:delete_hub:route"), topicHandler.DeleteHub)
+			superuserOnly.POST(urls.Get("topics:move_idea"), topicHandler.MoveIdea)
+			superuserOnly.POST(urls.Get("topics:setting_toggle_auto"), topicHandler.ToggleAutoMOCSetting)
+		}
 	}
 
 	return router

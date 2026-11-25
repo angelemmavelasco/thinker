@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,10 +44,11 @@ type SessionTokens struct {
 }
 
 type AuthService struct {
-	queries *database.Queries
-	jwtMgr  *auth.JWTManager
-	mailer  *MailerService
-	google  *GoogleOAuthService
+	queries        *database.Queries
+	jwtMgr         *auth.JWTManager
+	mailer         *MailerService
+	google         *GoogleOAuthService
+	superuserEmail string
 }
 
 func NewAuthService(
@@ -72,6 +74,18 @@ func (s *AuthService) GoogleOAuth() *GoogleOAuthService {
 	return s.google
 }
 
+func (s *AuthService) SetSuperuserEmail(email string) {
+	s.superuserEmail = strings.ToLower(strings.TrimSpace(email))
+}
+
+func (s *AuthService) ListUserRoles(ctx context.Context, userID uuid.UUID) ([]database.Role, error) {
+	return s.queries.ListRolesByUserID(ctx, userID)
+}
+
+func (s *AuthService) isBootstrapSuperuser(email string) bool {
+	return s.superuserEmail != "" && strings.EqualFold(strings.TrimSpace(email), s.superuserEmail)
+}
+
 func (s *AuthService) Register(ctx context.Context, rawEmail, password string) (database.User, string, error) {
 	email, err := auth.NormalizeEmail(rawEmail)
 	if err != nil {
@@ -91,11 +105,19 @@ func (s *AuthService) Register(ctx context.Context, rawEmail, password string) (
 		return database.User{}, "", fmt.Errorf("error procesando credenciales")
 	}
 
-	user, err := s.queries.CreateUser(ctx, database.CreateUserParams{
+	role := "member"
+	isSuperuser := int32(0)
+	if s.isBootstrapSuperuser(email) {
+		role = "admin"
+		isSuperuser = 1
+	}
+
+	user, err := s.queries.CreateUserWithSuperuser(ctx, database.CreateUserWithSuperuserParams{
 		ID:            uuid.New(),
 		Email:         email,
 		PasswordHash:  passwordHash,
-		Role:          "member",
+		Role:          role,
+		IsSuperuser:   isSuperuser,
 		AuthProvider:  "local",
 		GoogleID:      "",
 		EmailVerified: 0,
@@ -277,11 +299,18 @@ func (s *AuthService) AuthenticateGoogleUser(ctx context.Context, profile *Googl
 			}
 			user = linkedUser
 		} else {
-			createdUser, createErr := s.queries.CreateUser(ctx, database.CreateUserParams{
+			role := "member"
+			isSuperuser := int32(0)
+			if s.isBootstrapSuperuser(email) {
+				role = "admin"
+				isSuperuser = 1
+			}
+			createdUser, createErr := s.queries.CreateUserWithSuperuser(ctx, database.CreateUserWithSuperuserParams{
 				ID:            uuid.New(),
 				Email:         email,
 				PasswordHash:  "",
-				Role:          "member",
+				Role:          role,
+				IsSuperuser:   isSuperuser,
 				AuthProvider:  "google",
 				GoogleID:      profile.Sub,
 				EmailVerified: 1,
