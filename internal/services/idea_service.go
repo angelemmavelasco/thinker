@@ -13,6 +13,8 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+
+	"thinker/internal/auth"
 	"thinker/internal/database"
 )
 
@@ -21,9 +23,17 @@ const (
 	defaultSemanticTopK      = 5
 )
 
+type IdeaRolePermissionInfo struct {
+	RoleID     uuid.UUID
+	RoleName   string
+	RoleSlug   string
+	Permission string
+}
+
 type IdeaWithKeywords struct {
 	database.Idea
-	Keywords []database.Keyword
+	Keywords        []database.Keyword
+	RolePermissions []IdeaRolePermissionInfo
 }
 
 type GraphNode struct {
@@ -68,6 +78,8 @@ type IdeaService struct {
 	topicService   *TopicService
 	jobQueue       chan ideaJob
 	inFlight       sync.Map
+	relinkQueue    chan uuid.UUID
+	relinkInFlight sync.Map
 }
 
 func NewIdeaService(queries *database.Queries, llm *LLMService, embedding *EmbeddingService) *IdeaService {
@@ -78,8 +90,10 @@ func NewIdeaService(queries *database.Queries, llm *LLMService, embedding *Embed
 		keywordService: NewKeywordService(queries, embedding),
 		topicService:   NewTopicService(queries, embedding, llm),
 		jobQueue:       make(chan ideaJob, 100),
+		relinkQueue:    make(chan uuid.UUID, 200),
 	}
 	go svc.startWorker()
+	go svc.startRelinkWorker()
 	return svc
 }
 
@@ -108,6 +122,16 @@ func (s *IdeaService) startWorker() {
 	}
 }
 
+func (s *IdeaService) startRelinkWorker() {
+	for ideaID := range s.relinkQueue {
+		idKey := ideaID.String()
+		if err := s.RelinkIdeaScope(context.Background(), ideaID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("[relink] Error recalculando relaciones [%s]: %v", ideaID, err)
+		}
+		s.relinkInFlight.Delete(idKey)
+	}
+}
+
 func (s *IdeaService) EnqueueIdeaAnalysis(idea database.Idea, title, content string) {
 	idKey := idea.ID.String()
 	if _, loaded := s.inFlight.LoadOrStore(idKey, true); loaded {
@@ -122,10 +146,86 @@ func (s *IdeaService) EnqueueIdeaAnalysis(idea database.Idea, title, content str
 	}
 }
 
-func (s *IdeaService) ListIdeas(ctx context.Context) ([]IdeaWithKeywords, error) {
-	ideas, err := s.queries.ListIdeas(ctx)
+func (s *IdeaService) EnqueueIdeaRelink(ideaID uuid.UUID) {
+	if ideaID == uuid.Nil {
+		return
+	}
+	idKey := ideaID.String()
+	if _, loaded := s.relinkInFlight.LoadOrStore(idKey, true); loaded {
+		return
+	}
+	select {
+	case s.relinkQueue <- ideaID:
+	default:
+		go func() {
+			s.relinkQueue <- ideaID
+		}()
+	}
+}
+
+func (s *IdeaService) EnqueueIdeasRelink(ideaIDs []uuid.UUID) {
+	for _, id := range ideaIDs {
+		s.EnqueueIdeaRelink(id)
+	}
+}
+
+func (s *IdeaService) RelinkIdeaScope(ctx context.Context, ideaID uuid.UUID) error {
+	idea, err := s.queries.GetIdeaByID(ctx, ideaID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.queries.DeleteNonSequenceIdeaLinksByIdeaID(ctx, ideaID); err != nil {
+		return err
+	}
+
+	if idea.Status != "procesada" && idea.Status != "processed" {
+		return nil
+	}
+
+	if _, err := s.LinkOverlappingIdeas(ctx, ideaID); err != nil {
+		return err
+	}
+
+	if strings.TrimSpace(idea.Embedding) != "" {
+		if vec, err := DeserializeVector(idea.Embedding); err == nil && len(vec) > 0 {
+			if _, err := s.LinkSemanticIdeas(ctx, ideaID, vec, defaultSemanticThreshold, defaultSemanticTopK); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (s *IdeaService) ListIdeas(ctx context.Context, actor Actor) ([]IdeaWithKeywords, error) {
+	if !actor.IsValid() {
+		return nil, ErrUnauthorized
+	}
+
+	var (
+		ideas []database.Idea
+		err   error
+	)
+	if actor.IsSuperuser {
+		ideas, err = s.queries.ListIdeas(ctx)
+	} else {
+		ideas, err = s.queries.ListAccessibleIdeasByUser(ctx, actor.UserID)
+	}
 	if err != nil {
 		return nil, err
+	}
+
+	permsByIdea := make(map[uuid.UUID][]IdeaRolePermissionInfo)
+	if allPerms, permErr := s.queries.ListAllIdeaRolePermissions(ctx); permErr == nil {
+		for _, p := range allPerms {
+			permsByIdea[p.IdeaID] = append(permsByIdea[p.IdeaID], IdeaRolePermissionInfo{
+				RoleID:     p.RoleID,
+				RoleName:   p.RoleName,
+				RoleSlug:   p.RoleSlug,
+				Permission: p.Permission,
+			})
+		}
 	}
 
 	items := make([]IdeaWithKeywords, 0, len(ideas))
@@ -138,8 +238,9 @@ func (s *IdeaService) ListIdeas(ctx context.Context) ([]IdeaWithKeywords, error)
 			return nil, err
 		}
 		items = append(items, IdeaWithKeywords{
-			Idea:     idea,
-			Keywords: kws,
+			Idea:            idea,
+			Keywords:        kws,
+			RolePermissions: permsByIdea[idea.ID],
 		})
 	}
 
@@ -165,15 +266,48 @@ func (s *IdeaService) CreateIdea(ctx context.Context, userIDStr, title, content 
 	})
 }
 
-func (s *IdeaService) CreateIdeasFromInput(ctx context.Context, userIDStr, title, content string) ([]database.Idea, error) {
-	userID, err := uuid.Parse(userIDStr)
-	if err != nil {
-		return nil, err
+func (s *IdeaService) validateRolePermissionsMap(ctx context.Context, q *database.Queries, rolePerms map[uuid.UUID]string) (map[uuid.UUID]string, error) {
+	validated := make(map[uuid.UUID]string, len(rolePerms))
+	for roleID, rawPerm := range rolePerms {
+		if roleID == uuid.Nil {
+			continue
+		}
+		cleanPerm, ok := NormalizePermission(rawPerm)
+		if !ok {
+			return nil, ErrInvalidPermission
+		}
+		if _, err := q.GetRoleByID(ctx, roleID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, ErrRoleNotFound
+			}
+			return nil, err
+		}
+		validated[roleID] = cleanPerm
+	}
+	return validated, nil
+}
+
+func (s *IdeaService) CreateIdeasFromInput(ctx context.Context, actor Actor, title, content string, rolePerms map[uuid.UUID]string) ([]database.Idea, error) {
+	if !actor.IsValid() {
+		return nil, ErrUnauthorized
 	}
 
 	chunks := ChunkText(content, DefaultChunkMaxChars)
 	if len(chunks) == 0 {
 		return nil, fmt.Errorf("el contenido está vacío")
+	}
+
+	tx, err := s.queries.BeginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	qtx := s.queries.WithTx(tx)
+
+	validatedPerms, err := s.validateRolePermissionsMap(ctx, qtx, rolePerms)
+	if err != nil {
+		return nil, err
 	}
 
 	groupID := uuid.New()
@@ -191,9 +325,9 @@ func (s *IdeaService) CreateIdeasFromInput(ctx context.Context, userIDStr, title
 			groupID = newID
 		}
 
-		idea, err := s.queries.CreateIdea(ctx, database.CreateIdeaParams{
+		idea, err := qtx.CreateIdea(ctx, database.CreateIdeaParams{
 			ID:         newID,
-			UserID:     userID,
+			UserID:     actor.UserID,
 			GroupID:    groupID,
 			ChunkIndex: int32(i + 1),
 			ChunkTotal: totalChunks,
@@ -205,7 +339,7 @@ func (s *IdeaService) CreateIdeasFromInput(ctx context.Context, userIDStr, title
 			return nil, err
 		}
 
-		_, _ = s.queries.CreateIdeaChunk(ctx, database.CreateIdeaChunkParams{
+		_, _ = qtx.CreateIdeaChunk(ctx, database.CreateIdeaChunkParams{
 			ID:         uuid.New(),
 			IdeaID:     idea.ID,
 			ChunkIndex: int32(i),
@@ -213,26 +347,41 @@ func (s *IdeaService) CreateIdeasFromInput(ctx context.Context, userIDStr, title
 			Embedding:  "",
 		})
 
+		for roleID, perm := range validatedPerms {
+			if _, err := qtx.UpsertIdeaRolePermission(ctx, database.UpsertIdeaRolePermissionParams{
+				IdeaID:     idea.ID,
+				RoleID:     roleID,
+				Permission: perm,
+				GrantedBy:  uuid.NullUUID{UUID: actor.UserID, Valid: true},
+			}); err != nil {
+				return nil, err
+			}
+		}
+
 		created = append(created, idea)
 	}
 
 	for i := 1; i < len(created); i++ {
 		prevID := created[i-1].ID
 		currID := created[i].ID
-		_, _ = s.queries.CreateIdeaLink(ctx, database.CreateIdeaLinkParams{
+		_, _ = qtx.CreateIdeaLink(ctx, database.CreateIdeaLinkParams{
 			ID:           uuid.New(),
 			SourceIdeaID: prevID,
 			TargetIdeaID: currID,
 			RelationType: "sequence",
 			Weight:       0.85,
 		})
-		_, _ = s.queries.CreateIdeaLink(ctx, database.CreateIdeaLinkParams{
+		_, _ = qtx.CreateIdeaLink(ctx, database.CreateIdeaLinkParams{
 			ID:           uuid.New(),
 			SourceIdeaID: currID,
 			TargetIdeaID: prevID,
 			RelationType: "sequence",
 			Weight:       0.85,
 		})
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 
 	for _, idea := range created {
@@ -247,7 +396,7 @@ func (s *IdeaService) AnalyzeIdea(ctx context.Context, title, content string) (*
 }
 
 func (s *IdeaService) LinkOverlappingIdeas(ctx context.Context, ideaID uuid.UUID) ([]database.IdeaLink, error) {
-	overlaps, err := s.queries.FindOverlappingIdeas(ctx, ideaID)
+	overlaps, err := s.queries.FindOverlappingIdeasInScope(ctx, ideaID)
 	if err != nil {
 		return nil, err
 	}
@@ -289,7 +438,7 @@ func (s *IdeaService) LinkSemanticIdeas(ctx context.Context, ideaID uuid.UUID, i
 		return nil, nil
 	}
 
-	others, err := s.queries.ListIdeasWithEmbeddings(ctx, ideaID)
+	others, err := s.queries.ListIdeasWithEmbeddingsInScope(ctx, ideaID)
 	if err != nil {
 		return nil, err
 	}
@@ -409,7 +558,14 @@ func (s *IdeaService) ProcessPendingIdeas(ctx context.Context) {
 	for _, idea := range ideas {
 		if idea.Status == "borrador" || idea.Status == "draft" {
 			if idea.ChunkTotal <= 1 && len([]rune(idea.Content)) > DefaultChunkMaxChars+50 {
-				if _, err := s.CreateIdeasFromInput(ctx, idea.UserID.String(), idea.Title, idea.Content); err == nil {
+				existingPerms := make(map[uuid.UUID]string)
+				if permRows, err := s.queries.ListIdeaRolePermissionsByIdeaID(ctx, idea.ID); err == nil {
+					for _, row := range permRows {
+						existingPerms[row.RoleID] = row.Permission
+					}
+				}
+				ownerActor := Actor{UserID: idea.UserID}
+				if _, err := s.CreateIdeasFromInput(ctx, ownerActor, idea.Title, idea.Content, existingPerms); err == nil {
 					_ = s.queries.DeleteIdea(ctx, idea.ID)
 					continue
 				}
@@ -419,8 +575,8 @@ func (s *IdeaService) ProcessPendingIdeas(ctx context.Context) {
 	}
 }
 
-func (s *IdeaService) GetNetworkGraph(ctx context.Context) (*GraphData, error) {
-	ideasWithKws, err := s.ListIdeas(ctx)
+func (s *IdeaService) GetNetworkGraph(ctx context.Context, actor Actor) (*GraphData, error) {
+	ideasWithKws, err := s.ListIdeas(ctx, actor)
 	if err != nil {
 		return nil, err
 	}
@@ -430,11 +586,13 @@ func (s *IdeaService) GetNetworkGraph(ctx context.Context) (*GraphData, error) {
 		return nil, err
 	}
 
+	accessibleSet := make(map[uuid.UUID]bool, len(ideasWithKws))
 	nodes := make([]GraphNode, 0, len(ideasWithKws))
 	links := make([]GraphLink, 0, len(rawLinks))
 	keywordNodes := make(map[string]GraphNode)
 
 	for _, item := range ideasWithKws {
+		accessibleSet[item.ID] = true
 		ideaID := item.ID.String()
 		displayContent := item.Content
 		if item.RestructuredContent != "" {
@@ -477,21 +635,48 @@ func (s *IdeaService) GetNetworkGraph(ctx context.Context) (*GraphData, error) {
 	}
 
 	if s.topicService != nil {
-		if mocs, err := s.topicService.ListMOCs(ctx); err == nil {
-			for _, m := range mocs {
-				nodes = append(nodes, GraphNode{
-					ID:              "moc:" + m.ID.String(),
-					Label:           m.Title,
-					Type:            "moc",
-					Content:         m.Description,
-					OriginalContent: m.Code,
-					Status:          "moc",
-				})
+		edges, edgeErr := s.queries.ListAllHubIdeaEdges(ctx)
+		allHubs, hubErr := s.topicService.ListAllHubs(ctx)
+		allMOCs, mocErr := s.topicService.ListMOCs(ctx)
+
+		if edgeErr == nil && hubErr == nil && mocErr == nil {
+			visibleHubIDs := make(map[uuid.UUID]bool)
+			filteredEdges := make([]database.HubIdeaEdge, 0)
+			for _, e := range edges {
+				if accessibleSet[e.IdeaID] {
+					visibleHubIDs[e.HubID] = true
+					filteredEdges = append(filteredEdges, e)
+				}
 			}
-		}
-		if hubs, err := s.topicService.ListAllHubs(ctx); err == nil {
-			for _, h := range hubs {
+
+			visibleMocIDs := make(map[uuid.UUID]bool)
+			visibleHubs := make([]database.KnowledgeHub, 0)
+			for _, h := range allHubs {
+				if actor.IsSuperuser || visibleHubIDs[h.ID] {
+					visibleHubs = append(visibleHubs, h)
+					visibleMocIDs[h.MocID] = true
+				}
+			}
+
+			emittedMocIDs := make(map[uuid.UUID]bool)
+			for _, m := range allMOCs {
+				if actor.IsSuperuser || visibleMocIDs[m.ID] {
+					emittedMocIDs[m.ID] = true
+					nodes = append(nodes, GraphNode{
+						ID:              "moc:" + m.ID.String(),
+						Label:           m.Title,
+						Type:            "moc",
+						Content:         m.Description,
+						OriginalContent: m.Code,
+						Status:          "moc",
+					})
+				}
+			}
+
+			emittedHubIDs := make(map[uuid.UUID]bool)
+			for _, h := range visibleHubs {
 				hubID := "hub:" + h.ID.String()
+				emittedHubIDs[h.ID] = true
 				nodes = append(nodes, GraphNode{
 					ID:              hubID,
 					Label:           h.Title,
@@ -500,28 +685,34 @@ func (s *IdeaService) GetNetworkGraph(ctx context.Context) (*GraphData, error) {
 					OriginalContent: h.SearchAliases,
 					Status:          "hub",
 				})
-				links = append(links, GraphLink{
-					Source: "moc:" + h.MocID.String(),
-					Target: hubID,
-					Type:   "contains_concept",
-					Weight: 1.4,
-				})
+				if emittedMocIDs[h.MocID] {
+					links = append(links, GraphLink{
+						Source: "moc:" + h.MocID.String(),
+						Target: hubID,
+						Type:   "contains_concept",
+						Weight: 1.4,
+					})
+				}
 			}
-		}
-		if edges, err := s.queries.ListAllHubIdeaEdges(ctx); err == nil {
-			for _, e := range edges {
-				links = append(links, GraphLink{
-					Source: "hub:" + e.HubID.String(),
-					Target: e.IdeaID.String(),
-					Type:   e.RelationshipType,
-					Weight: e.Weight,
-				})
+
+			for _, e := range filteredEdges {
+				if emittedHubIDs[e.HubID] && accessibleSet[e.IdeaID] {
+					links = append(links, GraphLink{
+						Source: "hub:" + e.HubID.String(),
+						Target: e.IdeaID.String(),
+						Type:   e.RelationshipType,
+						Weight: e.Weight,
+					})
+				}
 			}
 		}
 	}
 
 	seenPairs := make(map[string]struct{})
 	for _, l := range rawLinks {
+		if !accessibleSet[l.SourceIdeaID] || !accessibleSet[l.TargetIdeaID] {
+			continue
+		}
 		src := l.SourceIdeaID.String()
 		dst := l.TargetIdeaID.String()
 		a, b := src, dst
@@ -557,23 +748,50 @@ type ConnectedIdeaInfo struct {
 }
 
 type IdeaDetail struct {
-	Idea            database.Idea
-	Keywords        []database.Keyword
-	Connections     []ConnectedIdeaInfo
-	GroupIdeas      []database.ListIdeasByGroupIDRow
-	GroupCount      int
-	CurrentPosition int
-	PrevFragmentID  *uuid.UUID
-	NextFragmentID  *uuid.UUID
+	Idea              database.Idea
+	Keywords          []database.Keyword
+	Connections       []ConnectedIdeaInfo
+	GroupIdeas        []database.ListIdeasByGroupIDRow
+	GroupCount        int
+	CurrentPosition   int
+	PrevFragmentID    *uuid.UUID
+	NextFragmentID    *uuid.UUID
+	RolePermissions   []IdeaRolePermissionInfo
+	RolePermissionMap map[string]string
+	CanEdit           bool
+	CanDelete         bool
+	CanManageRoles    bool
+	AuthorDisplay     string
+	UpdatedByDisplay  string
 }
 
-func (s *IdeaService) GetIdeaDetail(ctx context.Context, ideaIDStr string) (*IdeaDetail, error) {
+func (s *IdeaService) GetIdeaDetail(ctx context.Context, actor Actor, ideaIDStr string) (*IdeaDetail, error) {
+	if !actor.IsValid() {
+		return nil, ErrUnauthorized
+	}
+
 	ideaID, err := uuid.Parse(ideaIDStr)
 	if err != nil {
-		return nil, err
+		return nil, ErrIdeaNotFound
 	}
 
 	idea, err := s.queries.GetIdeaByID(ctx, ideaID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrIdeaNotFound
+		}
+		return nil, err
+	}
+
+	canView, err := CanViewIdea(ctx, s.queries, actor, idea)
+	if err != nil {
+		return nil, err
+	}
+	if !canView {
+		return nil, ErrIdeaNotFound
+	}
+
+	canEdit, err := CanEditIdea(ctx, s.queries, actor, idea)
 	if err != nil {
 		return nil, err
 	}
@@ -583,40 +801,57 @@ func (s *IdeaService) GetIdeaDetail(ctx context.Context, ideaIDStr string) (*Ide
 		return nil, err
 	}
 
-	rawLinks, err := s.queries.ListDirectConnectedIdeas(ctx, ideaID)
-	if err != nil {
-		return nil, err
+	var connections []ConnectedIdeaInfo
+	indexByID := make(map[uuid.UUID]int)
+
+	if actor.IsSuperuser {
+		rawLinks, err := s.queries.ListDirectConnectedIdeas(ctx, ideaID)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rawLinks {
+			appendConnection(&connections, indexByID, row.ID, row.Title, row.Content, row.RestructuredContent, row.Status, row.RelationType)
+		}
+	} else {
+		rawLinks, err := s.queries.ListAccessibleDirectConnectedIdeas(ctx, database.ListAccessibleDirectConnectedIdeasParams{
+			SourceIdeaID: ideaID,
+			UserID:       actor.UserID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rawLinks {
+			appendConnection(&connections, indexByID, row.ID, row.Title, row.Content, row.RestructuredContent, row.Status, row.RelationType)
+		}
 	}
 
-	indexByID := make(map[uuid.UUID]int)
-	var connections []ConnectedIdeaInfo
-
-	for _, row := range rawLinks {
-		relLabel := "Ideas afines"
-		if row.RelationType == "concept_overlap" {
-			relLabel = "Temas en común"
-		}
-
-		if idx, exists := indexByID[row.ID]; exists {
-			if connections[idx].RelationDescription != relLabel {
-				connections[idx].RelationDescription = "Afinidad y temas en común"
-			}
-			continue
-		}
-
-		preview := row.Content
-		if row.RestructuredContent != "" {
-			preview = row.RestructuredContent
-		}
-
-		indexByID[row.ID] = len(connections)
-		connections = append(connections, ConnectedIdeaInfo{
-			ID:                  row.ID,
-			Title:               row.Title,
-			Preview:             preview,
-			Status:              row.Status,
-			RelationDescription: relLabel,
+	permRows, _ := s.queries.ListIdeaRolePermissionsByIdeaID(ctx, ideaID)
+	rolePerms := make([]IdeaRolePermissionInfo, 0, len(permRows))
+	rolePermMap := make(map[string]string, len(permRows))
+	for _, row := range permRows {
+		rolePerms = append(rolePerms, IdeaRolePermissionInfo{
+			RoleID:     row.RoleID,
+			RoleName:   row.RoleName,
+			RoleSlug:   row.RoleSlug,
+			Permission: row.Permission,
 		})
+		rolePermMap[row.RoleID.String()] = row.Permission
+	}
+
+	authorDisplay := idea.UserID.String()
+	if authorUser, userErr := s.queries.GetUserByID(ctx, idea.UserID); userErr == nil {
+		display, _ := auth.UserDisplayName("", "", authorUser.Email)
+		if display != "" {
+			authorDisplay = display
+		}
+	}
+
+	updatedByDisplay := ""
+	if idea.UpdatedBy.Valid {
+		if editorUser, userErr := s.queries.GetUserByID(ctx, idea.UpdatedBy.UUID); userErr == nil {
+			display, _ := auth.UserDisplayName("", "", editorUser.Email)
+			updatedByDisplay = display
+		}
 	}
 
 	var groupIdeas []database.ListIdeasByGroupIDRow
@@ -649,15 +884,141 @@ func (s *IdeaService) GetIdeaDetail(ctx context.Context, ideaIDStr string) (*Ide
 	}
 
 	return &IdeaDetail{
-		Idea:            idea,
-		Keywords:        kws,
-		Connections:     connections,
-		GroupIdeas:      groupIdeas,
-		GroupCount:      groupCount,
-		CurrentPosition: currentPos,
-		PrevFragmentID:  prevID,
-		NextFragmentID:  nextID,
+		Idea:              idea,
+		Keywords:          kws,
+		Connections:       connections,
+		GroupIdeas:        groupIdeas,
+		GroupCount:        groupCount,
+		CurrentPosition:   currentPos,
+		PrevFragmentID:    prevID,
+		NextFragmentID:    nextID,
+		RolePermissions:   rolePerms,
+		RolePermissionMap: rolePermMap,
+		CanEdit:           canEdit,
+		CanDelete:         actor.CanDeleteIdea(idea),
+		CanManageRoles:    actor.CanManageIdeaPermissions(idea),
+		AuthorDisplay:     authorDisplay,
+		UpdatedByDisplay:  updatedByDisplay,
 	}, nil
+}
+
+func appendConnection(connections *[]ConnectedIdeaInfo, indexByID map[uuid.UUID]int, id uuid.UUID, title, content, restructured, status, relType string) {
+	relLabel := "Ideas afines"
+	if relType == "concept_overlap" {
+		relLabel = "Temas en común"
+	} else if relType == "sequence" {
+		relLabel = "Secuencia"
+	}
+
+	if idx, exists := indexByID[id]; exists {
+		if (*connections)[idx].RelationDescription != relLabel {
+			(*connections)[idx].RelationDescription = "Afinidad y temas en común"
+		}
+		return
+	}
+
+	preview := content
+	if restructured != "" {
+		preview = restructured
+	}
+
+	indexByID[id] = len(*connections)
+	*connections = append(*connections, ConnectedIdeaInfo{
+		ID:                  id,
+		Title:               title,
+		Preview:             preview,
+		Status:              status,
+		RelationDescription: relLabel,
+	})
+}
+
+func (s *IdeaService) UpdateIdeaPermissions(ctx context.Context, actor Actor, ideaIDStr string, rolePerms map[uuid.UUID]string) (*IdeaDetail, error) {
+	if !actor.IsValid() {
+		return nil, ErrUnauthorized
+	}
+
+	ideaID, err := uuid.Parse(ideaIDStr)
+	if err != nil {
+		return nil, ErrIdeaNotFound
+	}
+
+	idea, err := s.queries.GetIdeaByID(ctx, ideaID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrIdeaNotFound
+		}
+		return nil, err
+	}
+
+	canView, err := CanViewIdea(ctx, s.queries, actor, idea)
+	if err != nil {
+		return nil, err
+	}
+	if !canView {
+		return nil, ErrIdeaNotFound
+	}
+
+	if !actor.CanManageIdeaPermissions(idea) {
+		return nil, ErrForbidden
+	}
+
+	tx, err := s.queries.BeginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	qtx := s.queries.WithTx(tx)
+
+	validatedPerms, err := s.validateRolePermissionsMap(ctx, qtx, rolePerms)
+	if err != nil {
+		return nil, err
+	}
+
+	targetIdeaIDs := []uuid.UUID{idea.ID}
+	if idea.GroupID != uuid.Nil {
+		if groupRows, groupErr := qtx.ListIdeasByGroupID(ctx, idea.GroupID); groupErr == nil && len(groupRows) > 0 {
+			targetIdeaIDs = make([]uuid.UUID, 0, len(groupRows))
+			for _, row := range groupRows {
+				targetIdeaIDs = append(targetIdeaIDs, row.ID)
+			}
+		}
+	}
+
+	for _, tid := range targetIdeaIDs {
+		if err := qtx.DeleteIdeaRolePermissionsByIdeaID(ctx, tid); err != nil {
+			return nil, err
+		}
+		for roleID, perm := range validatedPerms {
+			if _, err := qtx.UpsertIdeaRolePermission(ctx, database.UpsertIdeaRolePermissionParams{
+				IdeaID:     tid,
+				RoleID:     roleID,
+				Permission: perm,
+				GrantedBy:  uuid.NullUUID{UUID: actor.UserID, Valid: true},
+			}); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	if len(targetIdeaIDs) <= 10 {
+		for _, tid := range targetIdeaIDs {
+			_ = s.RelinkIdeaScope(ctx, tid)
+		}
+	} else {
+		_ = s.RelinkIdeaScope(ctx, idea.ID)
+		for _, tid := range targetIdeaIDs {
+			if tid != idea.ID {
+				s.EnqueueIdeaRelink(tid)
+			}
+		}
+	}
+
+	return s.GetIdeaDetail(ctx, actor, ideaIDStr)
 }
 
 func (s *IdeaService) relinkGroupSequence(ctx context.Context, groupID uuid.UUID) {
@@ -688,10 +1049,38 @@ func (s *IdeaService) relinkGroupSequence(ctx context.Context, groupID uuid.UUID
 	}
 }
 
-func (s *IdeaService) UpdateIdea(ctx context.Context, ideaIDStr, title, content string) (*IdeaDetail, error) {
+func (s *IdeaService) UpdateIdea(ctx context.Context, actor Actor, ideaIDStr, title, content string) (*IdeaDetail, error) {
+	if !actor.IsValid() {
+		return nil, ErrUnauthorized
+	}
+
 	ideaID, err := uuid.Parse(ideaIDStr)
 	if err != nil {
+		return nil, ErrIdeaNotFound
+	}
+
+	idea, err := s.queries.GetIdeaByID(ctx, ideaID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrIdeaNotFound
+		}
 		return nil, err
+	}
+
+	canView, err := CanViewIdea(ctx, s.queries, actor, idea)
+	if err != nil {
+		return nil, err
+	}
+	if !canView {
+		return nil, ErrIdeaNotFound
+	}
+
+	canEdit, err := CanEditIdea(ctx, s.queries, actor, idea)
+	if err != nil {
+		return nil, err
+	}
+	if !canEdit {
+		return nil, ErrForbidden
 	}
 
 	_ = s.queries.DeleteIdeaLinksByIdeaID(ctx, ideaID)
@@ -699,9 +1088,10 @@ func (s *IdeaService) UpdateIdea(ctx context.Context, ideaIDStr, title, content 
 	_ = s.queries.DeleteOrphanKeywords(ctx)
 
 	updated, err := s.queries.UpdateIdeaContentAndReset(ctx, database.UpdateIdeaContentAndResetParams{
-		ID:      ideaID,
-		Title:   title,
-		Content: content,
+		ID:        ideaID,
+		Title:     title,
+		Content:   content,
+		UpdatedBy: uuid.NullUUID{UUID: actor.UserID, Valid: true},
 	})
 	if err != nil {
 		return nil, err
@@ -710,13 +1100,41 @@ func (s *IdeaService) UpdateIdea(ctx context.Context, ideaIDStr, title, content 
 	s.relinkGroupSequence(ctx, updated.GroupID)
 	s.EnqueueIdeaAnalysis(updated, updated.Title, updated.Content)
 
-	return s.GetIdeaDetail(ctx, ideaIDStr)
+	return s.GetIdeaDetail(ctx, actor, ideaIDStr)
 }
 
-func (s *IdeaService) ReanalyzeIdea(ctx context.Context, ideaIDStr string) (*IdeaDetail, error) {
+func (s *IdeaService) ReanalyzeIdea(ctx context.Context, actor Actor, ideaIDStr string) (*IdeaDetail, error) {
+	if !actor.IsValid() {
+		return nil, ErrUnauthorized
+	}
+
 	ideaID, err := uuid.Parse(ideaIDStr)
 	if err != nil {
+		return nil, ErrIdeaNotFound
+	}
+
+	idea, err := s.queries.GetIdeaByID(ctx, ideaID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrIdeaNotFound
+		}
 		return nil, err
+	}
+
+	canView, err := CanViewIdea(ctx, s.queries, actor, idea)
+	if err != nil {
+		return nil, err
+	}
+	if !canView {
+		return nil, ErrIdeaNotFound
+	}
+
+	canEdit, err := CanEditIdea(ctx, s.queries, actor, idea)
+	if err != nil {
+		return nil, err
+	}
+	if !canEdit {
+		return nil, ErrForbidden
 	}
 
 	_ = s.queries.DeleteIdeaLinksByIdeaID(ctx, ideaID)
@@ -731,18 +1149,37 @@ func (s *IdeaService) ReanalyzeIdea(ctx context.Context, ideaIDStr string) (*Ide
 	s.relinkGroupSequence(ctx, resetIdea.GroupID)
 	s.EnqueueIdeaAnalysis(resetIdea, resetIdea.Title, resetIdea.Content)
 
-	return s.GetIdeaDetail(ctx, ideaIDStr)
+	return s.GetIdeaDetail(ctx, actor, ideaIDStr)
 }
 
-func (s *IdeaService) DeleteIdeaFragment(ctx context.Context, ideaIDStr string) error {
+func (s *IdeaService) DeleteIdeaFragment(ctx context.Context, actor Actor, ideaIDStr string) error {
+	if !actor.IsValid() {
+		return ErrUnauthorized
+	}
+
 	ideaID, err := uuid.Parse(ideaIDStr)
 	if err != nil {
-		return err
+		return ErrIdeaNotFound
 	}
 
 	idea, err := s.queries.GetIdeaByID(ctx, ideaID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrIdeaNotFound
+		}
 		return err
+	}
+
+	canView, err := CanViewIdea(ctx, s.queries, actor, idea)
+	if err != nil {
+		return err
+	}
+	if !canView {
+		return ErrIdeaNotFound
+	}
+
+	if !actor.CanDeleteIdea(idea) {
+		return ErrForbidden
 	}
 
 	if err := s.queries.DeleteIdea(ctx, ideaID); err != nil {
@@ -754,15 +1191,34 @@ func (s *IdeaService) DeleteIdeaFragment(ctx context.Context, ideaIDStr string) 
 	return nil
 }
 
-func (s *IdeaService) DeleteIdeaGroup(ctx context.Context, ideaIDStr string) error {
+func (s *IdeaService) DeleteIdeaGroup(ctx context.Context, actor Actor, ideaIDStr string) error {
+	if !actor.IsValid() {
+		return ErrUnauthorized
+	}
+
 	ideaID, err := uuid.Parse(ideaIDStr)
 	if err != nil {
-		return err
+		return ErrIdeaNotFound
 	}
 
 	idea, err := s.queries.GetIdeaByID(ctx, ideaID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrIdeaNotFound
+		}
 		return err
+	}
+
+	canView, err := CanViewIdea(ctx, s.queries, actor, idea)
+	if err != nil {
+		return err
+	}
+	if !canView {
+		return ErrIdeaNotFound
+	}
+
+	if !actor.CanDeleteIdea(idea) {
+		return ErrForbidden
 	}
 
 	if idea.GroupID != uuid.Nil {
@@ -825,7 +1281,11 @@ type TraversalSubGraph struct {
 	Edges   []TraversalEdge
 }
 
-func (s *IdeaService) TraverseSubGraph(ctx context.Context, seedIDs []uuid.UUID, opts TraversalOptions) (*TraversalSubGraph, error) {
+func (s *IdeaService) TraverseSubGraph(ctx context.Context, actor Actor, seedIDs []uuid.UUID, opts TraversalOptions) (*TraversalSubGraph, error) {
+	if !actor.IsValid() {
+		return nil, ErrUnauthorized
+	}
+
 	if opts.Max1HopPerNode <= 0 {
 		opts.Max1HopPerNode = 4
 	}
@@ -846,11 +1306,19 @@ func (s *IdeaService) TraverseSubGraph(ctx context.Context, seedIDs []uuid.UUID,
 		return result, nil
 	}
 
+	accessibleSet, err := ListAccessibleIdeaIDSet(ctx, s.queries, actor)
+	if err != nil {
+		return nil, err
+	}
+	if len(accessibleSet) == 0 {
+		return result, nil
+	}
+
 	visited := make(map[uuid.UUID]bool)
 	seenEdges := make(map[string]bool)
 
 	for _, seedID := range seedIDs {
-		if seedID == uuid.Nil || visited[seedID] {
+		if seedID == uuid.Nil || visited[seedID] || !accessibleSet[seedID] {
 			continue
 		}
 		if len(result.Nodes) >= opts.MaxTotalNodes {
@@ -897,6 +1365,9 @@ func (s *IdeaService) TraverseSubGraph(ctx context.Context, seedIDs []uuid.UUID,
 
 		addedForSeed := 0
 		for _, neighbor := range neighbors {
+			if !accessibleSet[neighbor.ID] {
+				continue
+			}
 			if neighbor.RelationType != "sequence" && neighbor.Weight < opts.MinWeight {
 				continue
 			}
@@ -963,6 +1434,9 @@ func (s *IdeaService) TraverseSubGraph(ctx context.Context, seedIDs []uuid.UUID,
 
 		addedForHop1 := 0
 		for _, neighbor := range neighbors {
+			if !accessibleSet[neighbor.ID] {
+				continue
+			}
 			if neighbor.RelationType != "sequence" && neighbor.Weight < opts.MinWeight {
 				continue
 			}
@@ -1075,7 +1549,11 @@ const (
 	DefaultMinKeywordScore = 0.20
 )
 
-func (s *IdeaService) FindSeedIdeas(ctx context.Context, queryText string, topK int) ([]SeedCandidate, error) {
+func (s *IdeaService) FindSeedIdeas(ctx context.Context, actor Actor, queryText string, topK int) ([]SeedCandidate, error) {
+	if !actor.IsValid() {
+		return nil, ErrUnauthorized
+	}
+
 	cleanedQuery := strings.TrimSpace(queryText)
 	if cleanedQuery == "" {
 		return nil, nil
@@ -1083,6 +1561,22 @@ func (s *IdeaService) FindSeedIdeas(ctx context.Context, queryText string, topK 
 
 	if topK <= 0 {
 		topK = 3
+	}
+
+	var (
+		ideas []database.Idea
+		err   error
+	)
+	if actor.IsSuperuser {
+		ideas, err = s.queries.ListIdeas(ctx)
+	} else {
+		ideas, err = s.queries.ListAccessibleIdeasByUser(ctx, actor.UserID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(ideas) == 0 {
+		return nil, nil
 	}
 
 	searchQuery := cleanedQuery
@@ -1117,11 +1611,6 @@ func (s *IdeaService) FindSeedIdeas(ctx context.Context, queryText string, topK 
 	}
 
 	lowerQuery := strings.ToLower(searchQuery + " " + cleanedQuery)
-
-	ideas, err := s.queries.ListIdeas(ctx)
-	if err != nil {
-		return nil, err
-	}
 
 	candidates := make([]SeedCandidate, 0, len(ideas))
 
@@ -1248,7 +1737,11 @@ func (s *IdeaService) FindSeedIdeas(ctx context.Context, queryText string, topK 
 	return candidates, nil
 }
 
-func (s *IdeaService) FindHierarchicalSeeds(ctx context.Context, queryText string, topK int) ([]SeedCandidate, error) {
+func (s *IdeaService) FindHierarchicalSeeds(ctx context.Context, actor Actor, queryText string, topK int) ([]SeedCandidate, error) {
+	if !actor.IsValid() {
+		return nil, ErrUnauthorized
+	}
+
 	if s.topicService == nil || s.llm == nil {
 		return nil, nil
 	}
@@ -1258,20 +1751,67 @@ func (s *IdeaService) FindHierarchicalSeeds(ctx context.Context, queryText strin
 		return nil, nil
 	}
 
-	mocs, err := s.topicService.ListMOCs(ctx)
-	if err != nil || len(mocs) == 0 {
+	accessibleSet, err := ListAccessibleIdeaIDSet(ctx, s.queries, actor)
+	if err != nil {
+		return nil, err
+	}
+	if len(accessibleSet) == 0 {
 		return nil, nil
 	}
 
-	descriptors := make([]MOCDescriptor, 0, len(mocs))
-	mocByCode := make(map[string]database.KnowledgeMoc, len(mocs))
-	for _, m := range mocs {
+	allEdges, err := s.queries.ListAllHubIdeaEdges(ctx)
+	if err != nil {
+		return nil, nil
+	}
+
+	visibleHubIDs := make(map[uuid.UUID]bool)
+	for _, e := range allEdges {
+		if accessibleSet[e.IdeaID] {
+			visibleHubIDs[e.HubID] = true
+		}
+	}
+	if len(visibleHubIDs) == 0 {
+		return nil, nil
+	}
+
+	allHubs, err := s.topicService.ListAllHubs(ctx)
+	if err != nil || len(allHubs) == 0 {
+		return nil, nil
+	}
+
+	visibleHubsByMOC := make(map[uuid.UUID][]database.KnowledgeHub)
+	visibleMocIDs := make(map[uuid.UUID]bool)
+	for _, h := range allHubs {
+		if visibleHubIDs[h.ID] {
+			visibleHubsByMOC[h.MocID] = append(visibleHubsByMOC[h.MocID], h)
+			visibleMocIDs[h.MocID] = true
+		}
+	}
+	if len(visibleMocIDs) == 0 {
+		return nil, nil
+	}
+
+	allMOCs, err := s.topicService.ListMOCs(ctx)
+	if err != nil || len(allMOCs) == 0 {
+		return nil, nil
+	}
+
+	descriptors := make([]MOCDescriptor, 0, len(visibleMocIDs))
+	mocByCode := make(map[string]database.KnowledgeMoc, len(visibleMocIDs))
+	for _, m := range allMOCs {
+		if !visibleMocIDs[m.ID] {
+			continue
+		}
 		descriptors = append(descriptors, MOCDescriptor{
 			Code:        m.Code,
 			Title:       m.Title,
 			Description: m.Description,
 		})
 		mocByCode[strings.ToUpper(strings.TrimSpace(m.Code))] = m
+	}
+
+	if len(descriptors) == 0 {
+		return nil, nil
 	}
 
 	targetCodes, err := s.llm.TriageQueryMOC(ctx, cleanedQuery, descriptors)
@@ -1301,8 +1841,8 @@ func (s *IdeaService) FindHierarchicalSeeds(ctx context.Context, queryText strin
 			continue
 		}
 
-		hubs, err := s.topicService.ListHubsByMOC(ctx, moc.ID)
-		if err != nil || len(hubs) == 0 {
+		hubs := visibleHubsByMOC[moc.ID]
+		if len(hubs) == 0 {
 			continue
 		}
 
@@ -1378,7 +1918,7 @@ func (s *IdeaService) FindHierarchicalSeeds(ctx context.Context, queryText strin
 		}
 
 		for _, row := range linkedIdeas {
-			if seenIdeaIDs[row.ID] {
+			if !accessibleSet[row.ID] || seenIdeaIDs[row.ID] {
 				continue
 			}
 			seenIdeaIDs[row.ID] = true
@@ -1420,10 +1960,14 @@ func (s *IdeaService) FindHierarchicalSeeds(ctx context.Context, queryText strin
 	return candidates, nil
 }
 
-func (s *IdeaService) SearchAndExpand(ctx context.Context, queryText string, topKSeeds int, opts TraversalOptions) (*TraversalSubGraph, []SeedCandidate, error) {
+func (s *IdeaService) SearchAndExpand(ctx context.Context, actor Actor, queryText string, topKSeeds int, opts TraversalOptions) (*TraversalSubGraph, []SeedCandidate, error) {
+	if !actor.IsValid() {
+		return nil, nil, ErrUnauthorized
+	}
+
 	var seeds []SeedCandidate
 	if s.topicService != nil && s.llm != nil {
-		hSeeds, hErr := s.FindHierarchicalSeeds(ctx, queryText, topKSeeds)
+		hSeeds, hErr := s.FindHierarchicalSeeds(ctx, actor, queryText, topKSeeds)
 		if hErr == nil && len(hSeeds) > 0 {
 			seeds = hSeeds
 		}
@@ -1431,7 +1975,7 @@ func (s *IdeaService) SearchAndExpand(ctx context.Context, queryText string, top
 
 	if len(seeds) == 0 {
 		var err error
-		seeds, err = s.FindSeedIdeas(ctx, queryText, topKSeeds)
+		seeds, err = s.FindSeedIdeas(ctx, actor, queryText, topKSeeds)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1450,7 +1994,7 @@ func (s *IdeaService) SearchAndExpand(ctx context.Context, queryText string, top
 		seedIDs = append(seedIDs, seed.IdeaID)
 	}
 
-	subGraph, err := s.TraverseSubGraph(ctx, seedIDs, opts)
+	subGraph, err := s.TraverseSubGraph(ctx, actor, seedIDs, opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1518,14 +2062,18 @@ type QueryResult struct {
 	ContextPrompt string
 }
 
-func (s *IdeaService) QueryGraph(ctx context.Context, userQuery string) (*QueryResult, error) {
+func (s *IdeaService) QueryGraph(ctx context.Context, actor Actor, userQuery string) (*QueryResult, error) {
+	if !actor.IsValid() {
+		return nil, ErrUnauthorized
+	}
+
 	cleanedQuery := strings.TrimSpace(userQuery)
 	if cleanedQuery == "" {
 		return nil, fmt.Errorf("la consulta está vacía")
 	}
 
 	opts := DefaultTraversalOptions()
-	subGraph, seeds, err := s.SearchAndExpand(ctx, cleanedQuery, 3, opts)
+	subGraph, seeds, err := s.SearchAndExpand(ctx, actor, cleanedQuery, 3, opts)
 	if err != nil {
 		return nil, err
 	}
