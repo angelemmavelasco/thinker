@@ -221,7 +221,8 @@ func TestQueryGraph_EndToEndWithMocks(t *testing.T) {
 	linkTestIdeas(ctx, t, q, seedIdea.ID, hop1Idea.ID, "semantic", 0.91)
 	linkTestIdeas(ctx, t, q, hop1Idea.ID, hop2Idea.ID, "concept_overlap", 0.84)
 
-	res, err := svc.QueryGraph(ctx, "como estructurar el software modular?")
+	actor := Actor{UserID: userID}
+	res, err := svc.QueryGraph(ctx, actor, "como estructurar el software modular?")
 	if err != nil {
 		t.Fatalf("QueryGraph failed: %v", err)
 	}
@@ -245,7 +246,7 @@ func TestQueryGraph_EndToEndWithMocks(t *testing.T) {
 		t.Errorf("expected ContextPrompt to include associative context section")
 	}
 
-	_, err = svc.QueryGraph(ctx, "   ")
+	_, err = svc.QueryGraph(ctx, actor, "   ")
 	if err == nil {
 		t.Errorf("expected error for empty query")
 	}
