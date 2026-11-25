@@ -32,6 +32,7 @@
             </span>
             {{end}}
 
+            {{if .detail.CanEdit}}
             <button
                 type="button"
                 hx-get='{{url "ideas:edit" .detail.Idea.ID}}'
@@ -52,7 +53,9 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-rotate-cw"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
                 <span>Volver a analizar</span>
             </button>
+            {{end}}
 
+            {{if .detail.CanDelete}}
             <button
                 type="button"
                 onclick="var el=document.getElementById('idea-delete-panel'); el.classList.toggle('hidden'); el.classList.toggle('flex');"
@@ -60,9 +63,11 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-x"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="m14.5 12.5-5 5"/><path d="m9.5 12.5 5 5"/></svg>
                 <span>Eliminar</span>
             </button>
+            {{end}}
         </div>
     </div>
 
+    {{if .detail.CanDelete}}
     <div id="idea-delete-panel" class="hidden flex-col gap-3 border border-red-500/40 bg-red-950/20 p-3.5 rounded-xs">
         {{if gt .detail.GroupCount 1}}
         <div class="flex flex-col gap-1">
@@ -129,6 +134,7 @@
         </div>
         {{end}}
     </div>
+    {{end}}
 
     {{if gt .detail.GroupCount 1}}
     <div class="border border-cyan-500/30 bg-cyan-950/15 px-3.5 py-2 rounded-xs flex flex-wrap items-center justify-between gap-2 text-[11px]">
@@ -169,8 +175,8 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-zinc-400 border-t border-zinc-800/80 pt-2">
             <div>
-                <span class="text-zinc-500">Creado por:</span>
-                <span class="text-zinc-300 font-mono">{{.detail.Idea.UserID}}</span>
+                <span class="text-zinc-500">Autor:</span>
+                <span class="text-zinc-300">{{.detail.AuthorDisplay}}</span>
             </div>
             <div>
                 <span class="text-zinc-500">Fecha de creación:</span>
@@ -178,7 +184,7 @@
             </div>
             <div>
                 <span class="text-zinc-500">Última actualización:</span>
-                <span class="text-zinc-300">{{.detail.Idea.UpdatedAt.Format "02/01/2006 15:04"}}</span>
+                <span class="text-zinc-300">{{.detail.Idea.UpdatedAt.Format "02/01/2006 15:04"}}{{if .detail.UpdatedByDisplay}} · {{.detail.UpdatedByDisplay}}{{end}}</span>
             </div>
         </div>
     </div>
@@ -211,6 +217,92 @@
         </div>
 
         <div class="flex flex-col gap-4">
+            <div class="border border-zinc-800 rounded-xs bg-zinc-900 p-4 flex flex-col gap-2.5">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-[10px] text-amber-400 uppercase font-semibold tracking-wider">
+                        Visibilidad y roles
+                    </span>
+                    {{if .detail.CanManageRoles}}
+                    <button
+                        type="button"
+                        onclick="var el=document.getElementById('idea-permissions-form'); el.classList.toggle('hidden'); el.classList.toggle('flex');"
+                        class="text-[10px] text-cyan-400 hover:text-cyan-300 cursor-pointer underline"
+                    >
+                        Configurar
+                    </button>
+                    {{end}}
+                </div>
+
+                {{if .permSaveSuccess}}
+                <p class="border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 px-2 py-1.5 rounded-xs text-[11px]">
+                    {{.permSaveSuccess}}
+                </p>
+                {{end}}
+
+                {{if .detail.RolePermissions}}
+                <ul class="flex flex-wrap gap-1.5 text-[10px]">
+                    {{range $rp := .detail.RolePermissions}}
+                    <li class="px-2 py-0.5 rounded-xs border {{if eq $rp.Permission "edit"}}bg-emerald-500/15 text-emerald-300 border-emerald-500/30{{else}}bg-cyan-500/15 text-cyan-300 border-cyan-500/30{{end}}">
+                        {{$rp.RoleName}} · {{if eq $rp.Permission "edit"}}Editar{{else}}Solo ver{{end}}
+                    </li>
+                    {{end}}
+                </ul>
+                {{else}}
+                <p class="text-zinc-400 text-[11px]">
+                    Privada (solo visible para el autor y superusuarios).
+                </p>
+                {{end}}
+
+                {{if .detail.CanManageRoles}}
+                <form
+                    id="idea-permissions-form"
+                    hx-post='{{url "ideas:permissions" .detail.Idea.ID}}'
+                    hx-target="#workspace"
+                    hx-swap="innerHTML"
+                    class="hidden flex-col gap-2.5 pt-2.5 mt-1 border-t border-zinc-800"
+                >
+                    <input type="hidden" name="csrf_token" value="{{.csrf_token}}" />
+                    {{if .allRoles}}
+                    <div class="flex flex-col gap-2">
+                        {{range $role := .allRoles}}
+                        {{$currentPerm := index $.detail.RolePermissionMap $role.ID.String}}
+                        <div class="flex items-center justify-between gap-2 text-[11px]">
+                            <span class="text-zinc-200 truncate">{{$role.Name}}</span>
+                            <select
+                                name="role_perm[{{$role.ID}}]"
+                                class="bg-zinc-950 border border-zinc-700 focus:border-cyan-500 rounded-xs px-2 py-0.5 text-[11px] text-zinc-200 outline-none"
+                            >
+                                <option value="" {{if eq $currentPerm ""}}selected{{end}}>Sin acceso</option>
+                                <option value="view" {{if eq $currentPerm "view"}}selected{{end}}>Solo ver</option>
+                                <option value="edit" {{if eq $currentPerm "edit"}}selected{{end}}>Ver y editar</option>
+                            </select>
+                        </div>
+                        {{end}}
+                    </div>
+                    <div class="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800/80">
+                        <button
+                            type="button"
+                            onclick="var el=document.getElementById('idea-permissions-form'); el.classList.add('hidden'); el.classList.remove('flex');"
+                            class="text-zinc-400 hover:text-zinc-200 text-[11px] cursor-pointer px-2 py-1"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            class="bg-cyan-500 hover:bg-cyan-400 text-zinc-950 font-medium px-3 py-1 rounded-xs text-[11px] cursor-pointer transition-colors"
+                        >
+                            Guardar roles
+                        </button>
+                    </div>
+                    {{else}}
+                    <p class="text-[11px] text-zinc-500 italic">
+                        No existen roles configurados en el sistema todavía.
+                    </p>
+                    {{end}}
+                </form>
+                {{end}}
+            </div>
+
             <div class="border border-zinc-800 rounded-xs bg-zinc-900 p-4 flex flex-col gap-2.5">
                 <span class="text-[10px] text-zinc-400 uppercase font-semibold tracking-wider">
                     Términos obtenidos
