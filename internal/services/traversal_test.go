@@ -116,7 +116,8 @@ func TestTraverseSubGraph_LinearChain(t *testing.T) {
 	linkTestIdeas(ctx, t, q, ideaC.ID, ideaD.ID, "semantic", 0.70)
 
 	opts := DefaultTraversalOptions()
-	subGraph, err := svc.TraverseSubGraph(ctx, []uuid.UUID{ideaA.ID}, opts)
+	actor := Actor{UserID: userID}
+	subGraph, err := svc.TraverseSubGraph(ctx, actor, []uuid.UUID{ideaA.ID}, opts)
 	if err != nil {
 		t.Fatalf("TraverseSubGraph failed: %v", err)
 	}
@@ -169,7 +170,8 @@ func TestTraverseSubGraph_CycleAndDuplicatePrevention(t *testing.T) {
 	linkTestIdeas(ctx, t, q, ideaC.ID, ideaA.ID, "concept_overlap", 0.80)
 
 	opts := DefaultTraversalOptions()
-	subGraph, err := svc.TraverseSubGraph(ctx, []uuid.UUID{ideaA.ID}, opts)
+	actor := Actor{UserID: userID}
+	subGraph, err := svc.TraverseSubGraph(ctx, actor, []uuid.UUID{ideaA.ID}, opts)
 	if err != nil {
 		t.Fatalf("TraverseSubGraph failed: %v", err)
 	}
@@ -213,7 +215,8 @@ func TestTraverseSubGraph_WeightPruningAndNodeLimits(t *testing.T) {
 		MinWeight:      0.10,
 	}
 
-	subGraph, err := svc.TraverseSubGraph(ctx, []uuid.UUID{ideaA.ID}, opts)
+	actor := Actor{UserID: userID}
+	subGraph, err := svc.TraverseSubGraph(ctx, actor, []uuid.UUID{ideaA.ID}, opts)
 	if err != nil {
 		t.Fatalf("TraverseSubGraph failed: %v", err)
 	}
@@ -254,7 +257,8 @@ func TestTraverseSubGraph_MultipleSeeds(t *testing.T) {
 	linkTestIdeas(ctx, t, q, seedB.ID, uniqueY.ID, "concept_overlap", 0.75)
 
 	opts := DefaultTraversalOptions()
-	subGraph, err := svc.TraverseSubGraph(ctx, []uuid.UUID{seedA.ID, seedB.ID}, opts)
+	actor := Actor{UserID: userID}
+	subGraph, err := svc.TraverseSubGraph(ctx, actor, []uuid.UUID{seedA.ID, seedB.ID}, opts)
 	if err != nil {
 		t.Fatalf("TraverseSubGraph failed: %v", err)
 	}
@@ -279,12 +283,13 @@ func TestTraverseSubGraph_MultipleSeeds(t *testing.T) {
 }
 
 func TestTraverseSubGraph_EmptyOrMissing(t *testing.T) {
-	svc, _, _, cleanup := setupTestIdeaService(t)
+	svc, _, userID, cleanup := setupTestIdeaService(t)
 	defer cleanup()
 
 	ctx := context.Background()
+	actor := Actor{UserID: userID}
 
-	subGraph, err := svc.TraverseSubGraph(ctx, nil, DefaultTraversalOptions())
+	subGraph, err := svc.TraverseSubGraph(ctx, actor, nil, DefaultTraversalOptions())
 	if err != nil {
 		t.Fatalf("unexpected error for nil seeds: %v", err)
 	}
@@ -293,7 +298,7 @@ func TestTraverseSubGraph_EmptyOrMissing(t *testing.T) {
 	}
 
 	missingID := uuid.New()
-	subGraph, err = svc.TraverseSubGraph(ctx, []uuid.UUID{missingID}, DefaultTraversalOptions())
+	subGraph, err = svc.TraverseSubGraph(ctx, actor, []uuid.UUID{missingID}, DefaultTraversalOptions())
 	if err != nil {
 		t.Fatalf("unexpected error for missing seed: %v", err)
 	}

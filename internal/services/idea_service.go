@@ -498,6 +498,9 @@ func (s *IdeaService) LinkSemanticIdeas(ctx context.Context, ideaID uuid.UUID, i
 }
 
 func (s *IdeaService) ProcessIdeaAnalysis(ctx context.Context, ideaID uuid.UUID, title, content string) (*IdeaAnalysisResult, []database.Keyword, []database.IdeaLink, error) {
+	if s.llm == nil {
+		return nil, nil, nil, fmt.Errorf("servicio LLM no configurado")
+	}
 	result, err := s.llm.AnalyzeIdea(ctx, title, content)
 	if err != nil {
 		return nil, nil, nil, err
