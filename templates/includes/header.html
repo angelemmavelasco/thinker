@@ -20,9 +20,11 @@
         <span class="hover:text-cyan-400 transition-colors cursor-pointer py-1 text-zinc-400">
             Opciones
         </span>
+        {{if .is_superuser}}
         <a href='{{url "users:list"}}' class="hover:text-cyan-400 transition-colors cursor-pointer py-1">
-            Usuarios
+            Usuarios y roles
         </a>
+        {{end}}
         <span class="hover:text-cyan-400 transition-colors cursor-pointer py-1 text-zinc-400">
             Configuración
         </span>
@@ -46,6 +48,11 @@
             <span class="text-zinc-200">
                 {{if .user_name}}{{.user_name}}{{else}}Usuario{{end}}
             </span>
+            {{if .is_superuser}}
+            <span class="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded-xs bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                Super
+            </span>
+            {{end}}
         </div>
 
         <form method="POST" action='{{ url "auth:logout" }}' class="inline">
@@ -105,9 +112,11 @@
     <a href='{{url "topics:list"}}' class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80 block">
         Temas e índices
     </a>
+    {{if .is_superuser}}
     <a href='{{url "users:list"}}' class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80 block">
-        Usuarios
+        Usuarios y roles
     </a>
+    {{end}}
     <div class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80">
         Opciones
     </div>
