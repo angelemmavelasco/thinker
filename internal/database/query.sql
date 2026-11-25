@@ -3,6 +3,11 @@ INSERT INTO users (id, email, password_hash, role, auth_provider, google_id, ema
 VALUES ($1, $2, $3, $4, $5, $6, $7, 1)
 RETURNING *;
 
+-- name: CreateUserWithSuperuser :one
+INSERT INTO users (id, email, password_hash, role, is_superuser, auth_provider, google_id, email_verified, token_version)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)
+RETURNING *;
+
 -- name: GetUserByID :one
 SELECT * FROM users
 WHERE id = $1 LIMIT 1;
@@ -16,9 +21,21 @@ SELECT * FROM users
 WHERE google_id = $1 AND google_id != '' LIMIT 1;
 
 -- name: ListUsers :many
-SELECT id, email, role, auth_provider, email_verified, created_at
+SELECT id, email, role, is_superuser, auth_provider, email_verified, created_at
 FROM users
 ORDER BY created_at DESC;
+
+-- name: UpdateUserSuperuserStatus :one
+UPDATE users
+SET is_superuser = $2,
+    role = $3
+WHERE id = $1
+RETURNING *;
+
+-- name: CountSuperusers :one
+SELECT COUNT(1)
+FROM users
+WHERE is_superuser = 1;
 
 -- name: LinkGoogleAccount :one
 UPDATE users
@@ -222,6 +239,7 @@ ORDER BY il.weight DESC;
 UPDATE ideas
 SET title = $2,
     content = $3,
+    updated_by = $4,
     restructured_content = '',
     embedding = '',
     status = 'borrador',
@@ -400,3 +418,228 @@ RETURNING *;
 -- name: ListKnowledgeSettings :many
 SELECT * FROM knowledge_settings
 ORDER BY key ASC;
+
+-- name: CreateRole :one
+INSERT INTO roles (id, name, slug, description)
+VALUES ($1, $2, $3, $4)
+RETURNING *;
+
+-- name: GetRoleByID :one
+SELECT * FROM roles
+WHERE id = $1 LIMIT 1;
+
+-- name: GetRoleBySlug :one
+SELECT * FROM roles
+WHERE LOWER(slug) = LOWER($1) LIMIT 1;
+
+-- name: ListRoles :many
+SELECT * FROM roles
+ORDER BY name ASC;
+
+-- name: ListRolesWithUsage :many
+SELECT
+    r.id,
+    r.name,
+    r.slug,
+    r.description,
+    r.created_at,
+    r.updated_at,
+    (SELECT COUNT(1) FROM user_roles ur WHERE ur.role_id = r.id) AS user_count,
+    (SELECT COUNT(1) FROM idea_role_permissions irp WHERE irp.role_id = r.id) AS idea_count
+FROM roles r
+ORDER BY r.name ASC;
+
+-- name: UpdateRole :one
+UPDATE roles
+SET name = $2,
+    slug = $3,
+    description = $4,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteRole :exec
+DELETE FROM roles
+WHERE id = $1;
+
+-- name: AssignRoleToUser :exec
+INSERT INTO user_roles (user_id, role_id, assigned_by)
+VALUES ($1, $2, $3)
+ON CONFLICT (user_id, role_id) DO NOTHING;
+
+-- name: DeleteUserRolesByUserID :exec
+DELETE FROM user_roles
+WHERE user_id = $1;
+
+-- name: ListRolesByUserID :many
+SELECT r.*
+FROM roles r
+JOIN user_roles ur ON ur.role_id = r.id
+WHERE ur.user_id = $1
+ORDER BY r.name ASC;
+
+-- name: ListAllUserRoles :many
+SELECT ur.user_id, r.id AS role_id, r.name AS role_name, r.slug AS role_slug
+FROM user_roles ur
+JOIN roles r ON r.id = ur.role_id
+ORDER BY r.name ASC;
+
+-- name: UpsertIdeaRolePermission :one
+INSERT INTO idea_role_permissions (idea_id, role_id, permission, granted_by)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (idea_id, role_id)
+DO UPDATE SET permission = EXCLUDED.permission,
+              granted_by = EXCLUDED.granted_by,
+              updated_at = CURRENT_TIMESTAMP
+RETURNING *;
+
+-- name: DeleteIdeaRolePermissionsByIdeaID :exec
+DELETE FROM idea_role_permissions
+WHERE idea_id = $1;
+
+-- name: ListIdeaRolePermissionsByIdeaID :many
+SELECT
+    irp.idea_id,
+    irp.role_id,
+    r.name AS role_name,
+    r.slug AS role_slug,
+    irp.permission
+FROM idea_role_permissions irp
+JOIN roles r ON r.id = irp.role_id
+WHERE irp.idea_id = $1
+ORDER BY r.name ASC;
+
+-- name: ListAllIdeaRolePermissions :many
+SELECT
+    irp.idea_id,
+    irp.role_id,
+    r.name AS role_name,
+    r.slug AS role_slug,
+    irp.permission
+FROM idea_role_permissions irp
+JOIN roles r ON r.id = irp.role_id
+ORDER BY r.name ASC;
+
+-- name: ListIdeaIDsByRoleID :many
+SELECT DISTINCT idea_id
+FROM idea_role_permissions
+WHERE role_id = $1;
+
+-- name: HasUserViewPermissionOnIdea :one
+SELECT COUNT(1)
+FROM ideas i
+WHERE i.id = $1
+  AND (
+      i.user_id = $2
+      OR EXISTS (
+          SELECT 1
+          FROM idea_role_permissions irp
+          JOIN user_roles ur ON ur.role_id = irp.role_id
+          WHERE irp.idea_id = i.id AND ur.user_id = $2
+      )
+  );
+
+-- name: HasUserEditPermissionOnIdea :one
+SELECT COUNT(1)
+FROM ideas i
+WHERE i.id = $1
+  AND (
+      i.user_id = $2
+      OR EXISTS (
+          SELECT 1
+          FROM idea_role_permissions irp
+          JOIN user_roles ur ON ur.role_id = irp.role_id
+          WHERE irp.idea_id = i.id AND ur.user_id = $2 AND irp.permission = 'edit'
+      )
+  );
+
+-- name: ListAccessibleIdeasByUser :many
+SELECT i.*
+FROM ideas i
+WHERE i.user_id = $1
+   OR EXISTS (
+       SELECT 1
+       FROM idea_role_permissions irp
+       JOIN user_roles ur ON ur.role_id = irp.role_id
+       WHERE irp.idea_id = i.id AND ur.user_id = $1
+   )
+ORDER BY i.created_at DESC;
+
+-- name: ListAccessibleDirectConnectedIdeas :many
+SELECT
+    i.id,
+    i.title,
+    i.content,
+    i.restructured_content,
+    i.status,
+    il.relation_type,
+    il.weight
+FROM idea_links il
+JOIN ideas i ON i.id = il.target_idea_id
+WHERE il.source_idea_id = $1
+  AND (
+      i.user_id = $2
+      OR EXISTS (
+          SELECT 1
+          FROM idea_role_permissions irp
+          JOIN user_roles ur ON ur.role_id = irp.role_id
+          WHERE irp.idea_id = i.id AND ur.user_id = $2
+      )
+  )
+ORDER BY il.weight DESC;
+
+-- name: ListAccessibleIdeasByHubID :many
+SELECT i.*, hie.relationship_type, hie.weight, hie.is_manual_override
+FROM ideas i
+JOIN hub_idea_edges hie ON hie.idea_id = i.id
+WHERE hie.hub_id = $1
+  AND (
+      i.user_id = $2
+      OR EXISTS (
+          SELECT 1
+          FROM idea_role_permissions irp
+          JOIN user_roles ur ON ur.role_id = irp.role_id
+          WHERE irp.idea_id = i.id AND ur.user_id = $2
+      )
+  )
+ORDER BY hie.weight DESC;
+
+-- name: FindOverlappingIdeasInScope :many
+SELECT ik2.idea_id, COUNT(ik2.keyword_id) AS shared_count
+FROM idea_keywords ik1
+JOIN idea_keywords ik2 ON ik1.keyword_id = ik2.keyword_id
+JOIN ideas i1 ON i1.id = ik1.idea_id
+JOIN ideas i2 ON i2.id = ik2.idea_id
+WHERE ik1.idea_id = $1
+  AND ik2.idea_id != $1
+  AND (
+      i1.user_id = i2.user_id
+      OR EXISTS (
+          SELECT 1
+          FROM idea_role_permissions p1
+          JOIN idea_role_permissions p2 ON p1.role_id = p2.role_id
+          WHERE p1.idea_id = i1.id AND p2.idea_id = i2.id
+      )
+  )
+GROUP BY ik2.idea_id;
+
+-- name: ListIdeasWithEmbeddingsInScope :many
+SELECT i2.id, i2.title, i2.embedding
+FROM ideas i1
+JOIN ideas i2 ON i2.id != i1.id
+WHERE i1.id = $1
+  AND i2.embedding != ''
+  AND (
+      i1.user_id = i2.user_id
+      OR EXISTS (
+          SELECT 1
+          FROM idea_role_permissions p1
+          JOIN idea_role_permissions p2 ON p1.role_id = p2.role_id
+          WHERE p1.idea_id = i1.id AND p2.idea_id = i2.id
+      )
+  );
+
+-- name: DeleteNonSequenceIdeaLinksByIdeaID :exec
+DELETE FROM idea_links
+WHERE (source_idea_id = $1 OR target_idea_id = $1)
+  AND relation_type != 'sequence';
