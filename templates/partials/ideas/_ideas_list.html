@@ -10,9 +10,19 @@
             {{$idea.Title}}
         </p>
 
-        <p class="text-[9px] text-zinc-500">
-            Creado por: {{$idea.UserID}}
-        </p>
+        <div class="flex flex-wrap items-center gap-1 text-[9px]">
+            {{if $idea.RolePermissions}}
+                {{range $rp := $idea.RolePermissions}}
+                <span class="px-1.5 py-0.5 rounded-xs border {{if eq $rp.Permission "edit"}}bg-emerald-500/15 text-emerald-300 border-emerald-500/30{{else}}bg-cyan-500/15 text-cyan-300 border-cyan-500/30{{end}}">
+                    {{$rp.RoleName}} · {{if eq $rp.Permission "edit"}}Editar{{else}}Ver{{end}}
+                </span>
+                {{end}}
+            {{else}}
+            <span class="px-1.5 py-0.5 rounded-xs bg-zinc-800/90 text-zinc-400 border border-zinc-700/80">
+                Privada
+            </span>
+            {{end}}
+        </div>
 
         {{if $idea.RestructuredContent}}
         <p class="text-zinc-200">
@@ -43,7 +53,7 @@
     </li>
     {{else}}
     <li class="col-span-full py-12 text-center text-sm text-zinc-500">
-        No hay ideas registradas todavía. Crea una nueva o sube un documento.
+        No hay ideas accesibles todavía. Crea una nueva o sube un documento.
     </li>
     {{end}}
 </ul>
