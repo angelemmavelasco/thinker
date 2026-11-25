@@ -183,6 +183,10 @@ func Render(c *gin.Context, status int, templateName string, data gin.H) {
 	data["user"] = c.GetString("user")
 	data["user_email"] = c.GetString("user_email")
 	data["user_role"] = c.GetString("user_role")
+	data["is_superuser"] = c.GetBool("is_superuser")
+	if roles, ok := c.Get("user_roles"); ok {
+		data["user_roles"] = roles
+	}
 
 	userName := c.GetString("user_name")
 	userInitial := c.GetString("user_initial")

@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"thinker/internal/auth"
+	"thinker/internal/database"
 	"thinker/internal/services"
 )
 
@@ -32,6 +33,36 @@ func SecurityHeadersMiddleware() gin.HandlerFunc {
 	}
 }
 
+func setAuthenticatedContext(c *gin.Context, authService *services.AuthService, user database.User) bool {
+	roles, err := authService.ListUserRoles(c.Request.Context(), user.ID)
+	if err != nil {
+		return false
+	}
+	actor := services.NewActorFromUser(user, roles)
+	c.Set("actor", actor)
+	c.Set("user", user.ID.String())
+	c.Set("user_email", user.Email)
+	c.Set("user_role", user.Role)
+	c.Set("is_superuser", actor.IsSuperuser)
+	c.Set("user_roles", actor.Roles)
+	displayName, initial := auth.UserDisplayName("", "", user.Email)
+	c.Set("user_name", displayName)
+	c.Set("user_initial", initial)
+	return true
+}
+
+func ActorFromContext(c *gin.Context) (services.Actor, bool) {
+	raw, exists := c.Get("actor")
+	if !exists {
+		return services.Actor{}, false
+	}
+	actor, ok := raw.(services.Actor)
+	if !ok || !actor.IsValid() {
+		return services.Actor{}, false
+	}
+	return actor, true
+}
+
 func RequireAuthMiddleware(authService *services.AuthService, secureCookies bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Writer.Header().Set("Cache-Control", "no-store")
@@ -44,12 +75,10 @@ func RequireAuthMiddleware(authService *services.AuthService, secureCookies bool
 				if parseErr == nil {
 					user, verErr := authService.ValidateUserTokenVersion(c.Request.Context(), userID, claims.TokenVersion)
 					if verErr == nil {
-						c.Set("user", user.ID.String())
-						c.Set("user_email", user.Email)
-						c.Set("user_role", user.Role)
-						displayName, initial := auth.UserDisplayName("", "", user.Email)
-						c.Set("user_name", displayName)
-						c.Set("user_initial", initial)
+						if !setAuthenticatedContext(c, authService, user) {
+							c.AbortWithStatus(http.StatusInternalServerError)
+							return
+						}
 						c.Next()
 						return
 					}
@@ -67,12 +96,10 @@ func RequireAuthMiddleware(authService *services.AuthService, secureCookies bool
 			)
 			if err == nil && newTokens != nil {
 				SetSessionCookies(c, newTokens, secureCookies)
-				c.Set("user", newTokens.User.ID.String())
-				c.Set("user_email", newTokens.User.Email)
-				c.Set("user_role", newTokens.User.Role)
-				displayName, initial := auth.UserDisplayName("", "", newTokens.User.Email)
-				c.Set("user_name", displayName)
-				c.Set("user_initial", initial)
+				if !setAuthenticatedContext(c, authService, newTokens.User) {
+					c.AbortWithStatus(http.StatusInternalServerError)
+					return
+				}
 				c.Next()
 				return
 			}
@@ -81,6 +108,29 @@ func RequireAuthMiddleware(authService *services.AuthService, secureCookies bool
 		ClearSessionCookies(c, secureCookies)
 		abortUnauthenticated(c)
 	}
+}
+
+func RequireSuperuserMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		actor, ok := ActorFromContext(c)
+		if !ok {
+			abortUnauthenticated(c)
+			return
+		}
+		if !actor.IsSuperuser {
+			abortForbidden(c)
+			return
+		}
+		c.Next()
+	}
+}
+
+func abortForbidden(c *gin.Context) {
+	if strings.HasPrefix(c.Request.URL.Path, "/api/") || strings.Contains(c.GetHeader("Accept"), "application/json") {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "No tienes permisos para acceder a este recurso"})
+		return
+	}
+	c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Acceso denegado: requiere privilegios de superusuario"})
 }
 
 func abortUnauthenticated(c *gin.Context) {
