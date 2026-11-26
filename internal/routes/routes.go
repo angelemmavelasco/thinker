@@ -106,6 +106,7 @@ func SetUpRouter(
 		protected.GET(urls.Get("ideas:new"), ideaHandler.NewIdea)
 		protected.POST(urls.Get("ideas:new"), ideaHandler.CreateIdea)
 		protected.GET(urls.Get("ideas:detail:route"), ideaHandler.IdeaDetail)
+		protected.GET(urls.Get("ideas:full:route"), ideaHandler.IdeaFullDocument)
 		protected.GET(urls.Get("ideas:edit:route"), ideaHandler.EditIdeaView)
 		protected.POST(urls.Get("ideas:edit:route"), ideaHandler.UpdateIdea)
 		protected.POST(urls.Get("ideas:permissions:route"), ideaHandler.UpdateIdeaPermissions)
