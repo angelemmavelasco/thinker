@@ -467,3 +467,95 @@ func TestRBAC_GraphAndHierarchicalRAGZeroLeak(t *testing.T) {
 		}
 	}
 }
+
+func TestFullDocument_PreservesOriginalAndRBACAndInvalidation(t *testing.T) {
+	ideaSvc, roleSvc, userSvc, q, cleanup := setupTestRBACEnv(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	super := createTestUserActor(t, q, "super-doc@thinker.test", true)
+	author := createTestUserActor(t, q, "author-doc@thinker.test", false)
+	viewer := createTestUserActor(t, q, "viewer-doc@thinker.test", false)
+	outsider := createTestUserActor(t, q, "outsider-doc@thinker.test", false)
+
+	teamRole, err := roleSvc.CreateRole(ctx, super, "Producto", "Equipo de producto")
+	if err != nil {
+		t.Fatalf("CreateRole failed: %v", err)
+	}
+	if _, err := userSvc.UpdateUserAccess(ctx, super, viewer.UserID, false, []uuid.UUID{teamRole.ID}); err != nil {
+		t.Fatalf("assign viewer role failed: %v", err)
+	}
+
+	sectionA := "# Arquitectura de Conocimiento\n\n" + strings.Repeat("Este párrafo describe reglas explícitas de gobernanza y trazabilidad para notas técnicas. ", 10)
+	sectionB := "\n\n## Reglas de Privacidad\n\n- Toda nota inicia privada para su autor.\n- Los roles se asignan explícitamente.\n\n> Thinker garantiza aislamiento estricto entre roles.\n\n" + strings.Repeat("Cada fragmento conserva su estructura Markdown original para facilitar la lectura humana. ", 10)
+	fullMarkdown := strings.TrimSpace(sectionA + sectionB)
+
+	created, err := ideaSvc.CreateIdeasFromInput(ctx, author, "Manual Operativo", fullMarkdown, map[uuid.UUID]string{
+		teamRole.ID: PermissionView,
+	})
+	if err != nil {
+		t.Fatalf("CreateIdeasFromInput failed: %v", err)
+	}
+	if len(created) < 2 {
+		t.Fatalf("expected multi-fragment document, got %d fragment(s)", len(created))
+	}
+
+	if !strings.Contains(created[0].Content, "# Arquitectura de Conocimiento\n\n") {
+		t.Fatalf("expected first fragment to preserve heading and paragraph break, got: %q", created[0].Content)
+	}
+
+	docAuthor, err := ideaSvc.GetIdeaFullDocument(ctx, author, created[0].ID.String())
+	if err != nil {
+		t.Fatalf("GetIdeaFullDocument for author failed: %v", err)
+	}
+	if docAuthor.IsReconstructed {
+		t.Fatalf("expected stored original snapshot (IsReconstructed=false)")
+	}
+	if docAuthor.Content != fullMarkdown {
+		t.Fatalf("expected exact original document content")
+	}
+	if docAuthor.GroupCount != len(created) {
+		t.Fatalf("expected GroupCount=%d, got %d", len(created), docAuthor.GroupCount)
+	}
+
+	docViewer, err := ideaSvc.GetIdeaFullDocument(ctx, viewer, created[1].ID.String())
+	if err != nil {
+		t.Fatalf("GetIdeaFullDocument for viewer failed: %v", err)
+	}
+	if docViewer.Content != fullMarkdown {
+		t.Fatalf("viewer should receive exact full document")
+	}
+
+	if _, err := ideaSvc.GetIdeaFullDocument(ctx, outsider, created[0].ID.String()); !errors.Is(err, ErrIdeaNotFound) {
+		t.Fatalf("expected ErrIdeaNotFound for outsider, got %v", err)
+	}
+
+	// Updating one fragment must invalidate stored snapshot so full doc stays truthful.
+	updatedText := "## Sección Actualizada\n\nContenido revisado del segundo fragmento."
+	if _, err := ideaSvc.UpdateIdea(ctx, author, created[1].ID.String(), created[1].Title, updatedText); err != nil {
+		t.Fatalf("UpdateIdea failed: %v", err)
+	}
+
+	docAfterEdit, err := ideaSvc.GetIdeaFullDocument(ctx, author, created[0].ID.String())
+	if err != nil {
+		t.Fatalf("GetIdeaFullDocument after edit failed: %v", err)
+	}
+	if !docAfterEdit.IsReconstructed {
+		t.Fatalf("expected IsReconstructed=true after single-fragment edit")
+	}
+	if !strings.Contains(docAfterEdit.Content, "Contenido revisado del segundo fragmento.") {
+		t.Fatalf("expected reconstructed full document to reflect edited fragment, got: %q", docAfterEdit.Content)
+	}
+
+	// Deleting the edited fragment must remove it from reconstructed full document.
+	if err := ideaSvc.DeleteIdeaFragment(ctx, author, created[1].ID.String()); err != nil {
+		t.Fatalf("DeleteIdeaFragment failed: %v", err)
+	}
+	docAfterDelete, err := ideaSvc.GetIdeaFullDocument(ctx, author, created[0].ID.String())
+	if err != nil {
+		t.Fatalf("GetIdeaFullDocument after delete failed: %v", err)
+	}
+	if strings.Contains(docAfterDelete.Content, "Contenido revisado del segundo fragmento.") {
+		t.Fatalf("deleted fragment leaked into full document view")
+	}
+}
