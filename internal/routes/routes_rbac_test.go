@@ -330,3 +330,118 @@ func TestRoutesRBAC_EndToEndSecurity(t *testing.T) {
 		t.Fatalf("expected superuser to delete author's idea, got %d %s", wSuperDelete.Code, wSuperDelete.Body.String())
 	}
 }
+
+func TestRoutesFullDocument_LazyHTMLAndRBAC(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	chdirToProjectRoot(t)
+
+	dsn := fmt.Sprintf("file:routes_fulldoc_%d?mode=memory&cache=shared&_pragma=foreign_keys(1)", time.Now().UnixNano())
+	conn, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatalf("failed opening sqlite: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	ctx := context.Background()
+	if err := database.InitSchema(ctx, conn); err != nil {
+		t.Fatalf("InitSchema failed: %v", err)
+	}
+
+	cfg := &config.BaseConfig{
+		Debug:          true,
+		AppBaseURL:     "http://127.0.0.1:8080",
+		JWTSecret:      []byte("0123456789abcdef0123456789abcdef"),
+		SecureCookies:  false,
+		SuperuserEmail: "admin-doc@thinker.test",
+	}
+
+	q := database.New(conn)
+	router := SetUpRouter(q, nil, nil, cfg)
+
+	reqInit := httptest.NewRequest(http.MethodGet, "/auth/login", nil)
+	wInit := httptest.NewRecorder()
+	router.ServeHTTP(wInit, reqInit)
+	csrfCookie := extractCookie(wInit.Result().Cookies(), middleware.CSRFCookieName(false))
+	if csrfCookie == nil {
+		t.Fatalf("expected csrf cookie")
+	}
+
+	_, superCookies := registerVerifyAndLogin(t, router, q, csrfCookie, "admin-doc@thinker.test", "StrongPass123!")
+	_, authorCookies := registerVerifyAndLogin(t, router, q, csrfCookie, "author-doc@thinker.test", "StrongPass123!")
+	viewerUser, viewerCookies := registerVerifyAndLogin(t, router, q, csrfCookie, "viewer-doc@thinker.test", "StrongPass123!")
+	_, outsiderCookies := registerVerifyAndLogin(t, router, q, csrfCookie, "outsider-doc@thinker.test", "StrongPass123!")
+
+	wRole := doAuthRequest(router, http.MethodPost, "/web/roles", superCookies, url.Values{
+		"csrf_token":  {csrfCookie.Value},
+		"name":        {"Documentacion"},
+		"description": {"Equipo de guias"},
+	}, true)
+	if wRole.Code != http.StatusOK {
+		t.Fatalf("creating role failed: %d", wRole.Code)
+	}
+	docRole, err := q.GetRoleBySlug(ctx, "documentacion")
+	if err != nil {
+		t.Fatalf("GetRoleBySlug failed: %v", err)
+	}
+
+	wAssign := doAuthRequest(router, http.MethodPost, "/web/users/"+viewerUser.ID.String()+"/access", superCookies, url.Values{
+		"csrf_token": {csrfCookie.Value},
+		"role_ids":   {docRole.ID.String()},
+	}, true)
+	if wAssign.Code != http.StatusOK {
+		t.Fatalf("assign role failed: %d", wAssign.Code)
+	}
+
+	longDoc := "# Guía Completa\n\n" +
+		strings.Repeat("Contenido detallado de políticas operativas y procedimientos documentales. ", 18) +
+		"\n\n## Anexo Técnico\n\n- Primer lineamiento obligatorio.\n- Segundo lineamiento obligatorio.\n"
+
+	wCreate := doAuthRequest(router, http.MethodPost, "/web/ideas/new", authorCookies, url.Values{
+		"csrf_token":                         {csrfCookie.Value},
+		"title":                              {"Guía Completa"},
+		"content":                            {longDoc},
+		"role_perm[" + docRole.ID.String() + "]": {"view"},
+	}, true)
+	if wCreate.Code != http.StatusOK {
+		t.Fatalf("creating multi-fragment idea failed: %d %s", wCreate.Code, wCreate.Body.String())
+	}
+
+	allIdeas, err := q.ListIdeas(ctx)
+	if err != nil || len(allIdeas) < 2 {
+		t.Fatalf("expected >=2 fragments in DB, got %d (err=%v)", len(allIdeas), err)
+	}
+	firstFragID := allIdeas[0].ID.String()
+
+	// Unauthenticated access must redirect to login
+	reqAnon := httptest.NewRequest(http.MethodGet, "/web/ideas/"+firstFragID+"/full", nil)
+	wAnon := httptest.NewRecorder()
+	router.ServeHTTP(wAnon, reqAnon)
+	if wAnon.Code != http.StatusSeeOther {
+		t.Fatalf("expected 303 redirect for unauthenticated full doc request, got %d", wAnon.Code)
+	}
+
+	// Detail page must expose fragment tab and lazy full-document HTMX tab
+	wDetail := doAuthRequest(router, http.MethodGet, "/web/ideas/"+firstFragID, viewerCookies, nil, true)
+	if wDetail.Code != http.StatusOK {
+		t.Fatalf("viewer GET detail failed: %d", wDetail.Code)
+	}
+	if !strings.Contains(wDetail.Body.String(), "Documento completo") || !strings.Contains(wDetail.Body.String(), "/web/ideas/"+firstFragID+"/full") {
+		t.Fatalf("expected detail view to expose lazy Documento completo tab")
+	}
+
+	// Authorized viewer can fetch full document
+	wFullViewer := doAuthRequest(router, http.MethodGet, "/web/ideas/"+firstFragID+"/full", viewerCookies, nil, true)
+	if wFullViewer.Code != http.StatusOK {
+		t.Fatalf("viewer GET full doc failed: %d %s", wFullViewer.Code, wFullViewer.Body.String())
+	}
+	fullBody := wFullViewer.Body.String()
+	if !strings.Contains(fullBody, "Documento íntegro") || !strings.Contains(fullBody, "## Anexo Técnico") {
+		t.Fatalf("expected full document partial to include badge and full markdown, got: %s", fullBody)
+	}
+
+	// Outsider must receive 404 (RBAC isolation)
+	wFullOutsider := doAuthRequest(router, http.MethodGet, "/web/ideas/"+firstFragID+"/full", outsiderCookies, nil, true)
+	if wFullOutsider.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for outsider on full document endpoint, got %d", wFullOutsider.Code)
+	}
+}
