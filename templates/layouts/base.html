@@ -7,6 +7,149 @@
     <link rel="shortcut icon" type="image/x-icon" href="/media/tk.ico?v={{ faviconVersion }}" />
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+    <style>
+        .markdown-body {
+            color: #e4e4e7;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            word-break: break-word;
+        }
+        .markdown-body > *:first-child { margin-top: 0; }
+        .markdown-body > *:last-child { margin-bottom: 0; }
+        .markdown-body h1 {
+            font-size: 1.35em;
+            font-weight: 700;
+            color: #f4f4f5;
+            border-bottom: 1px solid #27272a;
+            padding-bottom: 0.35rem;
+            margin-top: 1rem;
+            margin-bottom: 0.55rem;
+        }
+        .markdown-body h2 {
+            font-size: 1.18em;
+            font-weight: 600;
+            color: #f4f4f5;
+            border-bottom: 1px solid #27272a;
+            padding-bottom: 0.25rem;
+            margin-top: 0.9rem;
+            margin-bottom: 0.45rem;
+        }
+        .markdown-body h3 {
+            font-size: 1.05em;
+            font-weight: 600;
+            color: #f4f4f5;
+            margin-top: 0.75rem;
+            margin-bottom: 0.35rem;
+        }
+        .markdown-body h4 {
+            font-size: 0.98em;
+            font-weight: 600;
+            color: #e4e4e7;
+            margin-top: 0.6rem;
+            margin-bottom: 0.3rem;
+        }
+        .markdown-body p {
+            margin-top: 0.45rem;
+            margin-bottom: 0.45rem;
+            line-height: 1.65;
+        }
+        .markdown-body strong {
+            font-weight: 600;
+            color: #67e8f9;
+        }
+        .markdown-body em {
+            font-style: italic;
+            color: #cbd5e1;
+        }
+        .markdown-body del {
+            text-decoration: line-through;
+            color: #71717a;
+        }
+        .markdown-body ul {
+            list-style-type: disc;
+            padding-left: 1.35rem;
+            margin-top: 0.45rem;
+            margin-bottom: 0.45rem;
+        }
+        .markdown-body ol {
+            list-style-type: decimal;
+            padding-left: 1.35rem;
+            margin-top: 0.45rem;
+            margin-bottom: 0.45rem;
+        }
+        .markdown-body li {
+            margin-top: 0.2rem;
+            margin-bottom: 0.2rem;
+            line-height: 1.55;
+        }
+        .markdown-body blockquote {
+            border-left: 3px solid #06b6d4;
+            padding: 0.35rem 0.75rem;
+            color: #a1a1aa;
+            font-style: italic;
+            margin-top: 0.55rem;
+            margin-bottom: 0.55rem;
+            background: rgba(6, 182, 212, 0.06);
+            border-radius: 0 0.125rem 0.125rem 0;
+        }
+        .markdown-body code {
+            background: #18181b;
+            border: 1px solid #27272a;
+            padding: 0.1rem 0.3rem;
+            border-radius: 0.2rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            color: #67e8f9;
+            font-size: 0.9em;
+        }
+        .markdown-body pre {
+            background: #09090b;
+            border: 1px solid #27272a;
+            padding: 0.75rem;
+            border-radius: 0.25rem;
+            overflow-x: auto;
+            margin-top: 0.65rem;
+            margin-bottom: 0.65rem;
+        }
+        .markdown-body pre code {
+            background: transparent;
+            border: none;
+            padding: 0;
+            color: #f4f4f5;
+            font-size: 0.88em;
+            display: block;
+            line-height: 1.5;
+        }
+        .markdown-body hr {
+            border: none;
+            border-top: 1px solid #27272a;
+            margin: 1rem 0;
+        }
+        .markdown-body a {
+            color: #38bdf8;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+        .markdown-body a:hover {
+            color: #67e8f9;
+        }
+        .markdown-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0.65rem 0;
+            font-size: 0.92em;
+        }
+        .markdown-body th, .markdown-body td {
+            border: 1px solid #27272a;
+            padding: 0.4rem 0.6rem;
+            text-align: left;
+        }
+        .markdown-body th {
+            background: #18181b;
+            color: #f4f4f5;
+            font-weight: 600;
+        }
+    </style>
     <title>
         Thinker: {{ .title }}
     </title>
@@ -20,5 +163,92 @@
     </main>
 
     {{template "footer.html" .}}
+
+    <script>
+    (function () {
+        function escapeHtml(str) {
+            return String(str || "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function fallbackMarkdown(raw) {
+            let html = escapeHtml(raw);
+            html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>");
+            html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>");
+            html = html.replace(/^# (.+)$/gm, "<h1>$1</h1>");
+            html = html.replace(/^&gt; (.+)$/gm, "<blockquote>$1</blockquote>");
+            html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+            html = html.replace(/(^|[^_])_([^_\n]+)_/g, "$1<em>$2</em>");
+            html = html.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+            html = html.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+            html = html.replace(/^\s*[-*]\s+(.+)$/gm, "<li>$1</li>");
+            html = html.replace(/\n\n+/g, "</p><p>");
+            html = html.replace(/\n/g, "<br/>");
+            return "<p>" + html + "</p>";
+        }
+
+        window.thinkerEscapeHtml = escapeHtml;
+
+        window.thinkerRenderMarkdown = function (raw) {
+            if (!raw) return "";
+            if (typeof window.marked !== "undefined" && typeof window.marked.parse === "function" && typeof window.DOMPurify !== "undefined") {
+                try {
+                    const parsed = window.marked.parse(String(raw), { breaks: true, gfm: true });
+                    return window.DOMPurify.sanitize(parsed, { USE_PROFILES: { html: true } });
+                } catch (_) {}
+            }
+            return fallbackMarkdown(raw);
+        };
+
+        window.thinkerHydrateMarkdown = function (root) {
+            const scope = root && typeof root.querySelectorAll === "function" ? root : document;
+            const blocks = scope.querySelectorAll("[data-md-container]");
+            blocks.forEach(function (container) {
+                const source = container.querySelector("[data-md-source]");
+                const target = container.querySelector("[data-md-render]");
+                if (!source || !target || target.dataset.mdRendered === "1") return;
+                target.innerHTML = window.thinkerRenderMarkdown(source.value || "");
+                target.dataset.mdRendered = "1";
+            });
+        };
+
+        window.thinkerCopyText = function (text, btn) {
+            if (!text) return;
+            const prev = btn ? btn.textContent : "";
+            function done() {
+                if (!btn) return;
+                btn.textContent = "Copiado";
+                setTimeout(function () { btn.textContent = prev; }, 1400);
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(done).catch(function () {
+                    const ta = document.createElement("textarea");
+                    ta.value = text;
+                    ta.style.position = "fixed";
+                    ta.style.opacity = "0";
+                    document.body.appendChild(ta);
+                    ta.select();
+                    try { document.execCommand("copy"); } catch (_) {}
+                    document.body.removeChild(ta);
+                    done();
+                });
+            }
+        };
+
+        document.addEventListener("DOMContentLoaded", function () {
+            window.thinkerHydrateMarkdown(document);
+        });
+        document.body.addEventListener("htmx:afterSwap", function (evt) {
+            window.thinkerHydrateMarkdown((evt && evt.target) || document);
+        });
+        document.body.addEventListener("htmx:afterSettle", function (evt) {
+            window.thinkerHydrateMarkdown((evt && evt.target) || document);
+        });
+    })();
+    </script>
 </body>
 </html>
