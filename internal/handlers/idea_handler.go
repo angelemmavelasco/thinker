@@ -402,6 +402,35 @@ func (h *IdeaHandler) IdeaDetail(c *gin.Context) {
 	config.Render(c, http.StatusOK, "idea_detail.html", data)
 }
 
+func (h *IdeaHandler) IdeaFullDocumentJSON(c *gin.Context) {
+	actor, ok := middleware.ActorFromContext(c)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "No autenticado"})
+		return
+	}
+
+	ideaID := c.Param("id")
+	fullDoc, err := h.service.GetIdeaFullDocument(c.Request.Context(), actor, ideaID)
+	if err != nil {
+		if errors.Is(err, services.ErrIdeaNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "No se encontró el documento solicitado"})
+			return
+		}
+		log.Printf("[ideas] Error consultando documento completo [%s]: %v", ideaID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al consultar el documento completo"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"ideaId":          fullDoc.IdeaID.String(),
+		"groupId":         fullDoc.GroupID.String(),
+		"title":           fullDoc.Title,
+		"content":         fullDoc.Content,
+		"groupCount":      fullDoc.GroupCount,
+		"isReconstructed": fullDoc.IsReconstructed,
+	})
+}
+
 func (h *IdeaHandler) EditIdeaView(c *gin.Context) {
 	actor, ok := middleware.ActorFromContext(c)
 	if !ok {

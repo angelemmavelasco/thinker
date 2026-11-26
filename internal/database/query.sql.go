@@ -591,6 +591,16 @@ func (q *Queries) DeleteIdea(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const deleteIdeaDocumentByGroupID = `-- name: DeleteIdeaDocumentByGroupID :exec
+DELETE FROM idea_documents
+WHERE group_id = $1
+`
+
+func (q *Queries) DeleteIdeaDocumentByGroupID(ctx context.Context, groupID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, deleteIdeaDocumentByGroupID, groupID)
+	return err
+}
+
 const deleteIdeaKeywordsByIdeaID = `-- name: DeleteIdeaKeywordsByIdeaID :exec
 DELETE FROM idea_keywords
 WHERE idea_id = $1
@@ -823,6 +833,24 @@ func (q *Queries) GetIdeaByID(ctx context.Context, id uuid.UUID) (Idea, error) {
 		&i.RestructuredContent,
 		&i.Status,
 		&i.Embedding,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getIdeaDocumentByGroupID = `-- name: GetIdeaDocumentByGroupID :one
+SELECT group_id, title, raw_content, created_at, updated_at FROM idea_documents
+WHERE group_id = $1 LIMIT 1
+`
+
+func (q *Queries) GetIdeaDocumentByGroupID(ctx context.Context, groupID uuid.UUID) (IdeaDocument, error) {
+	row := q.db.QueryRowContext(ctx, getIdeaDocumentByGroupID, groupID)
+	var i IdeaDocument
+	err := row.Scan(
+		&i.GroupID,
+		&i.Title,
+		&i.RawContent,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1684,6 +1712,52 @@ func (q *Queries) ListHubsByIdeaID(ctx context.Context, ideaID uuid.UUID) ([]Lis
 			&i.RelationshipType,
 			&i.Weight,
 			&i.IsManualOverride,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIdeaContentsByGroupID = `-- name: ListIdeaContentsByGroupID :many
+SELECT id, title, content, chunk_index, chunk_total, status
+FROM ideas
+WHERE group_id = $1
+ORDER BY chunk_index ASC, created_at ASC
+`
+
+type ListIdeaContentsByGroupIDRow struct {
+	ID         uuid.UUID
+	Title      string
+	Content    string
+	ChunkIndex int32
+	ChunkTotal int32
+	Status     string
+}
+
+func (q *Queries) ListIdeaContentsByGroupID(ctx context.Context, groupID uuid.UUID) ([]ListIdeaContentsByGroupIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, listIdeaContentsByGroupID, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListIdeaContentsByGroupIDRow
+	for rows.Next() {
+		var i ListIdeaContentsByGroupIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Content,
+			&i.ChunkIndex,
+			&i.ChunkTotal,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -2904,6 +2978,35 @@ func (q *Queries) UpdateUserSuperuserStatus(ctx context.Context, arg UpdateUserS
 		&i.FailedLoginAttempts,
 		&i.LockedUntil,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const upsertIdeaDocument = `-- name: UpsertIdeaDocument :one
+INSERT INTO idea_documents (group_id, title, raw_content)
+VALUES ($1, $2, $3)
+ON CONFLICT (group_id)
+DO UPDATE SET title = EXCLUDED.title,
+              raw_content = EXCLUDED.raw_content,
+              updated_at = CURRENT_TIMESTAMP
+RETURNING group_id, title, raw_content, created_at, updated_at
+`
+
+type UpsertIdeaDocumentParams struct {
+	GroupID    uuid.UUID
+	Title      string
+	RawContent string
+}
+
+func (q *Queries) UpsertIdeaDocument(ctx context.Context, arg UpsertIdeaDocumentParams) (IdeaDocument, error) {
+	row := q.db.QueryRowContext(ctx, upsertIdeaDocument, arg.GroupID, arg.Title, arg.RawContent)
+	var i IdeaDocument
+	err := row.Scan(
+		&i.GroupID,
+		&i.Title,
+		&i.RawContent,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

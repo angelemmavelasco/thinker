@@ -153,3 +153,11 @@ CREATE TABLE IF NOT EXISTS idea_role_permissions (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (idea_id, role_id)
 );
+
+CREATE TABLE IF NOT EXISTS idea_documents (
+    group_id UUID PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    raw_content TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

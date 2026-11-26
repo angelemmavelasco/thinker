@@ -164,3 +164,148 @@ func TestCollapseSpacedArtifacts(t *testing.T) {
 		t.Errorf("expected normal text to remain unchanged")
 	}
 }
+
+func TestChunkText_PreservesMarkdownFormatting(t *testing.T) {
+	doc := strings.Join([]string{
+		"# Guía de uso",
+		"",
+		"Thinker es un asistente agnóstico al dominio que responde con base en tu documentación.",
+		"",
+		"> Thinker utiliza modelos de lenguaje y búsquedas semánticas.",
+		"",
+		"## Cómo redactar notas",
+		"",
+		"- **Usa títulos claros:** Nombra el tema principal desde el inicio.",
+		"- **Estructura en Markdown:** Usa encabezados y listas para mejorar la lectura.",
+		"",
+		"```go",
+		"func main() {",
+		"",
+		"    println(\"hola\")",
+		"}",
+		"```",
+		"",
+		"## Cómo preguntar",
+		"",
+		"Formula consultas concretas mencionando el área o política exacta que necesitas consultar.",
+	}, "\n")
+
+	chunks := ChunkText(doc, 260)
+	if len(chunks) < 2 {
+		t.Fatalf("expected multiple chunks, got %d", len(chunks))
+	}
+
+	if !strings.Contains(chunks[0], "# Guía de uso\n\nThinker es un asistente") {
+		t.Errorf("expected paragraph breaks preserved in first chunk, got:\n%q", chunks[0])
+	}
+
+	joinedAll := strings.Join(chunks, "\n\n")
+	if !strings.Contains(joinedAll, "\n> Thinker utiliza") {
+		t.Errorf("expected blockquote on its own line, got:\n%q", joinedAll)
+	}
+	if !strings.Contains(joinedAll, "- **Usa títulos claros:** Nombra el tema principal desde el inicio.\n- **Estructura en Markdown:**") {
+		t.Errorf("expected list items separated by newline, got:\n%q", joinedAll)
+	}
+	if !strings.Contains(joinedAll, "```go\nfunc main() {\n\n    println(\"hola\")\n}\n```") {
+		t.Errorf("expected fenced code block kept intact, got:\n%q", joinedAll)
+	}
+}
+
+func TestStitchChunksWithoutOverlap(t *testing.T) {
+	doc := strings.Join([]string{
+		"# Política de Seguridad",
+		"",
+		"Primer párrafo extenso con detalles sobre autenticación, rotación de tokens y control de acceso por roles en la organización.",
+		"",
+		"## Reglas de Compartición",
+		"",
+		"- Toda nota inicia privada para su autor y superusuarios.",
+		"- Los permisos de lectura y edición se asignan explícitamente por rol.",
+		"",
+		"Tercer párrafo final explicando la auditoría de cambios y las consideraciones operativas para despliegue en producción.",
+	}, "\n")
+
+	chunks := ChunkText(doc, 180)
+	if len(chunks) < 2 {
+		t.Fatalf("expected at least 2 chunks, got %d", len(chunks))
+	}
+
+	stitched := StitchChunksWithoutOverlap(chunks)
+	if stitched != doc {
+		t.Errorf("stitched document mismatch.\nExpected:\n%q\n\nGot:\n%q", doc, stitched)
+	}
+}
+
+func TestChunkText_QuickstartStyleMarkdownBlocksAndTable(t *testing.T) {
+	doc := strings.Join([]string{
+		"### Cuenta DEMO",
+		"",
+		"Puedes probar las funcionalidades de thinker al ingresar con una cuenta demo, para ello",
+		"es necesario ingresar con un usuario y contraseña preestablecidos.",
+		"> * Usuario: thinker.demo@gmail.com",
+		"> * Contraseña: thinker1234",
+		"",
+		"Este usuario cuenta con rol demo, por lo que solo es posible ver guías de usuario y soporte general.",
+		"",
+		"### Guía de usuario",
+		"",
+		"**Qué es Thinker**",
+		"",
+		"Thinker es un espacio de conocimiento colaborativo que transforma notas y documentos en una red de ideas conectadas.",
+		"",
+		"**Cómo iniciar sesión**",
+		"",
+		"• Abre Thinker y selecciona Iniciar sesión, o Crear cuenta si aún no tienes usuario.",
+		"",
+		"• Si te registras con correo y contraseña, abre el enlace de confirmación.",
+		"",
+		"_Matriz rápida de capacidades_",
+		"",
+		"| Acción | Autor | Rol Ver | Rol Editar | Superusuario |",
+		"| --- | :---: | :---: | :---: | :---: |",
+		"| Ver nota y grafo | Sí | Sí | Sí | Sí |",
+		"| Editar contenido | Sí | No | Sí | Sí |",
+		"| Eliminar nota | Sí | No | No | Sí |",
+		"",
+		"### Buenas prácticas",
+		"",
+		"Thinker responde exclusivamente a partir de la documentación indexada.",
+		"> Thinker utiliza modelos de lenguaje y búsquedas semánticas, por lo que puede cometer errores.",
+		"",
+		"**Cómo redactar notas**",
+		"",
+		"_Usa títulos claros y contexto completo_",
+		"",
+		"Nombra explícitamente el tema, área, producto o regla desde el título y los primeros párrafos.",
+	}, "\n")
+
+	chunks := ChunkText(doc, 520)
+	if len(chunks) < 3 {
+		t.Fatalf("expected at least 3 chunks, got %d", len(chunks))
+	}
+
+	if !strings.Contains(chunks[0], "### Cuenta DEMO\n\nPuedes probar") {
+		t.Fatalf("expected blank line preserved after ### Cuenta DEMO, got:\n%q", chunks[0])
+	}
+	if !strings.Contains(chunks[0], "> * Contraseña: thinker1234\n\nEste usuario cuenta con rol demo") {
+		t.Fatalf("expected blockquote closed with double newline before next paragraph, got:\n%q", chunks[0])
+	}
+
+	for i, c := range chunks {
+		firstLine := c
+		if nl := strings.IndexByte(c, '\n'); nl >= 0 {
+			firstLine = c[:nl]
+		}
+		if strings.HasPrefix(strings.TrimSpace(firstLine), "|") && !strings.Contains(c, "\n| ---") {
+			t.Errorf("chunk %d starts with orphan table row:\n%q", i+1, c)
+		}
+		if strings.Count(c, "**")%2 != 0 {
+			t.Errorf("chunk %d has unbalanced ** markers:\n%q", i+1, c)
+		}
+	}
+
+	stitched := StitchChunksWithoutOverlap(chunks)
+	if stitched != doc {
+		t.Errorf("stitched quickstart-style doc mismatch.\nExpected:\n%q\n\nGot:\n%q", doc, stitched)
+	}
+}

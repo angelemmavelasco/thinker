@@ -1,16 +1,6 @@
 {{define "content"}}
 
 <script src="https://unpkg.com/force-graph"></script>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<style>
-.markdown-body strong { font-weight: 600; color: #f4f4f5; }
-.markdown-body ul { list-style-type: disc; padding-left: 1.25rem; margin-top: 0.25rem; margin-bottom: 0.25rem; }
-.markdown-body ol { list-style-type: decimal; padding-left: 1.25rem; margin-top: 0.25rem; margin-bottom: 0.25rem; }
-.markdown-body li { margin-top: 0.15rem; margin-bottom: 0.15rem; }
-.markdown-body p { margin-top: 0.25rem; margin-bottom: 0.25rem; line-height: 1.5; }
-.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { font-weight: 600; color: #f4f4f5; margin-top: 0.5rem; margin-bottom: 0.25rem; }
-.markdown-body code { background: #18181b; border: 1px solid #27272a; padding: 0.1rem 0.25rem; border-radius: 0.125rem; font-family: monospace; color: #67e8f9; }
-</style>
 
 <div class="flex flex-col gap-4">
     <div class="flex flex-wrap items-center justify-between border-b border-cyan-500 py-1.5 gap-3">
@@ -53,20 +43,26 @@
         </div>
     </div>
 
-    <!-- Layout contenedor: en móvil flex-col (Chat arriba order-1, Grafo abajo order-2), en desktop grid 4 cols (Grafo col-span-3, Chat col-span-1) -->
-    <div class="flex flex-col lg:grid lg:grid-cols-4 gap-4">
-        <!-- Panel lateral (Chat / Detalle): Order-1 en móvil, lg:order-2 en desktop -->
-        <aside id="node-inspector" class="order-1 lg:order-2 lg:col-span-1 border border-zinc-800 rounded-xs bg-zinc-900 p-3 flex flex-col gap-3 h-[420px] lg:h-[72vh] overflow-hidden">
+    <!-- Layout contenedor: en móvil flex-col (Chat arriba order-1, Grafo abajo order-2), en desktop grid 2 cols (50% Grafo / 50% Chat o Detalle) -->
+    <div class="flex flex-col lg:grid lg:grid-cols-2 gap-4">
+        <!-- Panel lateral (Chat / Detalle): Order-1 en móvil, lg:order-2 en desktop (50%) -->
+        <aside id="node-inspector" class="order-1 lg:order-2 lg:col-span-1 border border-zinc-800 rounded-xs bg-zinc-900 p-3 sm:p-4 flex flex-col gap-3 h-[420px] lg:h-[74vh] overflow-hidden">
             <div id="panel-inspector" class="hidden flex-col gap-3 h-full overflow-y-auto">
                 <div class="flex items-center justify-between border-b border-zinc-800 pb-1.5 shrink-0">
                     <h3 class="text-xs font-semibold text-zinc-100">
                         Detalle de selección
                     </h3>
-                    <button id="switch-to-chat-btn" type="button"
-                        class="border border-cyan-500/50 hover:border-cyan-400 bg-cyan-950/40 px-2 py-0.5 rounded-xs cursor-pointer text-cyan-300 hover:text-cyan-200 text-[10px] transition-all flex items-center gap-1">
-                        <span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-                        <span>Abrir chat</span>
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <a id="inspector-open-detail" href="#"
+                            class="hidden border border-zinc-800 hover:border-cyan-500 bg-zinc-950 px-2 py-0.5 rounded-xs text-zinc-300 hover:text-cyan-300 text-[10px] transition-all">
+                            Abrir nota →
+                        </a>
+                        <button id="switch-to-chat-btn" type="button"
+                            class="border border-cyan-500/50 hover:border-cyan-400 bg-cyan-950/40 px-2 py-0.5 rounded-xs cursor-pointer text-cyan-300 hover:text-cyan-200 text-[10px] transition-all flex items-center gap-1">
+                            <span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                            <span>Abrir chat</span>
+                        </button>
+                    </div>
                 </div>
                 <div id="inspector-empty" class="text-zinc-500 my-auto text-center py-8">
                     Selecciona una idea o tema en la red para ver su contenido y conexiones.
@@ -81,9 +77,9 @@
                         <span class="text-[10px] text-cyan-400 uppercase font-medium">Síntesis</span>
                         <p id="inspector-body" class="text-zinc-200 leading-relaxed whitespace-pre-line border-l-2 border-cyan-500 pl-2"></p>
                     </div>
-                    <div id="inspector-original-box" class="flex flex-col gap-1">
+                    <div id="inspector-original-box" class="flex flex-col gap-1.5">
                         <span class="text-[10px] text-zinc-400 uppercase font-medium">Idea original</span>
-                        <p id="inspector-original" class="text-zinc-400 leading-relaxed whitespace-pre-line border-l-2 border-zinc-700 pl-2"></p>
+                        <div id="inspector-original" class="markdown-body text-zinc-200 leading-relaxed border-l-2 border-zinc-700 pl-3 text-xs"></div>
                     </div>
                     <div id="inspector-keywords-box" class="flex flex-col gap-1.5 mt-2">
                         <span class="text-[10px] text-zinc-400 uppercase">Temas clave</span>
@@ -133,8 +129,8 @@
             </div>
         </aside>
 
-        <!-- Grafo interactivo: Order-2 en móvil, lg:order-1 en desktop -->
-        <div id="graph-wrapper" class="order-2 lg:order-1 lg:col-span-3 relative border border-zinc-800 rounded-xs bg-zinc-950 h-[380px] sm:h-[480px] lg:h-[72vh] overflow-hidden">
+        <!-- Grafo interactivo: Order-2 en móvil, lg:order-1 en desktop (50%) -->
+        <div id="graph-wrapper" class="order-2 lg:order-1 lg:col-span-1 relative border border-zinc-800 rounded-xs bg-zinc-950 h-[380px] sm:h-[480px] lg:h-[74vh] overflow-hidden">
             <div id="network-graph" class="w-full h-full"></div>
             <div id="graph-stats" class="absolute bottom-2 left-2 bg-zinc-900/80 border border-zinc-800 px-2 py-1 rounded-xs text-[10px] text-zinc-400 pointer-events-none">
                 Cargando red...
@@ -153,6 +149,7 @@
 
     const emptyEl = document.getElementById("inspector-empty");
     const contentEl = document.getElementById("inspector-content");
+    const openDetailEl = document.getElementById("inspector-open-detail");
     const badgeEl = document.getElementById("inspector-badge");
     const titleEl = document.getElementById("inspector-title");
     const metaEl = document.getElementById("inspector-meta");
@@ -379,6 +376,15 @@
         contentEl.classList.remove("hidden");
         contentEl.classList.add("flex");
 
+        if (openDetailEl) {
+            if (node.type === "idea" && node.id) {
+                openDetailEl.href = "/web/ideas/" + encodeURIComponent(node.id);
+                openDetailEl.classList.remove("hidden");
+            } else {
+                openDetailEl.classList.add("hidden");
+            }
+        }
+
         if (node.type === "moc") {
             badgeEl.textContent = "Tema Maestro (MOC)";
             badgeEl.className = "text-[9px] uppercase px-1.5 py-0.5 rounded-xs font-semibold bg-purple-500/20 text-purple-300";
@@ -414,10 +420,10 @@
             }
 
             if (origText) {
-                originalEl.textContent = origText;
+                originalEl.innerHTML = renderMarkdown(origText);
                 originalBoxEl.classList.remove("hidden");
             } else if (summaryText) {
-                originalEl.textContent = summaryText;
+                originalEl.innerHTML = renderMarkdown(summaryText);
                 originalBoxEl.classList.remove("hidden");
             } else {
                 originalBoxEl.classList.add("hidden");
@@ -491,6 +497,9 @@
     }
 
     window.addEventListener("resize", resizeGraph);
+    if (typeof ResizeObserver !== "undefined" && wrapper) {
+        new ResizeObserver(resizeGraph).observe(wrapper);
+    }
     resizeGraph();
 
     toggleKwBtn.addEventListener("click", () => {
@@ -611,10 +620,8 @@
 
     function renderMarkdown(raw) {
         if (!raw) return "";
-        if (typeof window.marked !== "undefined" && typeof window.marked.parse === "function") {
-            try {
-                return window.marked.parse(raw);
-            } catch (_) {}
+        if (typeof window.thinkerRenderMarkdown === "function") {
+            return window.thinkerRenderMarkdown(raw);
         }
         let html = escapeHtml(raw);
         html = html.replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-zinc-100">$1</strong>');

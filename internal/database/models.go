@@ -55,6 +55,14 @@ type IdeaChunk struct {
 	CreatedAt  time.Time
 }
 
+type IdeaDocument struct {
+	GroupID    uuid.UUID
+	Title      string
+	RawContent string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
 type IdeaKeyword struct {
 	IdeaID    uuid.UUID
 	KeywordID uuid.UUID

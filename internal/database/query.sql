@@ -643,3 +643,26 @@ WHERE i1.id = $1
 DELETE FROM idea_links
 WHERE (source_idea_id = $1 OR target_idea_id = $1)
   AND relation_type != 'sequence';
+
+-- name: UpsertIdeaDocument :one
+INSERT INTO idea_documents (group_id, title, raw_content)
+VALUES ($1, $2, $3)
+ON CONFLICT (group_id)
+DO UPDATE SET title = EXCLUDED.title,
+              raw_content = EXCLUDED.raw_content,
+              updated_at = CURRENT_TIMESTAMP
+RETURNING *;
+
+-- name: GetIdeaDocumentByGroupID :one
+SELECT * FROM idea_documents
+WHERE group_id = $1 LIMIT 1;
+
+-- name: DeleteIdeaDocumentByGroupID :exec
+DELETE FROM idea_documents
+WHERE group_id = $1;
+
+-- name: ListIdeaContentsByGroupID :many
+SELECT id, title, content, chunk_index, chunk_total, status
+FROM ideas
+WHERE group_id = $1
+ORDER BY chunk_index ASC, created_at ASC;

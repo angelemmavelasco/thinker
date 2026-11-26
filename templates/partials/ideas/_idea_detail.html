@@ -141,7 +141,13 @@
         <span class="text-zinc-300">
             Estás viendo el <strong class="text-cyan-300">fragmento {{.detail.CurrentPosition}} de {{.detail.GroupCount}}</strong> de esta misma idea.
         </span>
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
+            <button
+                type="button"
+                onclick="var tab=document.getElementById('idea-tab-full'); if(tab){ tab.click(); var card=document.getElementById('idea-content-card'); if(card){ card.scrollIntoView({behavior:'smooth', block:'start'}); } }"
+                class="border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-xs cursor-pointer transition-colors text-[11px]">
+                Ver documento completo
+            </button>
             {{if .detail.PrevFragmentID}}
             <button
                 type="button"
@@ -206,13 +212,90 @@
             </div>
             {{end}}
 
-            <div class="border border-zinc-800 rounded-xs bg-zinc-900 p-4 flex flex-col gap-2">
-                <span class="text-[10px] text-zinc-400 uppercase font-semibold tracking-wider">
-                    Idea original
-                </span>
-                <p class="text-zinc-300 leading-relaxed whitespace-pre-line border-l-2 border-zinc-700 pl-3 text-xs">
-                    {{.detail.Idea.Content}}
-                </p>
+            <div id="idea-content-card" class="border border-zinc-800 rounded-xs bg-zinc-900 p-4 flex flex-col gap-3">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
+                    {{if gt .detail.GroupCount 1}}
+                    <div class="inline-flex items-center gap-1 bg-zinc-950 p-0.5 rounded-xs border border-zinc-800 text-[11px]">
+                        <button
+                            id="idea-tab-fragment"
+                            type="button"
+                            onclick="window.thinkerSwitchIdeaView('fragment')"
+                            class="px-2.5 py-1 rounded-xs font-medium cursor-pointer transition-all bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
+                        >
+                            Este fragmento ({{.detail.CurrentPosition}}/{{.detail.GroupCount}})
+                        </button>
+                        <button
+                            id="idea-tab-full"
+                            type="button"
+                            data-full-url='{{url "api:ideas:full" .detail.Idea.ID}}'
+                            onclick="window.thinkerSwitchIdeaView('full')"
+                            class="px-2.5 py-1 rounded-xs font-medium cursor-pointer transition-all text-zinc-400 hover:text-zinc-200 border border-transparent"
+                        >
+                            Documento completo
+                        </button>
+                    </div>
+                    {{else}}
+                    <span class="text-[10px] text-zinc-400 uppercase font-semibold tracking-wider">
+                        Idea original
+                    </span>
+                    {{end}}
+
+                    <div class="flex items-center gap-1.5 text-[10px]">
+                        <button
+                            id="idea-toggle-raw-btn"
+                            type="button"
+                            onclick="window.thinkerToggleIdeaFormatMode()"
+                            class="border border-zinc-800 hover:border-zinc-700 bg-zinc-950 text-zinc-400 hover:text-zinc-200 px-2 py-1 rounded-xs cursor-pointer transition-colors"
+                        >
+                            Ver texto plano
+                        </button>
+                        <button
+                            type="button"
+                            onclick="window.thinkerCopyActiveIdeaContent(this)"
+                            class="border border-zinc-800 hover:border-cyan-500/60 bg-zinc-950 text-zinc-400 hover:text-cyan-300 px-2 py-1 rounded-xs cursor-pointer transition-colors"
+                        >
+                            Copiar
+                        </button>
+                    </div>
+                </div>
+
+                <div id="idea-fragment-panel" class="flex flex-col gap-2" data-md-container>
+                    <textarea id="idea-fragment-raw" data-md-source readonly class="hidden">{{.detail.Idea.Content}}</textarea>
+                    <div
+                        id="idea-fragment-rendered"
+                        data-md-render
+                        class="markdown-body text-zinc-200 leading-relaxed border-l-2 border-zinc-700 pl-3.5 text-[13px]"
+                    ></div>
+                    <pre
+                        id="idea-fragment-plain"
+                        class="hidden text-zinc-300 leading-relaxed whitespace-pre-wrap break-words font-mono border-l-2 border-zinc-700 pl-3.5 text-xs overflow-x-auto"
+                    ></pre>
+                </div>
+
+                {{if gt .detail.GroupCount 1}}
+                <div id="idea-full-doc-wrapper" class="hidden flex-col gap-2.5">
+                    <div id="idea-full-doc-loading" class="hidden items-center gap-2 py-6 text-zinc-400 text-xs">
+                        <span class="inline-block w-3 h-3 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin"></span>
+                        <span>Cargando documento completo...</span>
+                    </div>
+                    <div id="idea-full-doc-error" class="hidden border border-red-500/40 bg-red-950/20 text-red-300 px-3 py-2 rounded-xs text-xs"></div>
+                    <div id="idea-full-doc-content" class="hidden flex-col gap-2.5">
+                        <div class="flex flex-wrap items-center gap-2 text-[10px] text-zinc-400">
+                            <span id="idea-full-title" class="font-medium text-zinc-200"></span>
+                            <span id="idea-full-count" class="px-1.5 py-0.5 rounded-xs bg-zinc-800 text-zinc-300 border border-zinc-700 font-mono"></span>
+                            <span id="idea-full-mode-badge" class="px-1.5 py-0.5 rounded-xs border"></span>
+                        </div>
+                        <div
+                            id="idea-full-rendered"
+                            class="markdown-body text-zinc-200 leading-relaxed border-l-2 border-cyan-500/60 pl-3.5 text-[13px] max-h-[68vh] overflow-y-auto pr-2"
+                        ></div>
+                        <pre
+                            id="idea-full-plain"
+                            class="hidden text-zinc-300 leading-relaxed whitespace-pre-wrap break-words font-mono border-l-2 border-cyan-500/60 pl-3.5 text-xs max-h-[68vh] overflow-y-auto pr-2"
+                        ></pre>
+                    </div>
+                </div>
+                {{end}}
             </div>
         </div>
 
@@ -358,3 +441,196 @@
         </div>
     </div>
 </div>
+<script>
+(function () {
+    let activeTab = "fragment";
+    let showPlainText = false;
+    let fullDocCache = null;
+    let fullDocLoading = false;
+
+    const activeTabClasses = ["bg-cyan-500/20", "text-cyan-300", "border-cyan-500/30"];
+    const inactiveTabClasses = ["text-zinc-400", "hover:text-zinc-200", "border-transparent"];
+
+    function setTabState(btn, isActive) {
+        if (!btn) return;
+        activeTabClasses.forEach(function (c) { btn.classList.toggle(c, isActive); });
+        inactiveTabClasses.forEach(function (c) { btn.classList.toggle(c, !isActive); });
+    }
+
+    function ensurePlainTextPopulated() {
+        if (!showPlainText) return;
+        const fragRaw = document.getElementById("idea-fragment-raw");
+        const fragPlain = document.getElementById("idea-fragment-plain");
+        if (fragRaw && fragPlain && !fragPlain.dataset.filled) {
+            fragPlain.textContent = fragRaw.value || "";
+            fragPlain.dataset.filled = "1";
+        }
+        const fullPlain = document.getElementById("idea-full-plain");
+        if (fullDocCache && fullPlain && !fullPlain.dataset.filled) {
+            fullPlain.textContent = fullDocCache.content || "";
+            fullPlain.dataset.filled = "1";
+        }
+    }
+
+    window.thinkerSyncIdeaFormatMode = function () {
+        ensurePlainTextPopulated();
+        const fragRendered = document.getElementById("idea-fragment-rendered");
+        const fragPlain = document.getElementById("idea-fragment-plain");
+        const fullRendered = document.getElementById("idea-full-rendered");
+        const fullPlain = document.getElementById("idea-full-plain");
+        const toggleBtn = document.getElementById("idea-toggle-raw-btn");
+
+        if (fragRendered && fragPlain) {
+            fragRendered.classList.toggle("hidden", showPlainText);
+            fragPlain.classList.toggle("hidden", !showPlainText);
+        }
+        if (fullRendered && fullPlain) {
+            fullRendered.classList.toggle("hidden", showPlainText);
+            fullPlain.classList.toggle("hidden", !showPlainText);
+        }
+        if (toggleBtn) {
+            toggleBtn.textContent = showPlainText ? "Vista formateada" : "Ver texto plano";
+        }
+    };
+
+    window.thinkerToggleIdeaFormatMode = function () {
+        showPlainText = !showPlainText;
+        window.thinkerSyncIdeaFormatMode();
+    };
+
+    function renderFullDocError(msg) {
+        const loadingEl = document.getElementById("idea-full-doc-loading");
+        const errorEl = document.getElementById("idea-full-doc-error");
+        const contentEl = document.getElementById("idea-full-doc-content");
+        if (loadingEl) {
+            loadingEl.classList.add("hidden");
+            loadingEl.classList.remove("flex");
+        }
+        if (contentEl) {
+            contentEl.classList.add("hidden");
+            contentEl.classList.remove("flex");
+        }
+        if (errorEl) {
+            errorEl.textContent = msg;
+            errorEl.classList.remove("hidden");
+        }
+    }
+
+    function loadFullDocumentOnce() {
+        if (fullDocCache || fullDocLoading) return;
+        const tabFull = document.getElementById("idea-tab-full");
+        const endpoint = tabFull ? (tabFull.getAttribute("data-full-url") || "").trim() : "";
+        if (!endpoint || endpoint.startsWith("#")) {
+            renderFullDocError("El servidor necesita reiniciarse con la compilación actualizada para cargar el documento completo.");
+            return;
+        }
+
+        const loadingEl = document.getElementById("idea-full-doc-loading");
+        const errorEl = document.getElementById("idea-full-doc-error");
+        if (errorEl) errorEl.classList.add("hidden");
+        if (loadingEl) {
+            loadingEl.classList.remove("hidden");
+            loadingEl.classList.add("flex");
+        }
+
+        fullDocLoading = true;
+        fetch(endpoint, {
+            method: "GET",
+            headers: { "Accept": "application/json" }
+        })
+        .then(function (res) {
+            const ct = (res.headers.get("content-type") || "").toLowerCase();
+            if (!res.ok) {
+                throw new Error("No se pudo cargar el documento completo (HTTP " + res.status + ").");
+            }
+            if (!ct.includes("application/json")) {
+                throw new Error("Respuesta inesperada del servidor. Verifica que el binario esté actualizado.");
+            }
+            return res.json();
+        })
+        .then(function (data) {
+            fullDocCache = data || {};
+            const titleEl = document.getElementById("idea-full-title");
+            const countEl = document.getElementById("idea-full-count");
+            const badgeEl = document.getElementById("idea-full-mode-badge");
+            const renderedEl = document.getElementById("idea-full-rendered");
+            const contentEl = document.getElementById("idea-full-doc-content");
+
+            if (titleEl) titleEl.textContent = fullDocCache.title || "";
+            if (countEl) countEl.textContent = (fullDocCache.groupCount || 1) + " fragmentos";
+            if (badgeEl) {
+                if (fullDocCache.isReconstructed) {
+                    badgeEl.textContent = "Ensamblado desde fragmentos";
+                    badgeEl.className = "px-1.5 py-0.5 rounded-xs border bg-amber-500/15 text-amber-300 border-amber-500/30";
+                    badgeEl.title = "Ensamblado automáticamente desde los fragmentos vigentes eliminando el texto solapado";
+                } else {
+                    badgeEl.textContent = "Documento íntegro";
+                    badgeEl.className = "px-1.5 py-0.5 rounded-xs border bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+                    badgeEl.title = "Documento original completo con formato intacto";
+                }
+            }
+            if (renderedEl) {
+                renderedEl.innerHTML = typeof window.thinkerRenderMarkdown === "function"
+                    ? window.thinkerRenderMarkdown(fullDocCache.content || "")
+                    : (fullDocCache.content || "");
+            }
+            if (loadingEl) {
+                loadingEl.classList.add("hidden");
+                loadingEl.classList.remove("flex");
+            }
+            if (contentEl) {
+                contentEl.classList.remove("hidden");
+                contentEl.classList.add("flex");
+            }
+            window.thinkerSyncIdeaFormatMode();
+        })
+        .catch(function (err) {
+            renderFullDocError((err && err.message) ? err.message : "Error cargando el documento completo.");
+        })
+        .finally(function () {
+            fullDocLoading = false;
+        });
+    }
+
+    window.thinkerSwitchIdeaView = function (tab) {
+        activeTab = tab === "full" ? "full" : "fragment";
+        const fragPanel = document.getElementById("idea-fragment-panel");
+        const fullWrap = document.getElementById("idea-full-doc-wrapper");
+        const tabFrag = document.getElementById("idea-tab-fragment");
+        const tabFull = document.getElementById("idea-tab-full");
+
+        if (fragPanel) {
+            fragPanel.classList.toggle("hidden", activeTab === "full");
+            fragPanel.classList.toggle("flex", activeTab !== "full");
+        }
+        if (fullWrap) {
+            fullWrap.classList.toggle("hidden", activeTab !== "full");
+            fullWrap.classList.toggle("flex", activeTab === "full");
+        }
+        setTabState(tabFrag, activeTab !== "full");
+        setTabState(tabFull, activeTab === "full");
+        if (activeTab === "full") {
+            loadFullDocumentOnce();
+        }
+        window.thinkerSyncIdeaFormatMode();
+    };
+
+    window.thinkerCopyActiveIdeaContent = function (btn) {
+        let text = "";
+        if (activeTab === "full" && fullDocCache && fullDocCache.content) {
+            text = fullDocCache.content;
+        } else {
+            const src = document.getElementById("idea-fragment-raw");
+            text = src ? (src.value || "") : "";
+        }
+        if (text && typeof window.thinkerCopyText === "function") {
+            window.thinkerCopyText(text, btn);
+        }
+    };
+
+    if (typeof window.thinkerHydrateMarkdown === "function") {
+        window.thinkerHydrateMarkdown(document.getElementById("idea-content-card") || document);
+    }
+    window.thinkerSyncIdeaFormatMode();
+})();
+</script>

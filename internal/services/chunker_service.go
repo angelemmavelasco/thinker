@@ -678,12 +678,21 @@ func ChunkTextWithMetadata(text string, opts ChunkOptions) []TextChunk {
 	return result
 }
 
-func chunkTextInternal(text string, maxChars int, overlapRatio float64) []string {
+type structuredUnit struct {
+	text      string
+	sepBefore string
+}
+
+func NormalizeDocumentContent(text string) string {
 	normalized := strings.ReplaceAll(text, "\r\n", "\n")
 	normalized = strings.ReplaceAll(normalized, "\r", "\n")
 	multiNewline := regexp.MustCompile(`\n{3,}`)
 	normalized = multiNewline.ReplaceAllString(normalized, "\n\n")
-	normalized = strings.TrimSpace(normalized)
+	return strings.TrimSpace(normalized)
+}
+
+func chunkTextInternal(text string, maxChars int, overlapRatio float64) []string {
+	normalized := NormalizeDocumentContent(text)
 	if normalized == "" {
 		return nil
 	}
@@ -692,7 +701,7 @@ func chunkTextInternal(text string, maxChars int, overlapRatio float64) []string
 		return []string{normalized}
 	}
 
-	units := splitUnitsRecursively(normalized, maxChars)
+	units := splitStructuredUnits(normalized, maxChars, "")
 	if len(units) == 0 {
 		return nil
 	}
@@ -707,18 +716,21 @@ func chunkTextInternal(text string, maxChars int, overlapRatio float64) []string
 	currentLen := 0
 
 	for _, unit := range units {
-		unit = strings.TrimSpace(unit)
-		if unit == "" {
+		if strings.TrimSpace(unit.text) == "" {
 			continue
 		}
 
-		unitRunes := len([]rune(unit))
-		sep := " "
+		unitRunes := len([]rune(unit.text))
+		sep := unit.sepBefore
 		if currentLen == 0 {
 			sep = ""
+		} else if sep == "" {
+			sep = " "
 		}
-		needed := currentLen + len([]rune(sep)) + unitRunes
+		sepRunes := len([]rune(sep))
+		needed := currentLen + sepRunes + unitRunes
 
+		wroteOverlap := false
 		if currentLen > 0 && needed > maxChars {
 			chunkStr := strings.TrimSpace(currentChunk.String())
 			if chunkStr != "" {
@@ -729,19 +741,29 @@ func chunkTextInternal(text string, maxChars int, overlapRatio float64) []string
 
 			if maxOverlap > 0 && len([]rune(chunkStr)) > 0 {
 				overlapText := extractTailOverlap(chunkStr, maxOverlap)
-				if overlapText != "" && len([]rune(overlapText))+1+unitRunes <= maxChars {
+				overlapSep := unit.sepBefore
+				if overlapSep == "" {
+					overlapSep = " "
+				}
+				overlapSepRunes := len([]rune(overlapSep))
+				if overlapText != "" && len([]rune(overlapText))+overlapSepRunes+unitRunes <= maxChars {
 					currentChunk.WriteString(overlapText)
-					currentChunk.WriteString(" ")
-					currentLen = len([]rune(overlapText)) + 1
+					currentChunk.WriteString(overlapSep)
+					currentLen = len([]rune(overlapText)) + overlapSepRunes
+					wroteOverlap = true
 				}
 			}
 		}
 
-		if currentLen > 0 && !strings.HasSuffix(currentChunk.String(), " ") {
-			currentChunk.WriteString(" ")
-			currentLen++
+		if currentLen > 0 && !wroteOverlap {
+			joinSep := unit.sepBefore
+			if joinSep == "" {
+				joinSep = " "
+			}
+			currentChunk.WriteString(joinSep)
+			currentLen += len([]rune(joinSep))
 		}
-		currentChunk.WriteString(unit)
+		currentChunk.WriteString(unit.text)
 		currentLen += unitRunes
 	}
 
@@ -755,37 +777,129 @@ func chunkTextInternal(text string, maxChars int, overlapRatio float64) []string
 	return chunks
 }
 
-func splitUnitsRecursively(text string, maxChars int) []string {
-	text = strings.TrimSpace(text)
-	if text == "" {
+func splitTopLevelBlocks(text string) []string {
+	lines := strings.Split(text, "\n")
+	var blocks []string
+	var cur []string
+	inFence := false
+	fenceMarker := ""
+
+	flush := func() {
+		if len(cur) == 0 {
+			return
+		}
+		blk := strings.Trim(strings.Join(cur, "\n"), "\n")
+		if strings.TrimSpace(blk) != "" {
+			blocks = append(blocks, blk)
+		}
+		cur = nil
+	}
+
+	for _, rawLine := range lines {
+		line := strings.TrimRight(rawLine, " \t")
+		trimmed := strings.TrimSpace(line)
+
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			marker := trimmed[:3]
+			if !inFence {
+				inFence = true
+				fenceMarker = marker
+			} else if marker == fenceMarker {
+				inFence = false
+				fenceMarker = ""
+			}
+			cur = append(cur, line)
+			continue
+		}
+
+		if !inFence && trimmed == "" {
+			flush()
+			continue
+		}
+
+		cur = append(cur, line)
+	}
+	flush()
+
+	return blocks
+}
+
+func splitStructuredUnits(text string, maxChars int, initialSep string) []structuredUnit {
+	text = strings.Trim(text, "\n")
+	if strings.TrimSpace(text) == "" {
 		return nil
 	}
 
 	runes := []rune(text)
 	if len(runes) <= maxChars {
-		return []string{text}
+		return []structuredUnit{{text: text, sepBefore: initialSep}}
 	}
 
 	if strings.Contains(text, "\n\n") {
-		return splitByDelimAndRecurse(text, "\n\n", maxChars, false)
+		blocks := splitTopLevelBlocks(text)
+		if len(blocks) > 1 {
+			var result []structuredUnit
+			for i, blk := range blocks {
+				sep := "\n\n"
+				if i == 0 {
+					sep = initialSep
+				}
+				if len([]rune(blk)) <= maxChars {
+					result = append(result, structuredUnit{text: blk, sepBefore: sep})
+				} else {
+					result = append(result, splitStructuredUnits(blk, maxChars, sep)...)
+				}
+			}
+			if len(result) > 0 {
+				return result
+			}
+		}
 	}
 
 	if strings.Contains(text, "\n") {
-		return splitByDelimAndRecurse(text, "\n", maxChars, false)
+		rawLines := strings.Split(text, "\n")
+		var nonEmpty []string
+		for _, rawLine := range rawLines {
+			ln := strings.TrimRight(rawLine, " \t")
+			if strings.TrimSpace(ln) != "" {
+				nonEmpty = append(nonEmpty, ln)
+			}
+		}
+		if len(nonEmpty) > 1 {
+			var result []structuredUnit
+			for i, ln := range nonEmpty {
+				sep := "\n"
+				if i == 0 {
+					sep = initialSep
+				}
+				if len([]rune(ln)) <= maxChars {
+					result = append(result, structuredUnit{text: ln, sepBefore: sep})
+				} else {
+					result = append(result, splitStructuredUnits(ln, maxChars, sep)...)
+				}
+			}
+			if len(result) > 0 {
+				return result
+			}
+		}
 	}
 
 	sentences := splitSentencesNatural(text)
 	if len(sentences) > 1 {
-		var result []string
-		for _, s := range sentences {
+		var result []structuredUnit
+		for i, s := range sentences {
 			s = strings.TrimSpace(s)
 			if s == "" {
 				continue
 			}
+			sep := " "
+			if i == 0 {
+				sep = initialSep
+			}
 			if len([]rune(s)) <= maxChars {
-				result = append(result, s)
+				result = append(result, structuredUnit{text: s, sepBefore: sep})
 			} else {
-				result = append(result, splitUnitsRecursively(s, maxChars)...)
+				result = append(result, splitStructuredUnits(s, maxChars, sep)...)
 			}
 		}
 		if len(result) > 0 {
@@ -795,28 +909,36 @@ func splitUnitsRecursively(text string, maxChars int) []string {
 
 	for _, punct := range []string{"; ", ", ", " - "} {
 		if strings.Contains(text, punct) {
-			return splitByDelimAndRecurse(text, punct, maxChars, true)
+			return splitStructuredByDelim(text, punct, maxChars, true, initialSep)
 		}
 	}
 
 	if strings.Contains(text, " ") {
-		return splitByDelimAndRecurse(text, " ", maxChars, false)
+		return splitStructuredByDelim(text, " ", maxChars, false, initialSep)
 	}
 
-	var rawParts []string
+	var rawParts []structuredUnit
 	for start := 0; start < len(runes); start += maxChars {
 		end := start + maxChars
 		if end > len(runes) {
 			end = len(runes)
 		}
-		rawParts = append(rawParts, string(runes[start:end]))
+		sep := ""
+		if start == 0 {
+			sep = initialSep
+		}
+		rawParts = append(rawParts, structuredUnit{
+			text:      string(runes[start:end]),
+			sepBefore: sep,
+		})
 	}
 	return rawParts
 }
 
-func splitByDelimAndRecurse(text string, delim string, maxChars int, preserveDelim bool) []string {
+func splitStructuredByDelim(text string, delim string, maxChars int, preserveDelim bool, initialSep string) []structuredUnit {
 	parts := strings.Split(text, delim)
-	var result []string
+	var result []structuredUnit
+	added := 0
 	for i, part := range parts {
 		if preserveDelim && i < len(parts)-1 {
 			part = part + strings.TrimSpace(delim)
@@ -825,10 +947,15 @@ func splitByDelimAndRecurse(text string, delim string, maxChars int, preserveDel
 		if part == "" {
 			continue
 		}
+		sep := " "
+		if added == 0 {
+			sep = initialSep
+		}
+		added++
 		if len([]rune(part)) <= maxChars {
-			result = append(result, part)
+			result = append(result, structuredUnit{text: part, sepBefore: sep})
 		} else {
-			result = append(result, splitUnitsRecursively(part, maxChars)...)
+			result = append(result, splitStructuredUnits(part, maxChars, sep)...)
 		}
 	}
 	return result
@@ -864,16 +991,149 @@ func extractTailOverlap(text string, maxOverlap int) string {
 	if len(runes) <= maxOverlap {
 		return ""
 	}
-	tail := runes[len(runes)-maxOverlap:]
-	firstSpace := -1
-	for i, r := range tail {
-		if unicode.IsSpace(r) {
-			firstSpace = i
-			break
+	tail := string(runes[len(runes)-maxOverlap:])
+
+	var candidate string
+	if idx := strings.Index(tail, "\n\n"); idx >= 0 && idx+2 < len(tail) {
+		candidate = strings.TrimSpace(tail[idx+2:])
+	} else if idx := strings.Index(tail, "\n"); idx >= 0 && idx+1 < len(tail) {
+		candidate = strings.TrimSpace(tail[idx+1:])
+	} else {
+		tailRunes := []rune(tail)
+		firstSpace := -1
+		for i, r := range tailRunes {
+			if unicode.IsSpace(r) {
+				firstSpace = i
+				break
+			}
+		}
+		if firstSpace >= 0 && firstSpace+1 < len(tailRunes) {
+			candidate = strings.TrimSpace(string(tailRunes[firstSpace+1:]))
+		} else {
+			candidate = strings.TrimSpace(tail)
 		}
 	}
-	if firstSpace >= 0 && firstSpace+1 < len(tail) {
-		return strings.TrimSpace(string(tail[firstSpace+1:]))
+
+	if strings.Count(candidate, "```")%2 != 0 ||
+		strings.Count(candidate, "~~~")%2 != 0 ||
+		strings.Count(candidate, "**")%2 != 0 ||
+		strings.Count(candidate, "`")%2 != 0 {
+		return ""
 	}
-	return strings.TrimSpace(string(tail))
+
+	if hasOrphanMarkdownTable(candidate) || hasUnbalancedUnderscoreEmphasis(candidate) {
+		return ""
+	}
+
+	return candidate
+}
+
+func hasOrphanMarkdownTable(s string) bool {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return false
+	}
+	firstLine := trimmed
+	if nl := strings.IndexByte(trimmed, '\n'); nl >= 0 {
+		firstLine = strings.TrimSpace(trimmed[:nl])
+	}
+	if strings.HasPrefix(firstLine, "|") && !strings.Contains(trimmed, "\n| ---") && !strings.Contains(trimmed, "\n|---") {
+		return true
+	}
+	return false
+}
+
+func hasUnbalancedUnderscoreEmphasis(s string) bool {
+	runes := []rune(s)
+	count := 0
+	for i, r := range runes {
+		if r != '_' {
+			continue
+		}
+		prevWord := i > 0 && (unicode.IsLetter(runes[i-1]) || unicode.IsDigit(runes[i-1]))
+		nextWord := i+1 < len(runes) && (unicode.IsLetter(runes[i+1]) || unicode.IsDigit(runes[i+1]))
+		if prevWord && nextWord {
+			continue
+		}
+		count++
+	}
+	return count%2 != 0
+}
+
+func StitchChunksWithoutOverlap(chunks []string) string {
+	cleaned := make([]string, 0, len(chunks))
+	for _, raw := range chunks {
+		c := NormalizeDocumentContent(raw)
+		if c != "" {
+			cleaned = append(cleaned, c)
+		}
+	}
+	if len(cleaned) == 0 {
+		return ""
+	}
+	if len(cleaned) == 1 {
+		return cleaned[0]
+	}
+
+	var out strings.Builder
+	out.WriteString(cleaned[0])
+
+	for i := 1; i < len(cleaned); i++ {
+		prev := out.String()
+		curr := cleaned[i]
+		sep, rest, matched := stripLeadingChunkOverlap(prev, curr)
+		if rest == "" {
+			continue
+		}
+		if !matched {
+			sep = "\n\n"
+		}
+		out.WriteString(sep)
+		out.WriteString(rest)
+	}
+
+	return out.String()
+}
+
+func stripLeadingChunkOverlap(prev, curr string) (sep string, rest string, matched bool) {
+	const minOverlapRunes = 8
+	const maxWindowRunes = 600
+
+	prevRunes := []rune(prev)
+	currRunes := []rune(curr)
+
+	if len(prevRunes) < minOverlapRunes || len(currRunes) < minOverlapRunes {
+		return "\n\n", curr, false
+	}
+
+	prevTail := prevRunes
+	if len(prevTail) > maxWindowRunes {
+		prevTail = prevTail[len(prevTail)-maxWindowRunes:]
+	}
+
+	maxK := len(prevTail)
+	if len(currRunes) < maxK {
+		maxK = len(currRunes)
+	}
+
+	for k := maxK; k >= minOverlapRunes; k-- {
+		if k < len(currRunes) && !unicode.IsSpace(currRunes[k]) {
+			continue
+		}
+		if string(prevTail[len(prevTail)-k:]) == string(currRunes[:k]) {
+			remainder := string(currRunes[k:])
+			if strings.TrimSpace(remainder) == "" {
+				return "", "", true
+			}
+			if strings.HasPrefix(remainder, "\n\n") {
+				return "\n\n", strings.TrimLeft(remainder, "\n"), true
+			}
+			if strings.HasPrefix(remainder, "\n") {
+				return "\n", strings.TrimLeft(remainder, "\n"), true
+			}
+			return " ", strings.TrimLeft(remainder, " \t"), true
+		}
+	}
+
+	return "\n\n", curr, false
 }
