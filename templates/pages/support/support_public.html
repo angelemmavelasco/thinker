@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es" class="h-full scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/x-icon" href="/media/tk.ico?v={{ faviconVersion }}" />
+    <link rel="shortcut icon" type="image/x-icon" href="/media/tk.ico?v={{ faviconVersion }}" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <title>Thinker: {{ .title }}</title>
+  </head>
+  <body class="bg-zinc-950 text-xs text-zinc-50 min-h-screen flex flex-col antialiased">
+    <header class="fixed top-0 left-0 right-0 w-full z-50 px-4 py-3 sm:px-6 flex items-center justify-between backdrop-blur-xl bg-zinc-950/80 border-b border-zinc-900/80">
+      <div class="flex items-center gap-6">
+        <a href='{{url "landing"}}' class="text-cyan-500 hover:text-zinc-400 transition-all font-mono font-bold text-sm tracking-wide select-none">
+          Thinker
+        </a>
+        <nav class="hidden sm:flex items-center gap-5 text-xs text-zinc-300">
+          <a href='{{url "support:public"}}' class="text-cyan-400 transition-colors py-1">
+            Soporte
+          </a>
+          <a href='{{url "support:public"}}#cuenta-demo' class="hover:text-cyan-400 transition-colors py-1">
+            Demo
+          </a>
+        </nav>
+      </div>
+
+      <div class="flex items-center gap-3 text-xs">
+        <a href='{{url "auth:register"}}' class="hover:text-zinc-400 hover:border-zinc-500 transition-all border border-zinc-600 rounded-xs px-2 py-0.5 text-zinc-200">
+          Regístrate
+        </a>
+        <a href='{{url "auth:login"}}' class="hover:text-cyan-300 hover:border-cyan-400 transition-all border border-cyan-500 text-cyan-400 rounded-xs px-2 py-0.5">
+          Iniciar sesión
+        </a>
+      </div>
+    </header>
+
+    <main class="mt-20 mb-8 flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6">
+      {{template "_support_content" .}}
+    </main>
+
+    <div class="w-full max-w-4xl mx-auto px-4 sm:px-6">
+      {{template "footer.html" .}}
+    </div>
+  </body>
+</html>
