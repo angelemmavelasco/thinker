@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -292,7 +293,8 @@ func (s *IdeaService) CreateIdeasFromInput(ctx context.Context, actor Actor, tit
 		return nil, ErrUnauthorized
 	}
 
-	chunks := ChunkText(content, DefaultChunkMaxChars)
+	normalizedDoc := NormalizeDocumentContent(content)
+	chunks := ChunkText(normalizedDoc, DefaultChunkMaxChars)
 	if len(chunks) == 0 {
 		return nil, fmt.Errorf("el contenido está vacío")
 	}
@@ -378,6 +380,16 @@ func (s *IdeaService) CreateIdeasFromInput(ctx context.Context, actor Actor, tit
 			RelationType: "sequence",
 			Weight:       0.85,
 		})
+	}
+
+	if len(chunks) > 1 {
+		if _, err := qtx.UpsertIdeaDocument(ctx, database.UpsertIdeaDocumentParams{
+			GroupID:    groupID,
+			Title:      title,
+			RawContent: normalizedDoc,
+		}); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -905,6 +917,127 @@ func (s *IdeaService) GetIdeaDetail(ctx context.Context, actor Actor, ideaIDStr 
 	}, nil
 }
 
+type IdeaFullDocument struct {
+	IdeaID          uuid.UUID
+	GroupID         uuid.UUID
+	Title           string
+	Content         string
+	GroupCount      int
+	IsReconstructed bool
+}
+
+var ideaChunkTitleSuffixRegex = regexp.MustCompile(`^(.*)\s+\(\d+/\d+\)$`)
+
+func stripIdeaChunkTitleSuffix(title string) string {
+	trimmed := strings.TrimSpace(title)
+	if m := ideaChunkTitleSuffixRegex.FindStringSubmatch(trimmed); len(m) == 2 {
+		if base := strings.TrimSpace(m[1]); base != "" {
+			return base
+		}
+	}
+	return trimmed
+}
+
+func (s *IdeaService) GetIdeaFullDocument(ctx context.Context, actor Actor, ideaIDStr string) (*IdeaFullDocument, error) {
+	if !actor.IsValid() {
+		return nil, ErrUnauthorized
+	}
+
+	ideaID, err := uuid.Parse(ideaIDStr)
+	if err != nil {
+		return nil, ErrIdeaNotFound
+	}
+
+	idea, err := s.queries.GetIdeaByID(ctx, ideaID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrIdeaNotFound
+		}
+		return nil, err
+	}
+
+	canView, err := CanViewIdea(ctx, s.queries, actor, idea)
+	if err != nil {
+		return nil, err
+	}
+	if !canView {
+		return nil, ErrIdeaNotFound
+	}
+
+	if idea.GroupID == uuid.Nil {
+		return &IdeaFullDocument{
+			IdeaID:          idea.ID,
+			GroupID:         idea.ID,
+			Title:           stripIdeaChunkTitleSuffix(idea.Title),
+			Content:         idea.Content,
+			GroupCount:      1,
+			IsReconstructed: false,
+		}, nil
+	}
+
+	rows, err := s.queries.ListIdeaContentsByGroupID(ctx, idea.GroupID)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return &IdeaFullDocument{
+			IdeaID:          idea.ID,
+			GroupID:         idea.GroupID,
+			Title:           stripIdeaChunkTitleSuffix(idea.Title),
+			Content:         idea.Content,
+			GroupCount:      1,
+			IsReconstructed: false,
+		}, nil
+	}
+
+	accessibleRows := make([]database.ListIdeaContentsByGroupIDRow, 0, len(rows))
+	if actor.IsSuperuser {
+		accessibleRows = rows
+	} else {
+		accessibleSet, err := ListAccessibleIdeaIDSet(ctx, s.queries, actor)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			if accessibleSet[row.ID] {
+				accessibleRows = append(accessibleRows, row)
+			}
+		}
+	}
+
+	if len(accessibleRows) == 0 {
+		return nil, ErrIdeaNotFound
+	}
+
+	if len(accessibleRows) == len(rows) && len(rows) > 1 {
+		if doc, docErr := s.queries.GetIdeaDocumentByGroupID(ctx, idea.GroupID); docErr == nil && strings.TrimSpace(doc.RawContent) != "" {
+			return &IdeaFullDocument{
+				IdeaID:          idea.ID,
+				GroupID:         idea.GroupID,
+				Title:           doc.Title,
+				Content:         doc.RawContent,
+				GroupCount:      len(rows),
+				IsReconstructed: false,
+			}, nil
+		}
+	}
+
+	contents := make([]string, 0, len(accessibleRows))
+	for _, row := range accessibleRows {
+		contents = append(contents, row.Content)
+	}
+	stitched := StitchChunksWithoutOverlap(contents)
+
+	return &IdeaFullDocument{
+		IdeaID:          idea.ID,
+		GroupID:         idea.GroupID,
+		Title:           stripIdeaChunkTitleSuffix(idea.Title),
+		Content:         stitched,
+		GroupCount:      len(accessibleRows),
+		IsReconstructed: len(accessibleRows) > 1,
+	}, nil
+}
+
 func appendConnection(connections *[]ConnectedIdeaInfo, indexByID map[uuid.UUID]int, id uuid.UUID, title, content, restructured, status, relType string) {
 	relLabel := "Ideas afines"
 	if relType == "concept_overlap" {
@@ -1100,6 +1233,10 @@ func (s *IdeaService) UpdateIdea(ctx context.Context, actor Actor, ideaIDStr, ti
 		return nil, err
 	}
 
+	if updated.GroupID != uuid.Nil {
+		_ = s.queries.DeleteIdeaDocumentByGroupID(ctx, updated.GroupID)
+	}
+
 	s.relinkGroupSequence(ctx, updated.GroupID)
 	s.EnqueueIdeaAnalysis(updated, updated.Title, updated.Content)
 
@@ -1189,6 +1326,10 @@ func (s *IdeaService) DeleteIdeaFragment(ctx context.Context, actor Actor, ideaI
 		return err
 	}
 
+	if idea.GroupID != uuid.Nil {
+		_ = s.queries.DeleteIdeaDocumentByGroupID(ctx, idea.GroupID)
+	}
+
 	_ = s.queries.DeleteOrphanKeywords(ctx)
 	s.relinkGroupSequence(ctx, idea.GroupID)
 	return nil
@@ -1228,6 +1369,7 @@ func (s *IdeaService) DeleteIdeaGroup(ctx context.Context, actor Actor, ideaIDSt
 		if err := s.queries.DeleteIdeasByGroupID(ctx, idea.GroupID); err != nil {
 			return err
 		}
+		_ = s.queries.DeleteIdeaDocumentByGroupID(ctx, idea.GroupID)
 	} else {
 		if err := s.queries.DeleteIdea(ctx, ideaID); err != nil {
 			return err
