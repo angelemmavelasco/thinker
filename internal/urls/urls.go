@@ -37,6 +37,8 @@ var RouteNames = map[string]string{
 	"ideas:new":                "/web/ideas/new",
 	"ideas:detail:route":       "/web/ideas/:id",
 	"ideas:detail":             "/web/ideas/%v",
+	"ideas:full:route":         "/web/ideas/:id/full",
+	"ideas:full":               "/web/ideas/%v/full",
 	"ideas:edit:route":         "/web/ideas/:id/edit",
 	"ideas:edit":               "/web/ideas/%v/edit",
 	"ideas:permissions:route":  "/web/ideas/:id/permissions",
