@@ -141,7 +141,13 @@
         <span class="text-zinc-300">
             Estás viendo el <strong class="text-cyan-300">fragmento {{.detail.CurrentPosition}} de {{.detail.GroupCount}}</strong> de esta misma idea.
         </span>
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
+            <button
+                type="button"
+                onclick="var tab=document.getElementById('idea-tab-full'); if(tab){ tab.click(); var card=document.getElementById('idea-content-card'); if(card){ card.scrollIntoView({behavior:'smooth', block:'start'}); } }"
+                class="border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-xs cursor-pointer transition-colors text-[11px]">
+                Ver documento completo
+            </button>
             {{if .detail.PrevFragmentID}}
             <button
                 type="button"
@@ -206,13 +212,79 @@
             </div>
             {{end}}
 
-            <div class="border border-zinc-800 rounded-xs bg-zinc-900 p-4 flex flex-col gap-2">
-                <span class="text-[10px] text-zinc-400 uppercase font-semibold tracking-wider">
-                    Idea original
-                </span>
-                <p class="text-zinc-300 leading-relaxed whitespace-pre-line border-l-2 border-zinc-700 pl-3 text-xs">
-                    {{.detail.Idea.Content}}
-                </p>
+            <div id="idea-content-card" class="border border-zinc-800 rounded-xs bg-zinc-900 p-4 flex flex-col gap-3">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-2.5">
+                    {{if gt .detail.GroupCount 1}}
+                    <div class="inline-flex items-center gap-1 bg-zinc-950 p-0.5 rounded-xs border border-zinc-800 text-[11px]">
+                        <button
+                            id="idea-tab-fragment"
+                            type="button"
+                            onclick="window.thinkerSwitchIdeaView('fragment')"
+                            class="px-2.5 py-1 rounded-xs font-medium cursor-pointer transition-all bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
+                        >
+                            Este fragmento ({{.detail.CurrentPosition}}/{{.detail.GroupCount}})
+                        </button>
+                        <button
+                            id="idea-tab-full"
+                            type="button"
+                            hx-get='{{url "ideas:full" .detail.Idea.ID}}'
+                            hx-target="#idea-full-doc-panel"
+                            hx-swap="innerHTML"
+                            hx-trigger="click once"
+                            onclick="window.thinkerSwitchIdeaView('full')"
+                            class="px-2.5 py-1 rounded-xs font-medium cursor-pointer transition-all text-zinc-400 hover:text-zinc-200 border border-transparent"
+                        >
+                            Documento completo
+                        </button>
+                    </div>
+                    {{else}}
+                    <span class="text-[10px] text-zinc-400 uppercase font-semibold tracking-wider">
+                        Idea original
+                    </span>
+                    {{end}}
+
+                    <div class="flex items-center gap-1.5 text-[10px]">
+                        <button
+                            id="idea-toggle-raw-btn"
+                            type="button"
+                            onclick="window.thinkerToggleIdeaFormatMode()"
+                            class="border border-zinc-800 hover:border-zinc-700 bg-zinc-950 text-zinc-400 hover:text-zinc-200 px-2 py-1 rounded-xs cursor-pointer transition-colors"
+                        >
+                            Ver texto plano
+                        </button>
+                        <button
+                            type="button"
+                            onclick="window.thinkerCopyActiveIdeaContent(this)"
+                            class="border border-zinc-800 hover:border-cyan-500/60 bg-zinc-950 text-zinc-400 hover:text-cyan-300 px-2 py-1 rounded-xs cursor-pointer transition-colors"
+                        >
+                            Copiar
+                        </button>
+                    </div>
+                </div>
+
+                <div id="idea-fragment-panel" class="flex flex-col gap-2" data-md-container>
+                    <textarea id="idea-fragment-raw" data-md-source readonly class="hidden">{{.detail.Idea.Content}}</textarea>
+                    <div
+                        id="idea-fragment-rendered"
+                        data-md-render
+                        class="markdown-body text-zinc-200 leading-relaxed border-l-2 border-zinc-700 pl-3.5 text-[13px]"
+                    ></div>
+                    <pre
+                        id="idea-fragment-plain"
+                        class="hidden text-zinc-300 leading-relaxed whitespace-pre-wrap break-words font-mono border-l-2 border-zinc-700 pl-3.5 text-xs overflow-x-auto"
+                    >{{.detail.Idea.Content}}</pre>
+                </div>
+
+                {{if gt .detail.GroupCount 1}}
+                <div id="idea-full-doc-wrapper" class="hidden flex-col gap-2">
+                    <div id="idea-full-doc-panel">
+                        <div class="flex items-center gap-2 py-6 text-zinc-400 text-xs">
+                            <span class="inline-block w-3 h-3 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin"></span>
+                            <span>Cargando documento completo...</span>
+                        </div>
+                    </div>
+                </div>
+                {{end}}
             </div>
         </div>
 
@@ -358,3 +430,76 @@
         </div>
     </div>
 </div>
+<script>
+(function () {
+    let activeTab = "fragment";
+    let showPlainText = false;
+
+    const activeTabClasses = ["bg-cyan-500/20", "text-cyan-300", "border-cyan-500/30"];
+    const inactiveTabClasses = ["text-zinc-400", "hover:text-zinc-200", "border-transparent"];
+
+    function setTabState(btn, isActive) {
+        if (!btn) return;
+        activeTabClasses.forEach(function (c) { btn.classList.toggle(c, isActive); });
+        inactiveTabClasses.forEach(function (c) { btn.classList.toggle(c, !isActive); });
+    }
+
+    window.thinkerSyncIdeaFormatMode = function () {
+        const fragRendered = document.getElementById("idea-fragment-rendered");
+        const fragPlain = document.getElementById("idea-fragment-plain");
+        const fullRendered = document.getElementById("idea-full-rendered");
+        const fullPlain = document.getElementById("idea-full-plain");
+        const toggleBtn = document.getElementById("idea-toggle-raw-btn");
+
+        if (fragRendered && fragPlain) {
+            fragRendered.classList.toggle("hidden", showPlainText);
+            fragPlain.classList.toggle("hidden", !showPlainText);
+        }
+        if (fullRendered && fullPlain) {
+            fullRendered.classList.toggle("hidden", showPlainText);
+            fullPlain.classList.toggle("hidden", !showPlainText);
+        }
+        if (toggleBtn) {
+            toggleBtn.textContent = showPlainText ? "Vista formateada" : "Ver texto plano";
+        }
+    };
+
+    window.thinkerToggleIdeaFormatMode = function () {
+        showPlainText = !showPlainText;
+        window.thinkerSyncIdeaFormatMode();
+    };
+
+    window.thinkerSwitchIdeaView = function (tab) {
+        activeTab = tab === "full" ? "full" : "fragment";
+        const fragPanel = document.getElementById("idea-fragment-panel");
+        const fullWrap = document.getElementById("idea-full-doc-wrapper");
+        const tabFrag = document.getElementById("idea-tab-fragment");
+        const tabFull = document.getElementById("idea-tab-full");
+
+        if (fragPanel) {
+            fragPanel.classList.toggle("hidden", activeTab === "full");
+            fragPanel.classList.toggle("flex", activeTab !== "full");
+        }
+        if (fullWrap) {
+            fullWrap.classList.toggle("hidden", activeTab !== "full");
+            fullWrap.classList.toggle("flex", activeTab === "full");
+        }
+        setTabState(tabFrag, activeTab !== "full");
+        setTabState(tabFull, activeTab === "full");
+        window.thinkerSyncIdeaFormatMode();
+    };
+
+    window.thinkerCopyActiveIdeaContent = function (btn) {
+        const sourceId = activeTab === "full" ? "idea-full-raw" : "idea-fragment-raw";
+        const src = document.getElementById(sourceId) || document.getElementById("idea-fragment-raw");
+        if (src && typeof window.thinkerCopyText === "function") {
+            window.thinkerCopyText(src.value || "", btn);
+        }
+    };
+
+    if (typeof window.thinkerHydrateMarkdown === "function") {
+        window.thinkerHydrateMarkdown(document.getElementById("idea-content-card") || document);
+    }
+    window.thinkerSyncIdeaFormatMode();
+})();
+</script>
