@@ -5,7 +5,9 @@ import (
 )
 
 var RouteNames = map[string]string{
-	"landing": "/",
+	"landing":        "/",
+	"support:public": "/support",
+	"support:view":   "/web/support",
 
 	"auth:login":               "/auth/login",
 	"auth:register":            "/auth/register",

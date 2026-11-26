@@ -17,20 +17,24 @@
         <a href='{{url "topics:list"}}' class="hover:text-cyan-400 transition-colors cursor-pointer py-1">
             Temas e índices
         </a>
+        {{/*
         <span class="hover:text-cyan-400 transition-colors cursor-pointer py-1 text-zinc-400">
             Opciones
         </span>
+        */}}
         {{if .is_superuser}}
         <a href='{{url "users:list"}}' class="hover:text-cyan-400 transition-colors cursor-pointer py-1">
             Usuarios y roles
         </a>
         {{end}}
+        {{/*
         <span class="hover:text-cyan-400 transition-colors cursor-pointer py-1 text-zinc-400">
             Configuración
         </span>
-        <span class="hover:text-cyan-400 transition-colors cursor-pointer py-1 text-zinc-400">
+        */}}
+        <a href='{{url "support:view"}}' class="hover:text-cyan-400 transition-colors cursor-pointer py-1">
             Soporte
-        </span>
+        </a>
     </nav>
 
     
@@ -117,15 +121,17 @@
         Usuarios y roles
     </a>
     {{end}}
+    {{/*
     <div class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80">
         Opciones
     </div>
     <div class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80">
         Configuración
     </div>
-    <div class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80">
+    */}}
+    <a href='{{url "support:view"}}' class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80 block">
         Soporte
-    </div>
+    </a>
 
     
     <form method="POST" action='{{ url "auth:logout" }}' class="w-full">

@@ -458,3 +458,105 @@ func TestRoutesFullDocument_LazyHTMLAndRBAC(t *testing.T) {
 		t.Fatalf("expected 404 for outsider on full document API, got %d", wFullOutsider.Code)
 	}
 }
+
+func TestRoutesSupport_PublicAndAuthenticatedViews(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	chdirToProjectRoot(t)
+
+	dsn := fmt.Sprintf("file:routes_support_%d?mode=memory&cache=shared&_pragma=foreign_keys(1)", time.Now().UnixNano())
+	conn, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatalf("failed opening sqlite: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	ctx := context.Background()
+	if err := database.InitSchema(ctx, conn); err != nil {
+		t.Fatalf("InitSchema failed: %v", err)
+	}
+
+	cfg := &config.BaseConfig{
+		Debug:         true,
+		AppBaseURL:    "http://127.0.0.1:8080",
+		JWTSecret:     []byte("0123456789abcdef0123456789abcdef"),
+		SecureCookies: false,
+	}
+
+	q := database.New(conn)
+	router := SetUpRouter(q, nil, nil, cfg)
+
+	reqLanding := httptest.NewRequest(http.MethodGet, "/", nil)
+	wLanding := httptest.NewRecorder()
+	router.ServeHTTP(wLanding, reqLanding)
+	if wLanding.Code != http.StatusOK {
+		t.Fatalf("GET / failed: %d", wLanding.Code)
+	}
+	landingBody := wLanding.Body.String()
+	if !strings.Contains(landingBody, `href='/support'`) || !strings.Contains(landingBody, `href='/support#cuenta-demo'`) {
+		t.Fatalf("expected landing page to link to /support and /support#cuenta-demo")
+	}
+
+	reqPublic := httptest.NewRequest(http.MethodGet, "/support", nil)
+	wPublic := httptest.NewRecorder()
+	router.ServeHTTP(wPublic, reqPublic)
+	if wPublic.Code != http.StatusOK {
+		t.Fatalf("GET /support failed: %d", wPublic.Code)
+	}
+	publicBody := wPublic.Body.String()
+	for _, expected := range []string{
+		`id="cuenta-demo"`,
+		"thinker.demo@gmail.com",
+		"thinker1234",
+		`href='/auth/login'`,
+		"Guía de usuario",
+		"Buenas prácticas: cómo documentar y preguntar con precisión y seguridad",
+	} {
+		if !strings.Contains(publicBody, expected) {
+			t.Fatalf("GET /support missing expected content %q", expected)
+		}
+	}
+	if strings.Contains(publicBody, "for teams") {
+		t.Fatalf("GET /support footer should not render commented out Thinker for teams")
+	}
+
+	reqAnonWeb := httptest.NewRequest(http.MethodGet, "/web/support", nil)
+	wAnonWeb := httptest.NewRecorder()
+	router.ServeHTTP(wAnonWeb, reqAnonWeb)
+	if wAnonWeb.Code != http.StatusSeeOther {
+		t.Fatalf("expected 303 redirect for unauthenticated GET /web/support, got %d", wAnonWeb.Code)
+	}
+
+	reqInit := httptest.NewRequest(http.MethodGet, "/auth/login", nil)
+	wInit := httptest.NewRecorder()
+	router.ServeHTTP(wInit, reqInit)
+	csrfCookie := extractCookie(wInit.Result().Cookies(), middleware.CSRFCookieName(false))
+	if csrfCookie == nil {
+		t.Fatalf("expected csrf cookie")
+	}
+
+	_, userCookies := registerVerifyAndLogin(t, router, q, csrfCookie, "support-user@thinker.test", "StrongPass123!")
+
+	wAuthSupport := doAuthRequest(router, http.MethodGet, "/web/support", userCookies, nil, false)
+	if wAuthSupport.Code != http.StatusOK {
+		t.Fatalf("authenticated GET /web/support failed: %d", wAuthSupport.Code)
+	}
+	authBody := wAuthSupport.Body.String()
+	for _, expected := range []string{
+		`id="cuenta-demo"`,
+		"Guía de usuario",
+		`href='/web/support'`,
+	} {
+		if !strings.Contains(authBody, expected) {
+			t.Fatalf("GET /web/support missing expected content %q", expected)
+		}
+	}
+	for _, forbidden := range []string{
+		">Configuración<",
+		">Opciones<",
+		"for teams",
+	} {
+		if strings.Contains(authBody, forbidden) {
+			t.Fatalf("GET /web/support must not render commented out nav/footer item %q", forbidden)
+		}
+	}
+}

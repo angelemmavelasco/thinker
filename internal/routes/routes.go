@@ -79,6 +79,11 @@ func SetUpRouter(
 	router.GET(urls.Get("landing"), func(c *gin.Context) {
 		config.Render(c, http.StatusOK, "landing.html", gin.H{})
 	})
+	router.GET(urls.Get("support:public"), func(c *gin.Context) {
+		config.Render(c, http.StatusOK, "support_public.html", gin.H{
+			"title": "Soporte",
+		})
+	})
 
 	router.GET(urls.Get("auth:login"), authHandler.LoginView)
 	router.POST(urls.Get("auth:login"), authRateLimiter.LimitEndpoint(), authHandler.Login)
@@ -115,6 +120,11 @@ func SetUpRouter(
 		protected.POST(urls.Get("ideas:delete_group:route"), ideaHandler.DeleteIdeaGroup)
 
 		protected.GET(urls.Get("topics:list"), topicHandler.ListTopics)
+		protected.GET(urls.Get("support:view"), func(c *gin.Context) {
+			config.Render(c, http.StatusOK, "support.html", gin.H{
+				"title": "Soporte",
+			})
+		})
 
 		superuserOnly := protected.Group("/")
 		superuserOnly.Use(middleware.RequireSuperuserMiddleware())

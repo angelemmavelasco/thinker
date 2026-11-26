@@ -19,9 +19,13 @@
 
       <li class="desktop-nav-item cursor-pointer hover:text-zinc-500 transition-all hidden sm:block">Características</li>
 
-      <li class="desktop-nav-item cursor-pointer hover:text-zinc-500 transition-all hidden sm:block">Soporte</li>
+      <li class="desktop-nav-item cursor-pointer hover:text-zinc-500 transition-all hidden sm:block">
+        <a href='{{url "support:public"}}'>Soporte</a>
+      </li>
 
-      <li class="desktop-nav-item cursor-pointer hover:text-zinc-500 transition-all hidden sm:block">Demo</li>
+      <li class="desktop-nav-item cursor-pointer hover:text-zinc-500 transition-all hidden sm:block">
+        <a href='{{url "support:public"}}#cuenta-demo'>Demo</a>
+      </li>
 
       <li class="cursor-pointer hover:text-zinc-500 hover:border-zinc-500 transition-all border border-zinc-400 rounded-sm p-0.5 ml-auto sm:ml-0">
         <a href='{{url "auth:register"}}'>
@@ -49,8 +53,8 @@
     >
       <div class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80">Documentación</div>
       <div class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80">Características</div>
-      <div class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80">Soporte</div>
-      <div class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2">Demo</div>
+      <a href='{{url "support:public"}}' class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 border-b border-zinc-900/80 block">Soporte</a>
+      <a href='{{url "support:public"}}#cuenta-demo' class="cursor-pointer hover:text-cyan-400 text-zinc-300 transition-colors py-2 block">Demo</a>
     </nav>
 
     {{ template "landing_graph_top" . }}

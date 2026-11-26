@@ -1,0 +1,358 @@
+{{define "_support_content"}}
+<div class="flex flex-col gap-6 text-xs sm:text-[13px] text-zinc-300 leading-relaxed">
+    <nav class="flex flex-wrap items-center gap-2 border-b border-zinc-800/80 pb-4 text-[11px]">
+        <a href="#cuenta-demo" class="border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 px-2.5 py-1 rounded-xs transition-colors">
+            Cuenta DEMO
+        </a>
+        <a href="#guia-usuario" class="border border-zinc-800 hover:border-zinc-700 bg-zinc-900/70 text-zinc-300 hover:text-zinc-100 px-2.5 py-1 rounded-xs transition-colors">
+            Guía de usuario
+        </a>
+        <a href="#roles" class="border border-zinc-800 hover:border-zinc-700 bg-zinc-900/70 text-zinc-300 hover:text-zinc-100 px-2.5 py-1 rounded-xs transition-colors">
+            Roles
+        </a>
+        <a href="#seguridad" class="border border-zinc-800 hover:border-zinc-700 bg-zinc-900/70 text-zinc-300 hover:text-zinc-100 px-2.5 py-1 rounded-xs transition-colors">
+            Seguridad
+        </a>
+        <a href="#buenas-practicas" class="border border-zinc-800 hover:border-zinc-700 bg-zinc-900/70 text-zinc-300 hover:text-zinc-100 px-2.5 py-1 rounded-xs transition-colors">
+            Buenas prácticas
+        </a>
+    </nav>
+
+    <section id="cuenta-demo" class="scroll-mt-24 border border-cyan-500/30 bg-zinc-900/50 rounded-xs p-5 flex flex-col gap-3.5">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-3">
+            <h2 class="text-base sm:text-lg font-semibold text-zinc-100">Cuenta DEMO</h2>
+            <a href='{{url "auth:login"}}' class="inline-flex items-center gap-1.5 border border-cyan-500 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 hover:text-cyan-200 font-medium px-3 py-1 rounded-xs text-xs transition-colors">
+                <span>Iniciar sesión</span>
+                <span>→</span>
+            </a>
+        </div>
+
+        <p>
+            Puedes probar las funcionalidades de thinker al ingresar con una cuenta demo, para ello
+            es necesario ingresar con un usuario y contraseña preestablecidos.
+        </p>
+
+        <blockquote class="border-l-2 border-cyan-500 bg-cyan-500/5 pl-3.5 py-2.5 rounded-r-xs">
+            <ul class="list-disc pl-4 space-y-1 text-zinc-200 font-mono text-xs">
+                <li>Usuario: thinker.demo@gmail.com</li>
+                <li>Contraseña: thinker1234</li>
+            </ul>
+        </blockquote>
+
+        <p>
+            Este usuario cuenta con rol demo, por lo que solo es posible ver en primera instancia guías de usuario y soporte genera, además de descripciones de productos relacionados con la plataforma.
+        </p>
+
+        <p>
+            Si quieres generar y ver tus propias ideas, no existe restricción para dicho rol y usuario.
+        </p>
+    </section>
+
+    <section id="guia-usuario" class="scroll-mt-24 border border-zinc-800/80 bg-zinc-900/40 rounded-xs p-5 flex flex-col gap-6">
+        <h2 class="text-base sm:text-lg font-semibold text-zinc-100 border-b border-zinc-800/80 pb-3">
+            Guía de usuario
+        </h2>
+
+        <div class="flex flex-col gap-2">
+            <h3 class="text-sm font-semibold text-cyan-300">Qué es Thinker</h3>
+            <p>
+                Thinker es un espacio de conocimiento colaborativo que transforma notas y documentos en una red de ideas conectadas, respetando el alcance de acceso de cada persona y equipo. En lugar de ordenar archivos en carpetas manuales, la plataforma analiza cada texto, extrae conceptos clave y enlaza únicamente la información que pertenece al mismo ámbito de acceso.
+            </p>
+        </div>
+
+        <div class="flex flex-col gap-2.5 border-t border-zinc-800/70 pt-5">
+            <h3 class="text-sm font-semibold text-cyan-300">Flujo de uso</h3>
+            <div class="bg-zinc-950/70 border border-zinc-800/80 rounded-xs p-4 flex flex-col gap-1.5 font-mono text-xs text-zinc-200">
+                <p>Acceso: usuario / google</p>
+                <p class="text-cyan-400 pl-2">↓</p>
+                <p>Mis ideas: crear / subir archivo</p>
+                <p class="text-cyan-400 pl-2">↓</p>
+                <p>Síntesis, extracción de términos clave y tópicos</p>
+                <p class="text-cyan-400 pl-2">↓</p>
+                <p class="text-zinc-300">→ Red: explorar grafo y relaciones creadas</p>
+                <p class="text-zinc-300">→ Pregunta a thinker: consultar red y conexiones</p>
+                <p class="text-zinc-300">→ Temas e índices: Temas principales y subtemas</p>
+            </div>
+        </div>
+
+        <div class="flex flex-col gap-2.5 border-t border-zinc-800/70 pt-5">
+            <h3 class="text-sm font-semibold text-cyan-300">Cómo iniciar sesión</h3>
+            <ul class="space-y-2">
+                <li>• Abre Thinker y selecciona Iniciar sesión, o Crear cuenta si aún no tienes usuario.</li>
+                <li>• Si te registras con correo y contraseña, abre el enlace de confirmación que llega a tu correo en los siguientes quince minutos.</li>
+                <li>• Si prefieres acceso directo, selecciona Continuar con Google.</li>
+            </ul>
+            <p>
+                Al entrar verás la barra superior con acceso a Red, Mis ideas y Temas e índices. Si tu cuenta tiene privilegios de Superusuario, verás además la etiqueta Super junto a tu nombre y el acceso a Usuarios y roles.
+            </p>
+            <blockquote class="border-l-2 border-cyan-500 bg-cyan-500/5 pl-3.5 py-2 text-zinc-400 italic rounded-r-xs">
+                Si acabas de registrarte por primera vez y no ves notas compartidas de otros equipos, es el comportamiento esperado: un superusuario debe asignarte tus roles correspondientes.
+            </blockquote>
+        </div>
+
+        <div class="flex flex-col gap-2.5 border-t border-zinc-800/70 pt-5">
+            <h3 class="text-sm font-semibold text-cyan-300">Cómo crear notas y subir documentos</h3>
+            <ul class="space-y-2">
+                <li>• Entra a Mis ideas y pulsa Nueva idea.</li>
+                <li>• Escribe un título y redacta el contenido en el editor Markdown, donde puedes cambiar entre escribir, dividir pantalla o ver vista previa.</li>
+                <li>• Para subir un archivo, pulsa Adjuntar archivo y elige un documento <code class="bg-zinc-950 border border-zinc-800 px-1 py-0.5 rounded-xs text-cyan-300 font-mono text-[11px]">.md</code>, <code class="bg-zinc-950 border border-zinc-800 px-1 py-0.5 rounded-xs text-cyan-300 font-mono text-[11px]">.txt</code>, <code class="bg-zinc-950 border border-zinc-800 px-1 py-0.5 rounded-xs text-cyan-300 font-mono text-[11px]">.pdf</code>, <code class="bg-zinc-950 border border-zinc-800 px-1 py-0.5 rounded-xs text-cyan-300 font-mono text-[11px]">.docx</code> o <code class="bg-zinc-950 border border-zinc-800 px-1 py-0.5 rounded-xs text-cyan-300 font-mono text-[11px]">.csv</code>.</li>
+                <li>• Si subes texto plano o Markdown puedes usar Cargar en el editor antes de guardarlo, y si dejas el título vacío se usará el nombre del archivo.</li>
+                <li>• (Opcional) Abre la sección Visibilidad y permisos por rol debajo del editor para elegir qué roles tendrán permiso de Solo ver o Ver y editar. Si no seleccionas ninguno, la nota se guardará como Privada.</li>
+                <li>• Pulsa Guardar idea para enviar el contenido al análisis automático. Al guardarse, los textos largos se dividen en fragmentos y pasan brevemente por el estado Borrador antes de quedar en Procesada.</li>
+            </ul>
+            <p>
+                En el listado de Mis ideas cada tarjeta muestra sus etiquetas de visibilidad (Privada o los roles con Ver / Editar). Al abrir cualquier idea accesible puedes revisar su síntesis, el texto original, autor, quién realizó la última edición, términos extraídos y conexiones visibles; según tus permisos podrás editarla, volverla a analizar, eliminarla o reconfigurar sus roles.
+            </p>
+        </div>
+
+        <div id="roles" class="scroll-mt-24 flex flex-col gap-3.5 border-t border-zinc-800/70 pt-5">
+            <h3 class="text-sm font-semibold text-cyan-300">Cómo funcionan los roles (qué es por defecto y qué debe ser explícito)</h3>
+            <p>
+                Thinker trabaja con dos niveles globales (Superusuario y Usuario estándar) combinados con roles dinámicos creados por la administración (por ejemplo: Ingeniería, Ventas, Dirección).
+            </p>
+
+            <div class="flex flex-col gap-2">
+                <h4 class="italic text-zinc-200 font-medium">Lo que ocurre por defecto (sin configurar nada extra)</h4>
+                <ul class="space-y-2">
+                    <li>• Nuevos usuarios: Toda cuenta nueva (registro por correo o Google) se crea como usuario estándar y sin roles asignados.</li>
+                    <li>• Nuevas notas: Toda idea nueva nace Privada. Solo su autor y los superusuarios pueden verla, editarla, eliminarla o compartirla.</li>
+                    <li>• Notas heredadas/sin roles: Si una nota no tiene permisos de rol registrados, permanece privada para su autor y superusuarios.</li>
+                    <li>• Documentos fragmentados: Al crear una nota larga dividida en fragmentos o actualizar sus permisos en el detalle, los permisos de rol se replican automáticamente a todos los fragmentos del mismo documento.</li>
+                    <li>• Temas e índices: Los usuarios estándar ven únicamente los temas principales y subtemas donde exista al menos una nota accesible para ellos. No ven categorías vacías ni categorías pertenecientes solo a otros roles.</li>
+                    <li>• Aislamiento de enlaces: Thinker nunca conecta automáticamente una nota privada tuya con notas de otras personas si no comparten un rol.</li>
+                </ul>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <h4 class="italic text-zinc-200 font-medium">Lo que debes configurar de forma explícita</h4>
+                <ul class="space-y-2">
+                    <li>• Creación de roles: Los roles no existen predefinidos; un superusuario debe crearlos en Usuarios y roles → Roles (nombre y descripción opcional; el identificador slug se genera automáticamente).</li>
+                    <li>• Asignación de roles a usuarios: Un superusuario debe asignar explícitamente uno o más roles a cada usuario (al crearlo en Nuevo usuario o mediante Gestionar acceso en Usuarios asociados).</li>
+                    <li>
+                        • Compartir una nota con un rol: El autor de la nota o un superusuario debe elegir explícitamente en cada rol entre:
+                        <blockquote class="mt-2 border-l-2 border-cyan-500 bg-cyan-500/5 pl-3.5 py-2 rounded-r-xs">
+                            <ul class="list-disc pl-4 space-y-1 text-zinc-300">
+                                <li>Sin acceso (valor por defecto).</li>
+                                <li>Solo ver: Permite leer la nota, verla en Red, consultarla en Pregunta a Thinker y verla en Temas e índices.</li>
+                                <li>Ver y editar: Todo lo anterior, más permiso para Editar idea y Volver a analizar (registrando al editor como último modificador).</li>
+                                <li>Privilegios de superusuario: Conceder o retirar el rol de superusuario se hace explícitamente en Usuarios y roles.</li>
+                            </ul>
+                        </blockquote>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <h4 class="italic text-zinc-200 font-medium">Matriz rápida de capacidades</h4>
+                <div class="overflow-x-auto border border-zinc-800 rounded-xs">
+                    <table class="w-full text-left text-xs border-collapse min-w-[540px]">
+                        <thead class="bg-zinc-950 text-zinc-200 border-b border-zinc-800">
+                            <tr>
+                                <th class="py-2 px-3 font-medium">Acción</th>
+                                <th class="py-2 px-3 font-medium text-center">Autor de la nota</th>
+                                <th class="py-2 px-3 font-medium text-center">Rol con <code class="bg-zinc-900 border border-zinc-800 px-1 py-0.5 rounded-xs text-cyan-300 font-mono text-[11px]">Solo ver</code></th>
+                                <th class="py-2 px-3 font-medium text-center">Rol con <code class="bg-zinc-900 border border-zinc-800 px-1 py-0.5 rounded-xs text-cyan-300 font-mono text-[11px]">Ver y editar</code></th>
+                                <th class="py-2 px-3 font-medium text-center">Superusuario</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-zinc-800/70 bg-zinc-950/40">
+                            <tr>
+                                <td class="py-2 px-3">Ver nota, grafo y usar en Pregunta a thinker</td>
+                                <td class="py-2 px-3 text-center">Sí</td>
+                                <td class="py-2 px-3 text-center">Sí</td>
+                                <td class="py-2 px-3 text-center">Sí</td>
+                                <td class="py-2 px-3 text-center">Sí (todas)</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2 px-3">Editar contenido y reanalizar</td>
+                                <td class="py-2 px-3 text-center">Sí</td>
+                                <td class="py-2 px-3 text-center">No</td>
+                                <td class="py-2 px-3 text-center">Sí</td>
+                                <td class="py-2 px-3 text-center">Sí</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2 px-3">Eliminar nota o fragmento</td>
+                                <td class="py-2 px-3 text-center">Sí</td>
+                                <td class="py-2 px-3 text-center">No</td>
+                                <td class="py-2 px-3 text-center">No</td>
+                                <td class="py-2 px-3 text-center">Sí</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2 px-3">Cambiar permisos por rol</td>
+                                <td class="py-2 px-3 text-center">Sí</td>
+                                <td class="py-2 px-3 text-center">No</td>
+                                <td class="py-2 px-3 text-center">No</td>
+                                <td class="py-2 px-3 text-center">Sí</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2 px-3">Administrar temas y subtemas</td>
+                                <td class="py-2 px-3 text-center">No</td>
+                                <td class="py-2 px-3 text-center">No</td>
+                                <td class="py-2 px-3 text-center">No</td>
+                                <td class="py-2 px-3 text-center">Sí</td>
+                            </tr>
+                            <tr>
+                                <td class="py-2 px-3">Gestionar usuarios y roles</td>
+                                <td class="py-2 px-3 text-center">No</td>
+                                <td class="py-2 px-3 text-center">No</td>
+                                <td class="py-2 px-3 text-center">No</td>
+                                <td class="py-2 px-3 text-center">Sí</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-col gap-2.5 border-t border-zinc-800/70 pt-5">
+            <h3 class="text-sm font-semibold text-cyan-300">Cómo explorar la red de ideas y conexiones</h3>
+            <ul class="space-y-2">
+                <li>• Entra a Red desde el menú superior para ver el mapa visual de tu conocimiento.</li>
+                <li>
+                    • Identifica los elementos por color:
+                    <blockquote class="mt-2 border-l-2 border-cyan-500 bg-cyan-500/5 pl-3.5 py-2 rounded-r-xs">
+                        <ul class="list-disc pl-4 space-y-1 text-zinc-300">
+                            <li>Morado: temas maestros</li>
+                            <li>Cian: conceptos agrupadores</li>
+                            <li>Azul: ideas</li>
+                            <li>Ámbar: palabras clave</li>
+                            <li>Líneas cian: afinidad semántica</li>
+                            <li>Líneas verdes: conceptos en común</li>
+                        </ul>
+                    </blockquote>
+                </li>
+                <li>• Haz clic en cualquier nodo para centrar la vista, resaltar sus vecinos y abrir el panel Detalle de selección con su contenido y enlaces directos.</li>
+                <li>• Usa Ocultar temas para ver solo las ideas o Centrar red para reencuadrar el mapa.</li>
+            </ul>
+        </div>
+
+        <div class="flex flex-col gap-2.5 border-t border-zinc-800/70 pt-5">
+            <h3 class="text-sm font-semibold text-cyan-300">Cómo hacer preguntas</h3>
+            <ul class="space-y-2">
+                <li>• Dentro de Red, abre el panel Pregunta a Thinker.</li>
+                <li>• Escribe tu consulta en el cuadro inferior y presiona Enter o pulsa Preguntar.</li>
+                <li>• Lee la respuesta generada exclusivamente a partir de las notas y conexiones a las que tienes permiso de lectura.</li>
+                <li>• Haz clic en cualquiera de las Fuentes y conexiones consultadas que aparecen debajo para ubicar e inspeccionar esa nota en el grafo.</li>
+            </ul>
+        </div>
+
+        <div class="flex flex-col gap-2.5 border-t border-zinc-800/70 pt-5">
+            <h3 class="text-sm font-semibold text-cyan-300">Cómo organizar temas</h3>
+            <ul class="space-y-2">
+                <li>• Entra a Temas e índices para consultar tus notas agrupadas en temas principales y subtemas.</li>
+                <li>• Si eres usuario estándar: Verás en modo lectura los temas y subtemas derivados de tus notas propias y compartidas.</li>
+                <li>
+                    • Si eres superusuario: Tendrás habilitados los controles de administración:
+                    <blockquote class="mt-2 border-l-2 border-cyan-500 bg-cyan-500/5 pl-3.5 py-2 rounded-r-xs">
+                        <ul class="list-disc pl-4 space-y-1 text-zinc-300">
+                            <li>Activar o pausar Organización automática según prefieras que Thinker cree categorías nuevas por su cuenta o respete solo las actuales.</li>
+                            <li>Crear categorías manuales con Nuevo tema principal o Subtema, fijar un tema (Fijar / Liberar) para evitar cambios automáticos, eliminar categorías o usar Mover para reubicar una nota en otro subtema.</li>
+                        </ul>
+                    </blockquote>
+                </li>
+            </ul>
+        </div>
+
+        <div class="flex flex-col gap-2.5 border-t border-zinc-800/70 pt-5">
+            <h3 class="text-sm font-semibold text-cyan-300">Cómo administrar usuarios y roles (solo superusuarios)</h3>
+            <ul class="space-y-2">
+                <li>• Entra a Usuarios y roles desde la barra superior.</li>
+                <li>• En Roles puedes crear nuevos roles (por ejemplo Producto, Legal, Soporte), editar su nombre/descripción o eliminarlos. Al ver la tabla verás cuántos usuarios y cuántas notas usan cada rol; si eliminas un rol, Thinker lo retira de usuarios y notas y recalcula las conexiones afectadas en el grafo.</li>
+                <li>• En Usuarios asociados puedes ver el nivel (Superusuario o Estándar) y los roles de cada cuenta, y pulsar Gestionar acceso para modificar sus roles o privilegios.</li>
+                <li>• En Nuevo usuario puedes dar de alta cuentas locales verificadas asignando desde el inicio sus roles y si será superusuario.</li>
+            </ul>
+        </div>
+
+        <div id="seguridad" class="scroll-mt-24 flex flex-col gap-3.5 border-t border-zinc-800/70 pt-5">
+            <h3 class="text-sm font-semibold text-cyan-300">Cómo se maneja la seguridad en Thinker</h3>
+
+            <div class="flex flex-col gap-1.5">
+                <h4 class="italic text-zinc-200 font-medium">Autenticación y vigencia de sesiones</h4>
+                <p>
+                    Al iniciar sesión se emiten un token de acceso firmado, encriptado y con vigencia de 15 minutos y uno adicional que garantiza rotación y almacenamiento seguro.
+                </p>
+                <p>
+                    El menú superior incorpora Salir (cierra la sesión actual) y el botón de encendido para cerrar todas las sesiones activas, que revoca todos los tokens de acceso.
+                </p>
+            </div>
+
+            <div class="flex flex-col gap-1.5">
+                <h4 class="italic text-zinc-200 font-medium">Evaluación de permisos en tiempo real y doble barrera</h4>
+                <p>
+                    En cada petición protegida, siempre se valida la versión de token y recarga los roles actuales del usuario y su estado de superusuario. No se confía en los roles que se guardan en los tokens de acceso. Las rutas administrativas están protegidas tanto por middleware como por validación directa en cada servicio.
+                </p>
+                <p>
+                    Cuando un usuario no tiene acceso a una idea, el servidor responde con No encontrada (404) en lugar de revelar que la nota existe.
+                </p>
+            </div>
+
+            <div class="flex flex-col gap-1.5">
+                <h4 class="italic text-zinc-200 font-medium">Protección contra degradación accidental o bloqueo administrativo</h4>
+                <p>Un superusuario no puede quitarse a sí mismo el privilegio de superusuario.</p>
+                <p>El sistema impide retirar el privilegio al último superusuario activo para evitar dejar la plataforma sin administración.</p>
+                <p>Cuando a un superusuario se le retira ese privilegio, el sistema revoca todos sus tokens, cerrando sus sesiones activas al instante.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="buenas-practicas" class="scroll-mt-24 border border-zinc-800/80 bg-zinc-900/40 rounded-xs p-5 flex flex-col gap-4">
+        <h2 class="text-base sm:text-lg font-semibold text-zinc-100 border-b border-zinc-800/80 pb-3">
+            Buenas prácticas: cómo documentar y preguntar con precisión y seguridad
+        </h2>
+
+        <p>
+            Thinker es un asistente agnóstico al dominio, responde exclusivamente a partir de la documentación indexada a la que tu usuario tiene acceso. Si un dato no está respaldado en tus notas o no tienes permiso para verlo, no lo inventará ni lo completará con suposiciones externas.
+        </p>
+
+        <blockquote class="border-l-2 border-cyan-500 bg-cyan-500/5 pl-3.5 py-2 text-zinc-400 italic rounded-r-xs">
+            Thinker utiliza modelos de lenguaje y búsquedas semánticas, por lo que puede cometer errores.
+        </blockquote>
+
+        <div class="flex flex-col gap-3.5 pt-2">
+            <h3 class="text-sm font-semibold text-cyan-300">Cómo redactar notas y subir documentos</h3>
+
+            <div class="flex flex-col gap-1">
+                <h4 class="italic text-zinc-200 font-medium">Usa títulos claros y contexto completo</h4>
+                <p>
+                    Nombra explícitamente el tema, área, producto o regla desde el título y los primeros párrafos. Evita frases ambiguas ("como vimos ayer", "aplica igual que el otro"), ya que los documentos largos se dividen en fragmentos independientes durante el análisis.
+                </p>
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <h4 class="italic text-zinc-200 font-medium">Estructura en Markdown</h4>
+                <p>
+                    Organiza el contenido con encabezados (#, ##), listas y reglas explícitas. Así la síntesis, los conceptos clave y las relaciones del grafo serán mucho más precisos.
+                </p>
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <h4 class="italic text-zinc-200 font-medium">Elige el formato adecuado</h4>
+                <p>
+                    Puedes subir .md, .txt, .pdf, .docx o .csv. Si subes .md o .txt, usa Cargar en el editor para revisar o limpiar encabezados innecesarios antes de guardar. En PDF, asegúrate de que contenga texto seleccionable (no solo imagen escaneada).
+                </p>
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <h4 class="italic text-zinc-200 font-medium">Define la visibilidad desde el inicio</h4>
+                <p>
+                    Toda nota se guarda como Privada por defecto (solo tú y superusuarios). Si contiene información operativa para un equipo, selecciona explícitamente qué roles tienen Solo ver o Ver y editar en Visibilidad y permisos por rol.
+                </p>
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <h4 class="italic text-zinc-200 font-medium">Protege datos sensibles</h4>
+                <p>
+                    No guardes contraseñas, llaves privadas ni tokens dentro de notas compartidas por rol; mantén la información restringida únicamente en los roles que realmente la necesitan (Thinker no conecta ni mezcla contexto entre roles distintos).
+                </p>
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <h4 class="italic text-zinc-200 font-medium">Verifica el procesamiento</h4>
+                <p>
+                    Espera unos segundos a que la nota pase de Borrador a Procesada y revisa en su detalle que la síntesis y las palabras clave reflejen lo importante.
+                </p>
+            </div>
+        </div>
+    </section>
+</div>
+{{end}}
