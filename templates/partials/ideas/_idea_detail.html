@@ -227,10 +227,7 @@
                         <button
                             id="idea-tab-full"
                             type="button"
-                            hx-get='{{url "ideas:full" .detail.Idea.ID}}'
-                            hx-target="#idea-full-doc-panel"
-                            hx-swap="innerHTML"
-                            hx-trigger="click once"
+                            data-full-url='{{url "api:ideas:full" .detail.Idea.ID}}'
                             onclick="window.thinkerSwitchIdeaView('full')"
                             class="px-2.5 py-1 rounded-xs font-medium cursor-pointer transition-all text-zinc-400 hover:text-zinc-200 border border-transparent"
                         >
@@ -272,16 +269,30 @@
                     <pre
                         id="idea-fragment-plain"
                         class="hidden text-zinc-300 leading-relaxed whitespace-pre-wrap break-words font-mono border-l-2 border-zinc-700 pl-3.5 text-xs overflow-x-auto"
-                    >{{.detail.Idea.Content}}</pre>
+                    ></pre>
                 </div>
 
                 {{if gt .detail.GroupCount 1}}
-                <div id="idea-full-doc-wrapper" class="hidden flex-col gap-2">
-                    <div id="idea-full-doc-panel">
-                        <div class="flex items-center gap-2 py-6 text-zinc-400 text-xs">
-                            <span class="inline-block w-3 h-3 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin"></span>
-                            <span>Cargando documento completo...</span>
+                <div id="idea-full-doc-wrapper" class="hidden flex-col gap-2.5">
+                    <div id="idea-full-doc-loading" class="hidden items-center gap-2 py-6 text-zinc-400 text-xs">
+                        <span class="inline-block w-3 h-3 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin"></span>
+                        <span>Cargando documento completo...</span>
+                    </div>
+                    <div id="idea-full-doc-error" class="hidden border border-red-500/40 bg-red-950/20 text-red-300 px-3 py-2 rounded-xs text-xs"></div>
+                    <div id="idea-full-doc-content" class="hidden flex-col gap-2.5">
+                        <div class="flex flex-wrap items-center gap-2 text-[10px] text-zinc-400">
+                            <span id="idea-full-title" class="font-medium text-zinc-200"></span>
+                            <span id="idea-full-count" class="px-1.5 py-0.5 rounded-xs bg-zinc-800 text-zinc-300 border border-zinc-700 font-mono"></span>
+                            <span id="idea-full-mode-badge" class="px-1.5 py-0.5 rounded-xs border"></span>
                         </div>
+                        <div
+                            id="idea-full-rendered"
+                            class="markdown-body text-zinc-200 leading-relaxed border-l-2 border-cyan-500/60 pl-3.5 text-[13px] max-h-[68vh] overflow-y-auto pr-2"
+                        ></div>
+                        <pre
+                            id="idea-full-plain"
+                            class="hidden text-zinc-300 leading-relaxed whitespace-pre-wrap break-words font-mono border-l-2 border-cyan-500/60 pl-3.5 text-xs max-h-[68vh] overflow-y-auto pr-2"
+                        ></pre>
                     </div>
                 </div>
                 {{end}}
@@ -434,6 +445,8 @@
 (function () {
     let activeTab = "fragment";
     let showPlainText = false;
+    let fullDocCache = null;
+    let fullDocLoading = false;
 
     const activeTabClasses = ["bg-cyan-500/20", "text-cyan-300", "border-cyan-500/30"];
     const inactiveTabClasses = ["text-zinc-400", "hover:text-zinc-200", "border-transparent"];
@@ -444,7 +457,23 @@
         inactiveTabClasses.forEach(function (c) { btn.classList.toggle(c, !isActive); });
     }
 
+    function ensurePlainTextPopulated() {
+        if (!showPlainText) return;
+        const fragRaw = document.getElementById("idea-fragment-raw");
+        const fragPlain = document.getElementById("idea-fragment-plain");
+        if (fragRaw && fragPlain && !fragPlain.dataset.filled) {
+            fragPlain.textContent = fragRaw.value || "";
+            fragPlain.dataset.filled = "1";
+        }
+        const fullPlain = document.getElementById("idea-full-plain");
+        if (fullDocCache && fullPlain && !fullPlain.dataset.filled) {
+            fullPlain.textContent = fullDocCache.content || "";
+            fullPlain.dataset.filled = "1";
+        }
+    }
+
     window.thinkerSyncIdeaFormatMode = function () {
+        ensurePlainTextPopulated();
         const fragRendered = document.getElementById("idea-fragment-rendered");
         const fragPlain = document.getElementById("idea-fragment-plain");
         const fullRendered = document.getElementById("idea-full-rendered");
@@ -469,6 +498,100 @@
         window.thinkerSyncIdeaFormatMode();
     };
 
+    function renderFullDocError(msg) {
+        const loadingEl = document.getElementById("idea-full-doc-loading");
+        const errorEl = document.getElementById("idea-full-doc-error");
+        const contentEl = document.getElementById("idea-full-doc-content");
+        if (loadingEl) {
+            loadingEl.classList.add("hidden");
+            loadingEl.classList.remove("flex");
+        }
+        if (contentEl) {
+            contentEl.classList.add("hidden");
+            contentEl.classList.remove("flex");
+        }
+        if (errorEl) {
+            errorEl.textContent = msg;
+            errorEl.classList.remove("hidden");
+        }
+    }
+
+    function loadFullDocumentOnce() {
+        if (fullDocCache || fullDocLoading) return;
+        const tabFull = document.getElementById("idea-tab-full");
+        const endpoint = tabFull ? (tabFull.getAttribute("data-full-url") || "").trim() : "";
+        if (!endpoint || endpoint.startsWith("#")) {
+            renderFullDocError("El servidor necesita reiniciarse con la compilación actualizada para cargar el documento completo.");
+            return;
+        }
+
+        const loadingEl = document.getElementById("idea-full-doc-loading");
+        const errorEl = document.getElementById("idea-full-doc-error");
+        if (errorEl) errorEl.classList.add("hidden");
+        if (loadingEl) {
+            loadingEl.classList.remove("hidden");
+            loadingEl.classList.add("flex");
+        }
+
+        fullDocLoading = true;
+        fetch(endpoint, {
+            method: "GET",
+            headers: { "Accept": "application/json" }
+        })
+        .then(function (res) {
+            const ct = (res.headers.get("content-type") || "").toLowerCase();
+            if (!res.ok) {
+                throw new Error("No se pudo cargar el documento completo (HTTP " + res.status + ").");
+            }
+            if (!ct.includes("application/json")) {
+                throw new Error("Respuesta inesperada del servidor. Verifica que el binario esté actualizado.");
+            }
+            return res.json();
+        })
+        .then(function (data) {
+            fullDocCache = data || {};
+            const titleEl = document.getElementById("idea-full-title");
+            const countEl = document.getElementById("idea-full-count");
+            const badgeEl = document.getElementById("idea-full-mode-badge");
+            const renderedEl = document.getElementById("idea-full-rendered");
+            const contentEl = document.getElementById("idea-full-doc-content");
+
+            if (titleEl) titleEl.textContent = fullDocCache.title || "";
+            if (countEl) countEl.textContent = (fullDocCache.groupCount || 1) + " fragmentos";
+            if (badgeEl) {
+                if (fullDocCache.isReconstructed) {
+                    badgeEl.textContent = "Ensamblado desde fragmentos";
+                    badgeEl.className = "px-1.5 py-0.5 rounded-xs border bg-amber-500/15 text-amber-300 border-amber-500/30";
+                    badgeEl.title = "Ensamblado automáticamente desde los fragmentos vigentes eliminando el texto solapado";
+                } else {
+                    badgeEl.textContent = "Documento íntegro";
+                    badgeEl.className = "px-1.5 py-0.5 rounded-xs border bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+                    badgeEl.title = "Documento original completo con formato intacto";
+                }
+            }
+            if (renderedEl) {
+                renderedEl.innerHTML = typeof window.thinkerRenderMarkdown === "function"
+                    ? window.thinkerRenderMarkdown(fullDocCache.content || "")
+                    : (fullDocCache.content || "");
+            }
+            if (loadingEl) {
+                loadingEl.classList.add("hidden");
+                loadingEl.classList.remove("flex");
+            }
+            if (contentEl) {
+                contentEl.classList.remove("hidden");
+                contentEl.classList.add("flex");
+            }
+            window.thinkerSyncIdeaFormatMode();
+        })
+        .catch(function (err) {
+            renderFullDocError((err && err.message) ? err.message : "Error cargando el documento completo.");
+        })
+        .finally(function () {
+            fullDocLoading = false;
+        });
+    }
+
     window.thinkerSwitchIdeaView = function (tab) {
         activeTab = tab === "full" ? "full" : "fragment";
         const fragPanel = document.getElementById("idea-fragment-panel");
@@ -486,14 +609,22 @@
         }
         setTabState(tabFrag, activeTab !== "full");
         setTabState(tabFull, activeTab === "full");
+        if (activeTab === "full") {
+            loadFullDocumentOnce();
+        }
         window.thinkerSyncIdeaFormatMode();
     };
 
     window.thinkerCopyActiveIdeaContent = function (btn) {
-        const sourceId = activeTab === "full" ? "idea-full-raw" : "idea-fragment-raw";
-        const src = document.getElementById(sourceId) || document.getElementById("idea-fragment-raw");
-        if (src && typeof window.thinkerCopyText === "function") {
-            window.thinkerCopyText(src.value || "", btn);
+        let text = "";
+        if (activeTab === "full" && fullDocCache && fullDocCache.content) {
+            text = fullDocCache.content;
+        } else {
+            const src = document.getElementById("idea-fragment-raw");
+            text = src ? (src.value || "") : "";
+        }
+        if (text && typeof window.thinkerCopyText === "function") {
+            window.thinkerCopyText(text, btn);
         }
     };
 
