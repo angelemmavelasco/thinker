@@ -1014,11 +1014,50 @@ func extractTailOverlap(text string, maxOverlap int) string {
 		}
 	}
 
-	if strings.Count(candidate, "```")%2 != 0 || strings.Count(candidate, "~~~")%2 != 0 {
+	if strings.Count(candidate, "```")%2 != 0 ||
+		strings.Count(candidate, "~~~")%2 != 0 ||
+		strings.Count(candidate, "**")%2 != 0 ||
+		strings.Count(candidate, "`")%2 != 0 {
+		return ""
+	}
+
+	if hasOrphanMarkdownTable(candidate) || hasUnbalancedUnderscoreEmphasis(candidate) {
 		return ""
 	}
 
 	return candidate
+}
+
+func hasOrphanMarkdownTable(s string) bool {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return false
+	}
+	firstLine := trimmed
+	if nl := strings.IndexByte(trimmed, '\n'); nl >= 0 {
+		firstLine = strings.TrimSpace(trimmed[:nl])
+	}
+	if strings.HasPrefix(firstLine, "|") && !strings.Contains(trimmed, "\n| ---") && !strings.Contains(trimmed, "\n|---") {
+		return true
+	}
+	return false
+}
+
+func hasUnbalancedUnderscoreEmphasis(s string) bool {
+	runes := []rune(s)
+	count := 0
+	for i, r := range runes {
+		if r != '_' {
+			continue
+		}
+		prevWord := i > 0 && (unicode.IsLetter(runes[i-1]) || unicode.IsDigit(runes[i-1]))
+		nextWord := i+1 < len(runes) && (unicode.IsLetter(runes[i+1]) || unicode.IsDigit(runes[i+1]))
+		if prevWord && nextWord {
+			continue
+		}
+		count++
+	}
+	return count%2 != 0
 }
 
 func StitchChunksWithoutOverlap(chunks []string) string {
