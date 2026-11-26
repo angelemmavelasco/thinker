@@ -412,36 +412,49 @@ func TestRoutesFullDocument_LazyHTMLAndRBAC(t *testing.T) {
 	}
 	firstFragID := allIdeas[0].ID.String()
 
-	// Unauthenticated access must redirect to login
-	reqAnon := httptest.NewRequest(http.MethodGet, "/web/ideas/"+firstFragID+"/full", nil)
+	// Unauthenticated API access must return 401 JSON (never redirect to HTML login page)
+	reqAnon := httptest.NewRequest(http.MethodGet, "/api/ideas/"+firstFragID+"/full", nil)
+	reqAnon.Header.Set("Accept", "application/json")
 	wAnon := httptest.NewRecorder()
 	router.ServeHTTP(wAnon, reqAnon)
-	if wAnon.Code != http.StatusSeeOther {
-		t.Fatalf("expected 303 redirect for unauthenticated full doc request, got %d", wAnon.Code)
+	if wAnon.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for unauthenticated full doc API request, got %d", wAnon.Code)
 	}
 
-	// Detail page must expose fragment tab and lazy full-document HTMX tab
+	// Detail page must expose fragment tab and lazy JSON API URL
 	wDetail := doAuthRequest(router, http.MethodGet, "/web/ideas/"+firstFragID, viewerCookies, nil, true)
 	if wDetail.Code != http.StatusOK {
 		t.Fatalf("viewer GET detail failed: %d", wDetail.Code)
 	}
-	if !strings.Contains(wDetail.Body.String(), "Documento completo") || !strings.Contains(wDetail.Body.String(), "/web/ideas/"+firstFragID+"/full") {
-		t.Fatalf("expected detail view to expose lazy Documento completo tab")
+	if !strings.Contains(wDetail.Body.String(), "Documento completo") || !strings.Contains(wDetail.Body.String(), "/api/ideas/"+firstFragID+"/full") {
+		t.Fatalf("expected detail view to expose lazy /api/ideas/:id/full endpoint")
 	}
 
-	// Authorized viewer can fetch full document
-	wFullViewer := doAuthRequest(router, http.MethodGet, "/web/ideas/"+firstFragID+"/full", viewerCookies, nil, true)
+	// Authorized viewer receives pure JSON with intact full markdown (zero nested HTML templates)
+	wFullViewer := doAuthRequest(router, http.MethodGet, "/api/ideas/"+firstFragID+"/full", viewerCookies, nil, false)
 	if wFullViewer.Code != http.StatusOK {
-		t.Fatalf("viewer GET full doc failed: %d %s", wFullViewer.Code, wFullViewer.Body.String())
+		t.Fatalf("viewer GET full doc API failed: %d %s", wFullViewer.Code, wFullViewer.Body.String())
 	}
-	fullBody := wFullViewer.Body.String()
-	if !strings.Contains(fullBody, "Documento íntegro") || !strings.Contains(fullBody, "## Anexo Técnico") {
-		t.Fatalf("expected full document partial to include badge and full markdown, got: %s", fullBody)
+	if !strings.Contains(strings.ToLower(wFullViewer.Header().Get("Content-Type")), "application/json") {
+		t.Fatalf("expected application/json content-type, got %q", wFullViewer.Header().Get("Content-Type"))
+	}
+	var payload struct {
+		IdeaID          string `json:"ideaId"`
+		Title           string `json:"title"`
+		Content         string `json:"content"`
+		GroupCount      int    `json:"groupCount"`
+		IsReconstructed bool   `json:"isReconstructed"`
+	}
+	if err := json.Unmarshal(wFullViewer.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed decoding full doc JSON: %v", err)
+	}
+	if payload.IsReconstructed || payload.GroupCount < 2 || !strings.Contains(payload.Content, "## Anexo Técnico") {
+		t.Fatalf("unexpected full doc payload: %+v", payload)
 	}
 
-	// Outsider must receive 404 (RBAC isolation)
-	wFullOutsider := doAuthRequest(router, http.MethodGet, "/web/ideas/"+firstFragID+"/full", outsiderCookies, nil, true)
+	// Outsider must receive 404 JSON (RBAC isolation)
+	wFullOutsider := doAuthRequest(router, http.MethodGet, "/api/ideas/"+firstFragID+"/full", outsiderCookies, nil, false)
 	if wFullOutsider.Code != http.StatusNotFound {
-		t.Fatalf("expected 404 for outsider on full document endpoint, got %d", wFullOutsider.Code)
+		t.Fatalf("expected 404 for outsider on full document API, got %d", wFullOutsider.Code)
 	}
 }
