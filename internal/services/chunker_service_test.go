@@ -164,3 +164,74 @@ func TestCollapseSpacedArtifacts(t *testing.T) {
 		t.Errorf("expected normal text to remain unchanged")
 	}
 }
+
+func TestChunkText_PreservesMarkdownFormatting(t *testing.T) {
+	doc := strings.Join([]string{
+		"# Guía de uso",
+		"",
+		"Thinker es un asistente agnóstico al dominio que responde con base en tu documentación.",
+		"",
+		"> Thinker utiliza modelos de lenguaje y búsquedas semánticas.",
+		"",
+		"## Cómo redactar notas",
+		"",
+		"- **Usa títulos claros:** Nombra el tema principal desde el inicio.",
+		"- **Estructura en Markdown:** Usa encabezados y listas para mejorar la lectura.",
+		"",
+		"```go",
+		"func main() {",
+		"",
+		"    println(\"hola\")",
+		"}",
+		"```",
+		"",
+		"## Cómo preguntar",
+		"",
+		"Formula consultas concretas mencionando el área o política exacta que necesitas consultar.",
+	}, "\n")
+
+	chunks := ChunkText(doc, 260)
+	if len(chunks) < 2 {
+		t.Fatalf("expected multiple chunks, got %d", len(chunks))
+	}
+
+	if !strings.Contains(chunks[0], "# Guía de uso\n\nThinker es un asistente") {
+		t.Errorf("expected paragraph breaks preserved in first chunk, got:\n%q", chunks[0])
+	}
+
+	joinedAll := strings.Join(chunks, "\n\n")
+	if !strings.Contains(joinedAll, "\n> Thinker utiliza") {
+		t.Errorf("expected blockquote on its own line, got:\n%q", joinedAll)
+	}
+	if !strings.Contains(joinedAll, "- **Usa títulos claros:** Nombra el tema principal desde el inicio.\n- **Estructura en Markdown:**") {
+		t.Errorf("expected list items separated by newline, got:\n%q", joinedAll)
+	}
+	if !strings.Contains(joinedAll, "```go\nfunc main() {\n\n    println(\"hola\")\n}\n```") {
+		t.Errorf("expected fenced code block kept intact, got:\n%q", joinedAll)
+	}
+}
+
+func TestStitchChunksWithoutOverlap(t *testing.T) {
+	doc := strings.Join([]string{
+		"# Política de Seguridad",
+		"",
+		"Primer párrafo extenso con detalles sobre autenticación, rotación de tokens y control de acceso por roles en la organización.",
+		"",
+		"## Reglas de Compartición",
+		"",
+		"- Toda nota inicia privada para su autor y superusuarios.",
+		"- Los permisos de lectura y edición se asignan explícitamente por rol.",
+		"",
+		"Tercer párrafo final explicando la auditoría de cambios y las consideraciones operativas para despliegue en producción.",
+	}, "\n")
+
+	chunks := ChunkText(doc, 180)
+	if len(chunks) < 2 {
+		t.Fatalf("expected at least 2 chunks, got %d", len(chunks))
+	}
+
+	stitched := StitchChunksWithoutOverlap(chunks)
+	if stitched != doc {
+		t.Errorf("stitched document mismatch.\nExpected:\n%q\n\nGot:\n%q", doc, stitched)
+	}
+}
